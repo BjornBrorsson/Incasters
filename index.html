@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Incasters - 3D Isometric Curve Battler</title>
+    <!-- Premium Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@600;700;900&display=swap" rel="stylesheet">
+  </head>
+  <body>
+    <!-- Main Game Canvas Container -->
+    <div id="game-container"></div>
+
+    <!-- UI Overlay Shell -->
+    <div id="ui-overlay">
+      
+      <!-- MAIN MENU -->
+      <div id="menu-screen" class="glass-panel">
+        <h1 class="game-title">INCASTERS</h1>
+        <p class="game-subtitle">The Curved Shot Isometric Arena Battler</p>
+        
+        <div class="menu-section">
+          <h3>SELECT GAME MODE</h3>
+          <div class="mode-selector">
+            <button id="btn-mode-br" class="mode-btn active" data-mode="BATTLE_ROYALE">
+              <span class="mode-title">Last Caster Standing</span>
+              <span class="mode-desc">FFA Battle Royale with a shrinking Ring of Fire</span>
+            </button>
+            <button id="btn-mode-tdm" class="mode-btn" data-mode="TEAM_BATTLE">
+              <span class="mode-title">Team Battle</span>
+              <span class="mode-desc">4v4 Team Deathmatch. First to 20 eliminations wins</span>
+            </button>
+            <button id="btn-mode-gold" class="mode-btn" data-mode="GOLD_RUSH">
+              <span class="mode-title">Gold Rush</span>
+              <span class="mode-desc">Collect spawning coins. Hit Casters to steal theirs</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>SHOT CURVING STYLE</h3>
+          <div class="control-selector">
+            <button id="btn-ctrl-target" class="ctrl-btn active" data-ctrl="TARGET">
+              <span class="ctrl-title">Target Tracking</span>
+              <span class="ctrl-desc">Bullet actively curves towards your mouse cursor</span>
+            </button>
+            <button id="btn-ctrl-manual" class="ctrl-btn" data-ctrl="MANUAL">
+              <span class="ctrl-title">Manual Steering</span>
+              <span class="ctrl-desc">Fired bullet is manually steered left/right with [Q] / [E] keys</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>SELECT ARENA MAP</h3>
+          <div class="map-selector">
+            <button id="btn-map-arena" class="map-btn active" data-map="ARENA">
+              <span class="map-title">Neon Arena</span>
+              <span class="map-desc">Medium size (36x36). Standard obstacles and diagonal jump pads.</span>
+            </button>
+            <button id="btn-map-colosseum" class="map-btn" data-map="COLOSSEUM">
+              <span class="map-title">Neon Colosseum</span>
+              <span class="map-desc">Large size (48x48). Open center, sliding security doors & corner jump pads.</span>
+            </button>
+            <button id="btn-map-chamber" class="map-btn" data-map="CHAMBER">
+              <span class="map-title">Neon Chamber</span>
+              <span class="map-desc">Small size (24x24). Tight labyrinth corridors and moving cross gates.</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>TOTAL PLAYERS</h3>
+          <div class="players-selector">
+            <button class="player-count-btn" data-count="2">2 Players</button>
+            <button class="player-count-btn" data-count="4">4 Players</button>
+            <button class="player-count-btn" data-count="6">6 Players</button>
+            <button class="player-count-btn active" data-count="8">8 Players</button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>CUSTOMIZE YOUR WIZARD (FFA Modes)</h3>
+          <div class="customizer-container glass-panel-nested">
+            <div class="customizer-row">
+              <span class="customizer-label">Robe:</span>
+              <div id="robe-color-picker" class="color-picker"></div>
+            </div>
+            <div class="customizer-row">
+              <span class="customizer-label">Spell:</span>
+              <div id="spell-color-picker" class="color-picker"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="instructions glass-panel-nested">
+          <h4>CONTROLS</h4>
+          <p>🎮 <strong>Move:</strong> W, A, S, D / Arrow Keys</p>
+          <p>🎯 <strong>Aim:</strong> Move Mouse / Pointer</p>
+          <p>🔥 <strong>Cast Projectile:</strong> Left-Click (Hold click to bend/steer shot!)</p>
+          <p>⚡ <strong>Dodge Dash:</strong> Spacebar</p>
+        </div>
+
+        <button id="btn-play" class="play-btn">START BATTLE</button>
+      </div>
+
+      <!-- IN-GAME HUD -->
+      <div id="hud-container" style="display: none;">
+        
+        <!-- Player Stats (Top-Left) -->
+        <div class="hud-panel player-panel glass-panel-light">
+          <div class="player-avatar">🧙</div>
+          <div class="player-stats-text">
+            <span class="player-name">Caster (You)</span>
+            <div class="hp-bar-container">
+              <div id="hp-progress" class="hp-progress-bar"></div>
+              <span id="hp-text">100 / 100</span>
+            </div>
+            <div class="ammo-container">
+              <div id="ammo-slots" class="ammo-slots">
+                <div class="ammo-pip active"></div>
+                <div class="ammo-pip active"></div>
+                <div class="ammo-pip active"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coins Counter (Gold Rush Only) -->
+        <div id="coin-counter" class="hud-panel coin-panel glass-panel-light" style="display: none;">
+          <span class="coin-icon">🪙</span>
+          <span id="coin-val">0</span>
+        </div>
+
+        <!-- Match Timer / Mode (Top-Center) -->
+        <div class="hud-panel timer-panel glass-panel-light">
+          <span id="match-timer-label" class="mode-label">TIME REMAINING</span>
+          <span id="match-timer" class="timer-value">2:00</span>
+        </div>
+
+        <!-- Leaderboard (Top-Right) -->
+        <div class="hud-panel leaderboard-panel glass-panel-light">
+          <h4>LEADERBOARD</h4>
+          <div id="leaderboard-list">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+
+        <!-- Powerups Inventory (Bottom-Center) -->
+        <div class="hud-panel powerup-inventory">
+          <div id="pu-slot-0" class="pu-slot">
+            <span id="pu-slot-0-text" class="pu-slot-text">Empty Slot</span>
+          </div>
+          <div id="pu-slot-1" class="pu-slot">
+            <span id="pu-slot-1-text" class="pu-slot-text">Empty Slot</span>
+          </div>
+          <div id="pu-slot-2" class="pu-slot">
+            <span id="pu-slot-2-text" class="pu-slot-text">Empty Slot</span>
+          </div>
+        </div>
+
+        <!-- Dash Cooldown (Bottom-Right) -->
+        <div class="hud-panel dash-panel">
+          <div id="dash-cooldown-circle" class="dash-circle">
+            <div id="dash-cooldown-overlay" class="dash-circle-overlay"></div>
+            <span class="dash-letter">⚡</span>
+          </div>
+          <span class="dash-label">SPACEBAR</span>
+        </div>
+
+      </div>
+
+      <!-- GAME OVER SCREEN OVERLAY -->
+      <div id="gameover-overlay" class="gameover-overlay glass-panel" style="display: none;">
+        <h2 class="gameover-title">MATCH OVER</h2>
+        <p id="gameover-winner" class="gameover-winner-text">Glitch WINS Last Caster Standing!</p>
+        
+        <button id="btn-restart" class="play-btn">PLAY AGAIN</button>
+      </div>
+
+      <!-- VIRTUAL TOUCH JOYSTICKS -->
+      <div id="joy-left" class="joy-container">
+        <div id="joy-left-knob" class="joy-knob"></div>
+      </div>
+      <div id="joy-right" class="joy-container">
+        <div id="joy-right-knob" class="joy-knob"></div>
+      </div>
+
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

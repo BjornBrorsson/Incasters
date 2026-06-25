@@ -1,0 +1,1203 @@
+import * as THREE from 'three';
+import { Caster } from '../entities/Caster';
+import { Bot } from '../entities/Bot';
+import { Projectile } from '../entities/Projectile';
+import type { ProjectileStats } from '../entities/Projectile';
+import { PowerUp, PowerUpType, POWERUP_COLORS } from '../entities/PowerUp';
+import { Arena, MapType } from '../world/Arena';
+import { GameModeManager, GameModeType } from '../world/GameModes';
+import { testCircleVsAABB, testCircleVsCircle, reflectVector } from './Physics';
+import { sfx } from './Audio';
+
+export interface GameParticle {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  color: number;
+  size: number;
+  opacity: number;
+  lifetime: number;
+  maxLifetime: number;
+  mesh: THREE.Mesh;
+}
+
+export class Game {
+  // Rendering
+  scene!: THREE.Scene;
+  camera!: THREE.OrthographicCamera;
+  renderer!: THREE.WebGLRenderer;
+  private container: HTMLDivElement;
+
+  // Game Entities
+  arena!: THREE.Group;
+  physicsArena!: Arena;
+  casters: Caster[] = [];
+  player!: Caster;
+  projectiles: Projectile[] = [];
+  powerups: PowerUp[] = [];
+  particles: GameParticle[] = [];
+
+  // Managers
+  gameModeManager: GameModeManager;
+
+  // Spawners timers
+  private powerupSpawnCooldowns: number[] = [0, 0, 0, 0]; // matching arena spawners
+
+  // Input states
+  private keys: Record<string, boolean> = {};
+  private mouse = new THREE.Vector2();
+  private groundTarget = new THREE.Vector3(); // Mouse unprojected position
+  private raycaster = new THREE.Raycaster();
+  private planeY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  // Active player projectile reference for guiding
+  private playerGuidedProjectile: Projectile | null = null;
+  
+  // Game Configuration
+  controlMode: 'TARGET' | 'MANUAL' = 'TARGET'; // TARGET tracks mouse, MANUAL uses Q/E
+  private touchControlsActive: boolean = false;
+  private touchJoysticks = {
+    left: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 },
+    right: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 }
+  };
+
+  // State
+  isPlaying: boolean = false;
+  private clock = new THREE.Clock();
+
+  // Custom Colors
+  playerRobeColor: number = 0xff007f; // Neon Pink default
+  playerSpellColor: number = 0x00f0ff; // Neon Cyan default
+
+  // Match Customizer
+  playerCount: number = 8;
+  mapType: MapType = 'ARENA';
+
+  constructor(
+    container: HTMLDivElement,
+    modeType: GameModeType,
+    playerRobeColor?: number,
+    playerSpellColor?: number,
+    mapType?: MapType,
+    playerCount?: number
+  ) {
+    this.container = container;
+    this.gameModeManager = new GameModeManager(modeType);
+    if (playerRobeColor !== undefined) this.playerRobeColor = playerRobeColor;
+    if (playerSpellColor !== undefined) this.playerSpellColor = playerSpellColor;
+    if (mapType !== undefined) this.mapType = mapType;
+    if (playerCount !== undefined) this.playerCount = playerCount;
+    this.initThree();
+    this.setupInput();
+    this.resetGame();
+  }
+
+  private initThree() {
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x04060f);
+    this.scene.fog = new THREE.FogExp2(0x04060f, 0.025);
+
+    // Setup Orthographic Isometric Camera
+    const aspect = window.innerWidth / window.innerHeight;
+    const d = 11; // frustum size
+    this.camera = new THREE.OrthographicCamera(
+      -d * aspect, d * aspect,
+      d, -d,
+      1, 1000
+    );
+    // Position at 45 degree tilt looking down
+    this.camera.position.set(22, 22, 22);
+    this.camera.lookAt(0, 0, 0);
+
+    // WebGL Renderer
+    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.container.appendChild(this.renderer.domElement);
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+    this.scene.add(ambientLight);
+
+    // Directional Shadow Casting Light
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    dirLight.position.set(-15, 30, 15);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    dirLight.shadow.camera.near = 0.5;
+    dirLight.shadow.camera.far = 80;
+    // Stretch shadow bounds to fit orthographic arena
+    const sd = 25;
+    dirLight.shadow.camera.left = -sd;
+    dirLight.shadow.camera.right = sd;
+    dirLight.shadow.camera.top = sd;
+    dirLight.shadow.camera.bottom = -sd;
+    dirLight.shadow.bias = -0.0005;
+    this.scene.add(dirLight);
+
+    // Subtle blue background spotlight for environment depth
+    const envLight = new THREE.DirectionalLight(0x00d2ff, 0.4);
+    envLight.position.set(15, 20, -15);
+    this.scene.add(envLight);
+
+    // Listen to resize
+    window.addEventListener('resize', this.onResize.bind(this));
+  }
+
+  resetGame() {
+    // 1. Clean up old game state
+    this.casters.forEach((c) => c.destroy(this.scene));
+    this.projectiles.forEach((p) => p.destroy(this.scene));
+    this.powerups.forEach((pu) => pu.destroy(this.scene));
+    this.particles.forEach((p) => this.scene.remove(p.mesh));
+    
+    this.casters = [];
+    this.projectiles = [];
+    this.powerups = [];
+    this.particles = [];
+    this.playerGuidedProjectile = null;
+
+    if (this.physicsArena) {
+      this.physicsArena.destroy(this.scene);
+    }
+
+    // 2. Build Level Arena
+    this.physicsArena = new Arena(this.mapType);
+    this.physicsArena.buildArena(this.scene);
+
+    // 3. Spawn Casters (Player + Bots)
+    const sp = this.physicsArena.spawnPoints;
+    const botNames = ['Glitch', 'Spike', 'Glimmer', 'Vortex', 'Echo', 'Frost', 'Blaze'];
+
+    // Player (Index 0)
+    const playerSp = sp[0];
+    this.player = new Caster('player', 'You (Player)', playerSp.x, playerSp.y, 'GOLD', false, this.playerRobeColor, this.playerSpellColor);
+    this.scene.add(this.player.mesh);
+    this.casters.push(this.player);
+
+    // Pre-defined color pairs (robe, spell) for bots in FFA
+    const botColorPairs = [
+      { robe: 0x39ff14, spell: 0xffe200 }, // Lime Green + Yellow
+      { robe: 0xff5f1f, spell: 0xb026ff }, // Orange + Purple
+      { robe: 0xb026ff, spell: 0x39ff14 }, // Purple + Green
+      { robe: 0xffe200, spell: 0xff007f }, // Yellow + Pink
+      { robe: 0x00f0ff, spell: 0xff5f1f }, // Cyan + Orange
+      { robe: 0xff007f, spell: 0x00f0ff }, // Pink + Cyan
+      { robe: 0xff1122, spell: 0x0044ff }, // Red + Blue
+      { robe: 0x0044ff, spell: 0xff1122 }  // Blue + Red
+    ];
+
+    // Filter out pairs that match player's colors to avoid duplication
+    const filteredPairs = botColorPairs.filter(
+      p => p.robe !== this.playerRobeColor && p.spell !== this.playerSpellColor
+    );
+    const availablePairs = filteredPairs.length >= 7 ? filteredPairs : botColorPairs;
+
+    // Bots
+    for (let i = 1; i < this.playerCount; i++) {
+      const botSp = sp[i % sp.length];
+      const colorPair = availablePairs[(i - 1) % availablePairs.length];
+      const bot = new Bot(
+        `bot_${i}`,
+        botNames[i - 1],
+        botSp.x + (Math.random() - 0.5) * 0.5,
+        botSp.y + (Math.random() - 0.5) * 0.5,
+        'GOLD',
+        colorPair.robe,
+        colorPair.spell
+      );
+      
+      // Hook bot shoot capability into game loop spawner
+      bot.onAiShoot = (angle, target) => {
+        this.spawnProjectile(bot, angle, target);
+      };
+
+      this.scene.add(bot.mesh);
+      this.casters.push(bot);
+    }
+
+    // 4. Initialize active Game Mode
+    this.gameModeManager.initMode(this.scene, this.casters);
+
+    // 5. Reset power-up spawners timers
+    this.powerupSpawnCooldowns = this.physicsArena.powerupSpawners.map(() => 0);
+
+    // Reset clocks
+    this.clock.getDelta();
+  }
+
+  startGame() {
+    this.isPlaying = true;
+    this.clock.getDelta();
+    sfx.playStart();
+  }
+
+  private setupInput() {
+    // Keyboard inputs
+    window.addEventListener('keydown', (e) => {
+      this.keys[e.key.toLowerCase()] = true;
+
+      // Handle Spacebar Dash
+      if (e.key === ' ' || e.code === 'Space') {
+        e.preventDefault();
+        this.triggerPlayerDash();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      this.keys[e.key.toLowerCase()] = false;
+    });
+
+    // Mouse movement to aim
+    window.addEventListener('mousemove', (e) => {
+      this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+      this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      this.updateGroundTarget();
+    });
+
+    // Fire shots on click
+    window.addEventListener('mousedown', (e) => {
+      if (e.button === 0 && this.isPlaying && !this.player.isDead) { // Left click
+        this.updateGroundTarget();
+        if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
+          const angle = Math.atan2(this.groundTarget.z - this.player.y, this.groundTarget.x - this.player.x);
+          
+          // Spawn bullet
+          const proj = this.spawnProjectile(this.player, angle, this.controlMode === 'TARGET' ? this.groundTarget : null);
+          this.playerGuidedProjectile = proj;
+          this.player.shootTimer = this.player.getFireRateCooldown();
+        }
+      }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) {
+        // Release guiding on mouse release
+        this.playerGuidedProjectile = null;
+      }
+    });
+
+    // Touch screen / Mobile joy sticks setup
+    window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+    window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+    window.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
+    window.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false });
+
+    // Dash Circle mobile click listener
+    const dashCircle = document.getElementById('dash-cooldown-circle');
+    if (dashCircle) {
+      const handleMobileDash = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.triggerPlayerDash();
+      };
+      dashCircle.addEventListener('touchstart', handleMobileDash, { passive: false });
+      dashCircle.addEventListener('click', handleMobileDash);
+    }
+  }
+
+  private updateGroundTarget() {
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersectPoint = new THREE.Vector3();
+    this.raycaster.ray.intersectPlane(this.planeY0, intersectPoint);
+    this.groundTarget.copy(intersectPoint);
+  }
+
+  private onResize() {
+    const aspect = window.innerWidth / window.innerHeight;
+    const d = 11;
+    this.camera.left = -d * aspect;
+    this.camera.right = d * aspect;
+    this.camera.top = d;
+    this.camera.bottom = -d;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+  }
+
+  // Mobile virtual dual sticks logic
+  private onTouchStart(e: TouchEvent) {
+    if (!this.isPlaying) return;
+    this.touchControlsActive = true;
+    
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      const screenWidthHalf = window.innerWidth / 2;
+
+      // Left half = movement stick
+      if (touch.clientX < screenWidthHalf && !this.touchJoysticks.left.active) {
+        e.preventDefault();
+        this.touchJoysticks.left.active = true;
+        this.touchJoysticks.left.id = touch.identifier;
+        this.touchJoysticks.left.startX = touch.clientX;
+        this.touchJoysticks.left.startY = touch.clientY;
+        this.touchJoysticks.left.curX = touch.clientX;
+        this.touchJoysticks.left.curY = touch.clientY;
+        this.touchJoysticks.left.dirX = 0;
+        this.touchJoysticks.left.dirY = 0;
+        this.showJoystickUI('left', touch.clientX, touch.clientY);
+      }
+      
+      // Right half = aim/shoot stick
+      if (touch.clientX >= screenWidthHalf && !this.touchJoysticks.right.active) {
+        e.preventDefault();
+        this.touchJoysticks.right.active = true;
+        this.touchJoysticks.right.id = touch.identifier;
+        this.touchJoysticks.right.startX = touch.clientX;
+        this.touchJoysticks.right.startY = touch.clientY;
+        this.touchJoysticks.right.curX = touch.clientX;
+        this.touchJoysticks.right.curY = touch.clientY;
+        this.touchJoysticks.right.dirX = 0;
+        this.touchJoysticks.right.dirY = 0;
+        this.showJoystickUI('right', touch.clientX, touch.clientY);
+
+        // Instantly fire on right stick touch down
+        if (!this.player.isDead && this.player.shootTimer <= 0 && this.player.ammo > 0) {
+          const proj = this.spawnProjectile(this.player, this.player.aimAngle, null);
+          this.playerGuidedProjectile = proj;
+          this.player.shootTimer = this.player.getFireRateCooldown();
+        }
+      }
+    }
+  }
+
+  private onTouchMove(e: TouchEvent) {
+    if (!this.isPlaying) return;
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      
+      if (this.touchJoysticks.left.active && touch.identifier === this.touchJoysticks.left.id) {
+        e.preventDefault();
+        this.touchJoysticks.left.curX = touch.clientX;
+        this.touchJoysticks.left.curY = touch.clientY;
+        
+        const dx = touch.clientX - this.touchJoysticks.left.startX;
+        const dy = touch.clientY - this.touchJoysticks.left.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const maxDist = 50;
+        const limit = Math.min(dist, maxDist);
+        
+        this.touchJoysticks.left.dirX = (dx / dist) * (limit / maxDist);
+        this.touchJoysticks.left.dirY = (dy / dist) * (limit / maxDist);
+        
+        this.updateJoystickUI('left', (dx / dist) * limit, (dy / dist) * limit);
+      }
+
+      if (this.touchJoysticks.right.active && touch.identifier === this.touchJoysticks.right.id) {
+        e.preventDefault();
+        this.touchJoysticks.right.curX = touch.clientX;
+        this.touchJoysticks.right.curY = touch.clientY;
+
+        const dx = touch.clientX - this.touchJoysticks.right.startX;
+        const dy = touch.clientY - this.touchJoysticks.right.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const maxDist = 50;
+        const limit = Math.min(dist, maxDist);
+
+        this.touchJoysticks.right.dirX = dx / dist;
+        this.touchJoysticks.right.dirY = dy / dist;
+
+        this.updateJoystickUI('right', (dx / dist) * limit, (dy / dist) * limit);
+
+        // Continuous guide bullet direction on right stick slide
+        if (this.playerGuidedProjectile) {
+          const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+          this.playerGuidedProjectile.steerDirection = 0;
+          this.playerGuidedProjectile.targetPoint = {
+            x: this.playerGuidedProjectile.x + Math.cos(angle) * 8,
+            y: this.playerGuidedProjectile.y + Math.sin(angle) * 8
+          };
+        }
+      }
+    }
+  }
+
+  private onTouchEnd(e: TouchEvent) {
+    if (!this.isPlaying) return;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      
+      if (this.touchJoysticks.left.active && touch.identifier === this.touchJoysticks.left.id) {
+        this.touchJoysticks.left.active = false;
+        this.touchJoysticks.left.id = -1;
+        this.touchJoysticks.left.dirX = 0;
+        this.touchJoysticks.left.dirY = 0;
+        this.hideJoystickUI('left');
+      }
+      
+      if (this.touchJoysticks.right.active && touch.identifier === this.touchJoysticks.right.id) {
+        this.touchJoysticks.right.active = false;
+        this.touchJoysticks.right.id = -1;
+        this.touchJoysticks.right.dirX = 0;
+        this.touchJoysticks.right.dirY = 0;
+        this.playerGuidedProjectile = null;
+        this.hideJoystickUI('right');
+      }
+    }
+  }
+
+  // HTML Joysticks HUD Helpers
+  private showJoystickUI(side: 'left' | 'right', x: number, y: number) {
+    const el = document.getElementById(`joy-${side}`);
+    if (el) {
+      el.style.left = `${x - 40}px`;
+      el.style.top = `${y - 40}px`;
+      el.style.display = 'block';
+    }
+  }
+  private updateJoystickUI(side: 'left' | 'right', dx: number, dy: number) {
+    const knob = document.getElementById(`joy-${side}-knob`);
+    if (knob) {
+      knob.style.transform = `translate(${dx}px, ${dy}px)`;
+    }
+  }
+  private hideJoystickUI(side: 'left' | 'right') {
+    const el = document.getElementById(`joy-${side}`);
+    if (el) el.style.display = 'none';
+    const knob = document.getElementById(`joy-${side}-knob`);
+    if (knob) knob.style.transform = `translate(0px, 0px)`;
+  }
+
+  // Spawners projectiles helper
+  private spawnProjectile(
+    owner: Caster,
+    angle: number,
+    targetLoc: THREE.Vector3 | { x: number; y: number } | null
+  ): Projectile | null {
+    if (owner.ammo <= 0) return null;
+    owner.ammo--;
+    owner.timeSinceLastShot = 0;
+
+    const stats = owner.getProjectileStats();
+    
+    // Spawn projectile just ahead of the wizard body to prevent clipping
+    const ox = owner.x + Math.cos(angle) * (owner.radius + 0.35);
+    const oy = owner.y + Math.sin(angle) * (owner.radius + 0.35);
+
+    const proj = new Projectile(ox, oy, angle, owner.id, stats);
+    
+    if (targetLoc) {
+      proj.targetPoint = { x: targetLoc.x, y: (targetLoc as any).z ?? (targetLoc as any).y };
+    }
+
+    this.scene.add(proj.mesh);
+    this.projectiles.push(proj);
+
+    // Audio SFX
+    sfx.playShoot();
+    
+    // Spawn flash particles
+    this.spawnBlastParticles(ox, oy, stats.color, 8);
+
+    return proj;
+  }
+
+  // Spark/trail particle system
+  spawnBlastParticles(x: number, y: number, color: number, count: number = 10, scaleMultiplier = 1) {
+    const particleGeometry = new THREE.SphereGeometry(0.08 * scaleMultiplier, 4, 4);
+    const particleMaterial = new THREE.MeshBasicMaterial({ color: color });
+
+    for (let i = 0; i < count; i++) {
+      const mesh = new THREE.Mesh(particleGeometry, particleMaterial);
+      mesh.position.set(x, 0.4, y);
+      this.scene.add(mesh);
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2.0 + Math.random() * 4.0;
+      const vel = new THREE.Vector3(Math.cos(angle) * speed, 0.2 + Math.random() * 2.0, Math.sin(angle) * speed);
+
+      const p: GameParticle = {
+        position: new THREE.Vector3(x, 0.4, y),
+        velocity: vel,
+        color,
+        size: 1.0,
+        opacity: 1.0,
+        lifetime: 0,
+        maxLifetime: 0.3 + Math.random() * 0.3,
+        mesh
+      };
+      this.particles.push(p);
+    }
+  }
+
+  // Projectiles splitting stacking logic
+  private triggerProjectileSplit(proj: Projectile) {
+    if (proj.splitLevel <= 0) return;
+    
+    const count = proj.splitLevel === 1 ? 2 : proj.splitLevel === 2 ? 3 : 4;
+    const currentAngle = Math.atan2(proj.vy, proj.vx);
+    const arc = Math.PI / 3; // 60 degrees spread
+    const startAngle = currentAngle - arc / 2;
+    const angleStep = arc / (count - 1 || 1);
+
+    const parentOwner = this.casters.find((c) => c.id === proj.ownerId);
+    if (!parentOwner) return;
+
+    for (let i = 0; i < count; i++) {
+      const angle = startAngle + i * angleStep;
+      
+      // Reduced stats for splits
+      const splitStats: ProjectileStats = {
+        ...proj.stats,
+        damage: Math.round(proj.stats.damage * 0.6),
+        speed: proj.stats.speed * 0.85,
+        maxBounces: Math.max(0, proj.stats.maxBounces - 1),
+        maxPierces: 0, // Splits don't pierce
+        splitLevel: proj.splitLevel - 1 // Reduce split counter
+      };
+
+      // Spawn slightly offset in direction
+      const sx = proj.x + Math.cos(angle) * 0.25;
+      const sy = proj.y + Math.sin(angle) * 0.25;
+
+      const splitProj = new Projectile(sx, sy, angle, proj.ownerId, splitStats);
+      this.scene.add(splitProj.mesh);
+      this.projectiles.push(splitProj);
+    }
+
+    sfx.playBounce();
+  }
+
+  // Update loop
+  tick() {
+    requestAnimationFrame(this.tick.bind(this));
+
+    if (!this.isPlaying) {
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
+
+    // Clamp dt to prevent massive jumps when switching tabs
+    const dt = Math.min(this.clock.getDelta(), 0.1);
+
+    // 1. Process player inputs and movement
+    this.updatePlayerMovement();
+
+    // 2. Process active projectile curving guides for player
+    this.updateGuidedProjectile();
+
+    // 3. Process AI Bot Updates
+    this.casters.forEach((caster) => {
+      if (caster instanceof Bot) {
+        caster.aiUpdate(
+          dt,
+          this.casters,
+          this.projectiles,
+          this.powerups,
+          this.physicsArena.walls,
+          this.gameModeManager.coins,
+          this.gameModeManager.safeRadius
+        );
+      }
+    });
+
+    // 4. Update Game Mode rules (shrinking storm, gold coin spawns)
+    this.gameModeManager.update(dt, this.scene, this.casters, this.physicsArena.spawnPoints);
+
+    // 5. Update Entity physics & animations
+    this.casters.forEach((c) => c.update(dt));
+    this.projectiles.forEach((p) => p.update(dt));
+    this.powerups.forEach((pu) => pu.update(dt));
+    this.physicsArena.update(dt);
+
+    // 6. Physics Collision Checks
+    this.handleCollisions();
+
+    // 7. Spawning power-ups in arena spawners
+    this.updatePowerUpSpawning(dt);
+
+    // 8. Update decorative particle trails & bursts
+    this.updateParticles(dt);
+
+    // Camera follow player (smooth lerp)
+    if (!this.player.isDead) {
+      const targetCamX = this.player.x + 22;
+      const targetCamZ = this.player.y + 22;
+      
+      this.camera.position.x += (targetCamX - this.camera.position.x) * 4 * dt;
+      this.camera.position.z += (targetCamZ - this.camera.position.z) * 4 * dt;
+      
+      // Update lookAt
+      const lookTarget = new THREE.Vector3(this.player.x, 0, this.player.y);
+      this.camera.lookAt(lookTarget);
+    }
+
+    // Render scene
+    this.renderer.render(this.scene, this.camera);
+
+    // Update HTML HUD
+    this.updateHUD();
+  }
+
+  private updatePlayerMovement() {
+    if (this.player.isDead) return;
+
+    let moveX = 0;
+    let moveY = 0;
+
+    if (this.touchControlsActive && this.touchJoysticks.left.active) {
+      // Mobile touch stick input
+      moveX = this.touchJoysticks.left.dirX;
+      moveY = this.touchJoysticks.left.dirY;
+    } else {
+      // Keyboard input
+      if (this.keys['w'] || this.keys['arrowup']) moveY -= 1;
+      if (this.keys['s'] || this.keys['arrowdown']) moveY += 1;
+      if (this.keys['a'] || this.keys['arrowleft']) moveX -= 1;
+      if (this.keys['d'] || this.keys['arrowright']) moveX += 1;
+    }
+
+    // Normalize movement vector if diagonal
+    const length = Math.sqrt(moveX * moveX + moveY * moveY);
+    if (length > 0.05) {
+      const speed = this.player.getSpeed();
+      this.player.vx = (moveX / length) * speed;
+      this.player.vy = (moveY / length) * speed;
+    } else {
+      this.player.vx = 0;
+      this.player.vy = 0;
+    }
+
+    // Face aiming target
+    if (this.touchControlsActive && this.touchJoysticks.right.active) {
+      this.player.aimAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      
+      // Continuous shooting on mobile when right joystick is active
+      if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
+        const proj = this.spawnProjectile(this.player, this.player.aimAngle, null);
+        this.playerGuidedProjectile = proj;
+        this.player.shootTimer = this.player.getFireRateCooldown();
+      }
+    } else {
+      // Mouse tracking
+      this.player.aimAngle = Math.atan2(this.groundTarget.z - this.player.y, this.groundTarget.x - this.player.x);
+    }
+  }
+
+  private triggerPlayerDash() {
+    if (this.player.isDead) return;
+
+    let moveX = 0;
+    let moveY = 0;
+
+    if (this.touchControlsActive && this.touchJoysticks.left.active) {
+      moveX = this.touchJoysticks.left.dirX;
+      moveY = this.touchJoysticks.left.dirY;
+    } else {
+      if (this.keys['w'] || this.keys['arrowup']) moveY -= 1;
+      if (this.keys['s'] || this.keys['arrowdown']) moveY += 1;
+      if (this.keys['a'] || this.keys['arrowleft']) moveX -= 1;
+      if (this.keys['d'] || this.keys['arrowright']) moveX += 1;
+    }
+
+    this.player.dash(moveX, moveY);
+  }
+
+  private updateGuidedProjectile() {
+    if (!this.playerGuidedProjectile || this.playerGuidedProjectile.isDead) {
+      this.playerGuidedProjectile = null;
+      return;
+    }
+
+    if (this.touchControlsActive && this.touchJoysticks.right.active) {
+      // Mobile touch: curve projectile in direction the right stick is pointing
+      const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      this.playerGuidedProjectile.targetPoint = {
+        x: this.playerGuidedProjectile.x + Math.cos(angle) * 8,
+        y: this.playerGuidedProjectile.y + Math.sin(angle) * 8
+      };
+      this.playerGuidedProjectile.steerDirection = 0;
+    } else if (this.controlMode === 'TARGET') {
+      // Track 3D cursor target coordinate
+      this.updateGroundTarget();
+      this.playerGuidedProjectile.targetPoint = { x: this.groundTarget.x, y: this.groundTarget.z };
+      this.playerGuidedProjectile.steerDirection = 0;
+    } else {
+      // Manual steering via Q (left, counter-clockwise) and E (right, clockwise)
+      let steer = 0;
+      if (this.keys['q']) steer -= 1;
+      if (this.keys['e']) steer += 1;
+      
+      this.playerGuidedProjectile.steerDirection = steer;
+      this.playerGuidedProjectile.targetPoint = null;
+    }
+  }
+
+  private handleCollisions() {
+    const walls = this.physicsArena.walls;
+
+    // 1. Caster vs Wall AABB collisions (resolves overlap)
+    this.casters.forEach((caster) => {
+      if (caster.isDead || caster.isLeaping) return;
+
+      walls.forEach((wall) => {
+        const result = testCircleVsAABB(caster, wall);
+        if (result.collided) {
+          if (wall.isBouncePad) {
+            // Push Caster back violently
+            caster.vx = result.normalX * caster.getSpeed() * 1.5;
+            caster.vy = result.normalY * caster.getSpeed() * 1.5;
+            caster.dash(result.normalX, result.normalY); // triggering a forced dash
+          } else {
+            // Standard wall pushback
+            caster.x += result.overlapX;
+            caster.y += result.overlapY;
+            caster.syncMeshPosition();
+          }
+        }
+      });
+    });
+
+    // 2. Caster vs Caster collisions (resolves overlap)
+    for (let i = 0; i < this.casters.length; i++) {
+      const c1 = this.casters[i];
+      if (c1.isDead || c1.isLeaping) continue;
+
+      for (let j = i + 1; j < this.casters.length; j++) {
+        const c2 = this.casters[j];
+        if (c2.isDead || c2.isLeaping) continue;
+
+        const result = testCircleVsCircle(c1, c2);
+        if (result.collided) {
+          // Push both apart equally
+          c1.x += result.overlapX * 0.5;
+          c1.y += result.overlapY * 0.5;
+          c2.x -= result.overlapX * 0.5;
+          c2.y -= result.overlapY * 0.5;
+          c1.syncMeshPosition();
+          c2.syncMeshPosition();
+        }
+      }
+    }
+
+    // 2.5 Caster vs JumpPad collisions (launches them in a leap!)
+    this.casters.forEach((caster) => {
+      if (caster.isDead || caster.isLeaping) return;
+
+      this.physicsArena.jumpPads.forEach((pad) => {
+        const dx = caster.x - pad.x;
+        const dy = caster.y - pad.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < caster.radius + pad.radius - 0.25) {
+          // Trigger leap!
+          caster.isLeaping = true;
+          caster.leapTimer = caster.leapDuration;
+          caster.leapVx = pad.launchVx;
+          caster.leapVy = pad.launchVy;
+          caster.isDashing = false; // Cancel active dash
+
+          sfx.playDash(); // play launch sweep
+          this.spawnBlastParticles(pad.x, pad.y, 0x39ff14, 15, 1.2);
+        }
+      });
+    });
+
+    // 3. Projectile vs Wall collision checking
+    this.projectiles.forEach((proj) => {
+      if (proj.isDead) return;
+
+      walls.forEach((wall) => {
+        const result = testCircleVsAABB(proj, wall);
+        if (result.collided) {
+          // If hits a bounce pad, reflect bullet. Otherwise trigger normal bounce powerup reflection
+          if (wall.isBouncePad) {
+            const reflected = reflectVector(proj.vx, proj.vy, result.normalX, result.normalY, 1.0);
+            proj.vx = reflected.x;
+            proj.vy = reflected.y;
+            proj.targetPoint = null; // Clear tracking target on bounce to fly straight
+            sfx.playBounce();
+            this.spawnBlastParticles(proj.x, proj.y, 0xff00ff, 5, 0.6);
+          } else {
+            proj.handleWallCollision(result.normalX, result.normalY);
+          }
+        }
+      });
+    });
+
+    // 4. Projectile vs Projectile collisions (cancellation)
+    for (let i = 0; i < this.projectiles.length; i++) {
+      const p1 = this.projectiles[i];
+      if (p1.isDead) continue;
+
+      for (let j = i + 1; j < this.projectiles.length; j++) {
+        const p2 = this.projectiles[j];
+        if (p2.isDead) continue;
+
+        // Don't cancel bullets from the same owner
+        if (p1.ownerId === p2.ownerId) continue;
+
+        const result = testCircleVsCircle(p1, p2);
+        if (result.collided) {
+          p1.isDead = true;
+          p2.isDead = true;
+
+          // Play cancel sound and spark burst
+          sfx.playHit();
+          const mixColor = Math.random() < 0.5 ? p1.trailColor : p2.trailColor;
+          this.spawnBlastParticles((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, mixColor, 12, 1.2);
+        }
+      }
+    }
+
+    // 5. Projectile vs Caster collisions
+    this.projectiles.forEach((proj) => {
+      if (proj.isDead) return;
+
+      this.casters.forEach((caster) => {
+        if (caster.isDead || caster.isLeaping) return;
+        
+        // Don't hit yourself!
+        if (caster.id === proj.ownerId) return;
+
+        // TDM: Don't hit teammates
+        if (this.gameModeManager.type === GameModeType.TEAM_BATTLE) {
+          const owner = this.casters.find(c => c.id === proj.ownerId);
+          if (owner && owner.team === caster.team) return;
+        }
+
+        const result = testCircleVsCircle(proj, caster);
+        if (result.collided) {
+          const hitSuccess = proj.registerCasterHit(caster.id);
+          if (hitSuccess) {
+            const damageApplied = caster.takeDamage(proj.stats.damage);
+            
+            if (damageApplied) {
+              // Apply freeze slow if projectile has freezeLevel
+              if (proj.stats.freezeLevel && proj.stats.freezeLevel > 0) {
+                caster.freezeTimer = 2.5;
+                caster.freezeLevel = Math.max(caster.freezeLevel, proj.stats.freezeLevel);
+              }
+              
+              // Mode-specific damage hooks (e.g. drop coins)
+              this.gameModeManager.handleCasterHit(this.scene, caster);
+            }
+
+            this.spawnBlastParticles(proj.x, proj.y, proj.trailColor, 10, 0.8);
+
+            // Handle death logic
+            if (caster.isDead) {
+              const killer = this.casters.find((c) => c.id === proj.ownerId) || null;
+              if (killer) killer.score++;
+              
+              this.gameModeManager.handleCasterDeath(this.scene, caster, killer, this.casters);
+
+              // Spawn giant explosion of caster team color
+              const casterColor = caster.team === 'RED' ? 0xff3355 : caster.team === 'BLUE' ? 0x3388ff : 0xffcc00;
+              this.spawnBlastParticles(caster.x, caster.y, casterColor, 20, 1.6);
+            }
+          }
+        }
+      });
+    });
+
+    // 6. Caster vs PowerUp collisions
+    this.casters.forEach((caster) => {
+      if (caster.isDead) return;
+
+      for (let i = this.powerups.length - 1; i >= 0; i--) {
+        const pu = this.powerups[i];
+        const result = testCircleVsCircle(caster, pu);
+        if (result.collided) {
+          caster.collectPowerUp(pu.type);
+          
+          // Spawn burst particles around player
+          this.spawnBlastParticles(pu.x, pu.y, POWERUP_COLORS[pu.type], 15, 1.0);
+
+          pu.destroy(this.scene);
+          this.powerups.splice(i, 1);
+        }
+      }
+    });
+
+    // 7. Clean up deceased Projectiles (and trigger split upgrades if necessary)
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const proj = this.projectiles[i];
+      if (proj.isDead) {
+        // Trigger split stacking if the bullet exploded
+        if (proj.splitLevel > 0) {
+          this.triggerProjectileSplit(proj);
+        }
+        proj.destroy(this.scene);
+        this.projectiles.splice(i, 1);
+      }
+    }
+  }
+
+  private updatePowerUpSpawning(dt: number) {
+    const spawners = this.physicsArena.powerupSpawners;
+    const types: PowerUpType[] = [
+      PowerUpType.BOUNCE,
+      PowerUpType.PIERCE,
+      PowerUpType.SPLIT,
+      PowerUpType.HASTE,
+      PowerUpType.SHIELD,
+      PowerUpType.FREEZE
+    ];
+
+    for (let i = 0; i < spawners.length; i++) {
+      const spawn = spawners[i];
+      
+      // Check if a powerup is already floating at this spawner
+      const occupied = this.powerups.some((pu) => {
+        const dx = pu.x - spawn.x;
+        const dy = pu.y - spawn.y;
+        return (dx * dx + dy * dy) < 1.0;
+      });
+
+      if (!occupied) {
+        this.powerupSpawnCooldowns[i] += dt;
+        if (this.powerupSpawnCooldowns[i] >= 11.0) { // Spawns every 11 seconds
+          this.powerupSpawnCooldowns[i] = 0;
+          const randomType = types[Math.floor(Math.random() * types.length)];
+          const pu = new PowerUp(spawn.x, spawn.y, randomType);
+          this.scene.add(pu.mesh);
+          this.powerups.push(pu);
+        }
+      } else {
+        this.powerupSpawnCooldowns[i] = 0;
+      }
+    }
+  }
+
+  private updateParticles(dt: number) {
+    // 1. Spawning bullet trails
+    this.projectiles.forEach((proj) => {
+      // Spawn trail particle
+      const geom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+      const mat = new THREE.MeshBasicMaterial({
+        color: proj.trailColor,
+        transparent: true,
+        opacity: 0.7
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.position.set(proj.x, 0.4 + (Math.random() - 0.5) * 0.15, proj.y);
+      this.scene.add(mesh);
+
+      const p: GameParticle = {
+        position: mesh.position.clone(),
+        velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5),
+        color: proj.trailColor,
+        size: 1.0,
+        opacity: 0.7,
+        lifetime: 0,
+        maxLifetime: 0.28,
+        mesh
+      };
+      this.particles.push(p);
+    });
+
+    // 2. Animate and update existing particles
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.lifetime += dt;
+
+      if (p.lifetime >= p.maxLifetime) {
+        // Dispose
+        this.scene.remove(p.mesh);
+        p.mesh.geometry.dispose();
+        (p.mesh.material as THREE.Material).dispose();
+        this.particles.splice(i, 1);
+      } else {
+        // Move particle
+        p.position.addScaledVector(p.velocity, dt);
+        p.mesh.position.copy(p.position);
+        
+        // Gravity for blast sparks
+        if (p.velocity.y > 0.01) {
+          p.velocity.y -= 9.81 * dt;
+        }
+
+        // Scale down and fade opacity
+        const ratio = 1 - (p.lifetime / p.maxLifetime);
+        p.mesh.scale.set(ratio, ratio, ratio);
+        if (p.mesh.material instanceof THREE.MeshBasicMaterial) {
+          p.mesh.material.opacity = p.opacity * ratio;
+        }
+      }
+    }
+  }
+
+  private updateHUD() {
+    // 1. Health Bar
+    const hpProgress = document.getElementById('hp-progress');
+    const hpText = document.getElementById('hp-text');
+    if (hpProgress && hpText) {
+      hpProgress.style.width = `${this.player.health}%`;
+      hpText.innerText = `${Math.round(this.player.health)} / 100`;
+    }
+    
+    // Ammo slots update
+    const ammoSlots = document.getElementById('ammo-slots');
+    if (ammoSlots) {
+      const pips = ammoSlots.children;
+      for (let j = 0; j < pips.length; j++) {
+        if (j < this.player.ammo) {
+          pips[j].className = 'ammo-pip active';
+        } else {
+          pips[j].className = 'ammo-pip';
+        }
+      }
+    }
+
+    // 2. Power-ups HUD
+    for (let i = 0; i < 3; i++) {
+      const slot = document.getElementById(`pu-slot-${i}`);
+      const text = document.getElementById(`pu-slot-${i}-text`);
+      if (slot && text) {
+        if (i < this.player.powerupSlotsOrder.length) {
+          const type = this.player.powerupSlotsOrder[i];
+          const stack = this.player.powerups.get(type) || 1;
+          
+          text.innerText = `${type} [Lv ${stack}]`;
+          slot.className = 'pu-slot active';
+          
+          const colors: Record<PowerUpType, string> = {
+            BOUNCE: '#ffaa00',
+            PIERCE: '#aa00ff',
+            SPLIT: '#00dfff',
+            HASTE: '#39ff14',
+            SHIELD: '#ffffff',
+            FREEZE: '#4df0ff'
+          };
+          slot.style.borderColor = colors[type];
+          slot.style.boxShadow = `0 0 10px ${colors[type]}`;
+        } else {
+          text.innerText = 'Empty Slot';
+          slot.className = 'pu-slot';
+          slot.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+          slot.style.boxShadow = 'none';
+        }
+      }
+    }
+
+    // 3. Score / Cooldowns / Coin counters
+    const coinCounter = document.getElementById('coin-counter');
+    const coinText = document.getElementById('coin-val');
+    if (coinCounter && coinText) {
+      if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+        coinCounter.style.display = 'flex';
+        coinText.innerText = `${this.player.coins}`;
+      } else {
+        coinCounter.style.display = 'none';
+      }
+    }
+
+    // Dash Cooldown HUD
+    const dashOverlay = document.getElementById('dash-cooldown-overlay');
+    if (dashOverlay) {
+      if (this.player.dashCooldownTimer > 0) {
+        const percent = (this.player.dashCooldownTimer / this.player.dashCooldown) * 100;
+        dashOverlay.style.height = `${percent}%`;
+      } else {
+        dashOverlay.style.height = '0%';
+      }
+    }
+
+    // 4. Timer & Game Mode Info
+    const matchTimerEl = document.getElementById('match-timer');
+    if (matchTimerEl) {
+      const minutes = Math.floor(this.gameModeManager.matchTimer / 60);
+      const seconds = Math.floor(this.gameModeManager.matchTimer % 60).toString().padStart(2, '0');
+      matchTimerEl.innerText = `${minutes}:${seconds}`;
+    }
+
+    // Mode-specific leaderboard updates
+    this.updateLeaderboard();
+
+    // 5. Game Over Screen check
+    if (this.gameModeManager.isGameOver) {
+      this.isPlaying = false;
+      const overlay = document.getElementById('gameover-overlay');
+      const text = document.getElementById('gameover-winner');
+      if (overlay && text) {
+        text.innerText = this.gameModeManager.winnerText;
+        overlay.style.display = 'flex';
+      }
+    }
+  }
+
+  private updateLeaderboard() {
+    const list = document.getElementById('leaderboard-list');
+    if (!list) return;
+
+    // Sort casters based on current game mode rules
+    const sorted = [...this.casters];
+
+    if (this.gameModeManager.type === GameModeType.BATTLE_ROYALE) {
+      // Survival first (not dead), then score
+      sorted.sort((a, b) => {
+        if (a.isDead && !b.isDead) return 1;
+        if (!a.isDead && b.isDead) return -1;
+        return b.score - a.score;
+      });
+    } else if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+      sorted.sort((a, b) => b.coins - a.coins);
+    } else if (this.gameModeManager.type === GameModeType.TEAM_BATTLE) {
+      // Just list TDM scores on top
+      const redTotal = this.gameModeManager.redScore;
+      const blueTotal = this.gameModeManager.blueScore;
+      
+      list.innerHTML = `
+        <div class="leaderboard-item" style="color: #ff3355; font-weight: bold;">
+          <span>RED TEAM</span>
+          <span>${redTotal} / 20</span>
+        </div>
+        <div class="leaderboard-item" style="color: #3388ff; font-weight: bold;">
+          <span>BLUE TEAM</span>
+          <span>${blueTotal} / 20</span>
+        </div>
+        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 6px 0;" />
+      `;
+      
+      // Sort players by kills/score
+      sorted.sort((a, b) => b.score - a.score);
+    }
+
+    // Render top 3 in landscape, top 5 in portrait/desktop
+    const limit = window.innerHeight <= 500 ? 3 : 5;
+    const topN = sorted.slice(0, limit);
+    let itemsHtml = '';
+    
+    topN.forEach((caster, idx) => {
+      let scoreStr = '';
+      if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+        scoreStr = `${caster.coins} 🪙`;
+      } else {
+        scoreStr = `${caster.score} Kills`;
+      }
+
+      const teamStyle = caster.team === 'RED' ? 'color: #ff3355;' : caster.team === 'BLUE' ? 'color: #3388ff;' : 'color: #ffd700;';
+      const isDeadStyle = caster.isDead ? 'opacity: 0.4; text-decoration: line-through;' : '';
+      const activeUserStyle = caster.id === 'player' ? 'background: rgba(255,255,255,0.06); font-weight: bold; border-left: 3px solid #ffd700; padding-left: 4px;' : '';
+
+      itemsHtml += `
+        <div class="leaderboard-item" style="${isDeadStyle} ${activeUserStyle}">
+          <span style="${teamStyle}">#${idx + 1} ${caster.name}</span>
+          <span>${scoreStr}</span>
+        </div>
+      `;
+    });
+
+    if (this.gameModeManager.type === GameModeType.TEAM_BATTLE) {
+      list.innerHTML += itemsHtml;
+    } else {
+      list.innerHTML = itemsHtml;
+    }
+  }
+
+  cleanup() {
+    this.isPlaying = false;
+    this.physicsArena.destroy(this.scene);
+    this.casters.forEach((c) => c.destroy(this.scene));
+    this.projectiles.forEach((p) => p.destroy(this.scene));
+    this.powerups.forEach((pu) => pu.destroy(this.scene));
+    this.particles.forEach((p) => this.scene.remove(p.mesh));
+    this.gameModeManager.cleanup(this.scene);
+    
+    if (this.renderer) {
+      this.container.removeChild(this.renderer.domElement);
+      this.renderer.dispose();
+    }
+  }
+}
