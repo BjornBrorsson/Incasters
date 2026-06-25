@@ -3,6 +3,8 @@ import { Entity } from './Entity';
 import { PowerUpType, POWERUP_COLORS } from './PowerUp';
 import type { ProjectileStats } from './Projectile';
 import { sfx } from '../engine/Audio';
+import { buildHat, buildAccessory } from '../game/CharacterConfig';
+import type { CharacterConfig } from '../game/CharacterConfig';
 
 export class Caster extends Entity {
   id: string;
@@ -46,7 +48,8 @@ export class Caster extends Entity {
   staffMesh: THREE.Object3D | null = null;
   bodyGroup: THREE.Group;
   robeMesh: THREE.Mesh | null = null;
-  hatBrimMesh: THREE.Mesh | null = null;
+  hatGroup: THREE.Object3D | null = null;
+  accessoryGroup: THREE.Object3D | null = null;
   shieldMesh: THREE.Mesh | null = null;
   clothingColor!: number;
   spellColor!: number;
@@ -72,7 +75,8 @@ export class Caster extends Entity {
     team: 'RED' | 'BLUE' | 'GOLD',
     isBot: boolean,
     clothingColor?: number,
-    spellColor?: number
+    spellColor?: number,
+    config?: Partial<CharacterConfig>
   ) {
     const bodyGroup = new THREE.Group();
 
@@ -80,15 +84,20 @@ export class Caster extends Entity {
     const defaultClothing = team === 'RED' ? 0xff1122 : team === 'BLUE' ? 0x0044ff : 0xffcc00;
     const defaultSpell = team === 'RED' ? 0xff3355 : team === 'BLUE' ? 0x3388ff : 0xffcc00;
 
-    const finalClothing = clothingColor !== undefined ? clothingColor : defaultClothing;
-    const finalSpell = spellColor !== undefined ? spellColor : defaultSpell;
+    const finalClothing = config?.robeColor ?? (clothingColor !== undefined ? clothingColor : defaultClothing);
+    const finalSpell = config?.spellColor ?? (spellColor !== undefined ? spellColor : defaultSpell);
+    const hatStyle = config?.hat ?? 'WIZARD';
+    const accessoryStyle = config?.accessory ?? 'NONE';
+    const eyeColorVal = config?.eyeColor ?? 0xfff000;
 
     // 1. Robe (Body) - conical shape
     const robeGeo = new THREE.ConeGeometry(0.4, 0.9, 8);
     const robeMat = new THREE.MeshStandardMaterial({
       color: finalClothing,
-      roughness: 0.5,
-      metalness: 0.1
+      roughness: 0.45,
+      metalness: 0.05,
+      emissive: finalClothing,
+      emissiveIntensity: 0.12
     });
     const robe = new THREE.Mesh(robeGeo, robeMat);
     robe.position.y = 0.45;
@@ -107,27 +116,17 @@ export class Caster extends Entity {
     head.castShadow = true;
     bodyGroup.add(head);
 
-    // 3. Wizard Hat - Conical shape stacked on top of head, tipped back slightly
-    const hatGroup = new THREE.Group();
-    hatGroup.position.set(0, 0.95, 0);
-
-    const hatBrimGeo = new THREE.CylinderGeometry(0.45, 0.45, 0.05, 12);
-    const hatBrimMat = new THREE.MeshStandardMaterial({ color: finalClothing, roughness: 0.6 });
-    const hatBrim = new THREE.Mesh(hatBrimGeo, hatBrimMat);
-    hatGroup.add(hatBrim);
-
-    const hatConeGeo = new THREE.ConeGeometry(0.3, 0.7, 10);
-    // Tip the cone slightly
-    hatConeGeo.translate(0, 0.35, 0);
-    const hatCone = new THREE.Mesh(hatConeGeo, hatBrimMat);
-    hatCone.rotation.x = -0.15; // Tip backward slightly
-    hatGroup.add(hatCone);
-
+    // 3. Head gear (configurable cosmetic part)
+    const hatGroup = buildHat(hatStyle, finalClothing);
     bodyGroup.add(hatGroup);
+
+    // 3b. Back accessory (wings / cape / jetpack), tinted with the spell colour
+    const accessoryGroup = buildAccessory(accessoryStyle, finalSpell);
+    bodyGroup.add(accessoryGroup);
 
     // 4. Glowing eyes - 2 small spheres
     const eyeGeo = new THREE.SphereGeometry(0.05, 4, 4);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfff000 }); // Yellow glowing eyes
+    const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColorVal });
 
     const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
     leftEye.position.set(-0.09, 0.9, 0.22);
@@ -185,7 +184,8 @@ export class Caster extends Entity {
     this.clothingColor = finalClothing;
     this.spellColor = finalSpell;
     this.robeMesh = robe;
-    this.hatBrimMesh = hatBrim;
+    this.hatGroup = hatGroup;
+    this.accessoryGroup = accessoryGroup;
     this.shieldMesh = shieldBubble;
   }
 
@@ -212,7 +212,8 @@ export class Caster extends Entity {
       maxPierces: 0,
       splitLevel: 0,
       color: this.spellColor,
-      freezeLevel: 0
+      freezeLevel: 0,
+      wallRunLevel: 0
     };
 
     // 1. HASTE stack: projectile speed +25% per stack
@@ -238,6 +239,10 @@ export class Caster extends Entity {
     // 5. FREEZE stack
     const freeze = this.powerups.get(PowerUpType.FREEZE) || 0;
     stats.freezeLevel = freeze;
+
+    // 6. WALLRUN stack: projectile hugs and glides along walls
+    const wallrun = this.powerups.get(PowerUpType.WALLRUN) || 0;
+    stats.wallRunLevel = wallrun;
 
     // If there's an active power-up combination, color-mix the shot
     if (this.powerupSlotsOrder.length > 0) {
@@ -284,8 +289,19 @@ export class Caster extends Entity {
     if (this.robeMesh && this.robeMesh.material instanceof THREE.Material) {
       (this.robeMesh.material as THREE.MeshStandardMaterial).color.setHex(clothingColor);
     }
-    if (this.hatBrimMesh && this.hatBrimMesh.material instanceof THREE.Material) {
-      (this.hatBrimMesh.material as THREE.MeshStandardMaterial).color.setHex(clothingColor);
+    if (this.hatGroup) {
+      this.hatGroup.traverse((m) => {
+        if (m instanceof THREE.Mesh && m.material instanceof THREE.MeshStandardMaterial) {
+          m.material.color.setHex(clothingColor);
+        }
+      });
+    }
+    if (this.accessoryGroup) {
+      this.accessoryGroup.traverse((m) => {
+        if (m instanceof THREE.Mesh && m.material instanceof THREE.MeshStandardMaterial) {
+          m.material.color.setHex(spellColor);
+        }
+      });
     }
     this.updateStaffVisuals();
   }
@@ -511,8 +527,8 @@ export class Caster extends Entity {
       }
     } else {
       if (this.robeMesh && this.robeMesh.material instanceof THREE.MeshStandardMaterial) {
-        this.robeMesh.material.emissive.setHex(0x000000);
-        this.robeMesh.material.emissiveIntensity = 0;
+        this.robeMesh.material.emissive.setHex(this.clothingColor);
+        this.robeMesh.material.emissiveIntensity = 0.12;
       }
     }
   }

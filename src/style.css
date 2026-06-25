@@ -115,6 +115,7 @@ body {
   text-align: center;
   background: linear-gradient(135deg, #00f0ff 0%, #ff007f 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   filter: drop-shadow(0 0 12px rgba(0, 240, 255, 0.4));
   margin-bottom: -5px;
@@ -589,10 +590,156 @@ body {
 /* Color Picker Customizer */
 .customizer-container {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  gap: 14px;
   padding: 10px 14px;
+  align-items: stretch;
 }
+
+.char-preview {
+  width: 150px;
+  min-width: 130px;
+  height: 175px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 32%, rgba(0, 240, 255, 0.14), rgba(8, 12, 28, 0.5));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.customizer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+  justify-content: center;
+}
+
+.part-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.part-btn {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 4px 9px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: 'Inter', sans-serif;
+}
+
+.part-btn:hover {
+  background: rgba(0, 240, 255, 0.08);
+  border-color: rgba(0, 240, 255, 0.4);
+}
+
+.part-btn.active {
+  background: rgba(0, 240, 255, 0.16);
+  border-color: #00f0ff;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.3);
+}
+
+.part-btn.locked {
+  opacity: 0.72;
+  border-style: dashed;
+}
+
+.part-btn.denied {
+  animation: deny 0.4s ease;
+  border-color: #ff5a6e;
+}
+
+@keyframes deny {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+/* Progression badge (menu header) */
+.progress-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.8rem;
+  margin-bottom: 6px;
+}
+.pb-level { color: #ffd23d; font-weight: 700; }
+.pb-xpbar {
+  width: 120px;
+  height: 7px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pb-xpfill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #00f0ff, #0077ff);
+}
+.pb-tokens { color: #ffd23d; font-weight: 600; }
+
+/* Daily challenges */
+.challenges-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+}
+.challenge-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.78rem;
+}
+.challenge-item.done { opacity: 0.6; }
+.challenge-top {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.85);
+}
+.challenge-bar {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.challenge-bar > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #39ff14, #00f0ff);
+}
+.challenge-item.done .challenge-bar > span { background: #ffd23d; }
+
+/* End-of-match summary */
+.match-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.85rem;
+}
+.ms-row {
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 3px;
+}
+.ms-levelup {
+  color: #ffd23d;
+  font-weight: 700;
+  text-align: center;
+  margin-top: 4px;
+}
+.ms-challenge { color: #39ff14; font-size: 0.8rem; }
 
 .customizer-row {
   display: flex;
@@ -630,6 +777,111 @@ body {
   transform: scale(1.25);
   border-color: #ffffff;
   box-shadow: 0 0 10px currentColor;
+}
+
+/* FX layer: floating damage numbers */
+#fx-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 12;
+}
+
+.fx-dmg {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 1.2rem;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.75);
+  animation: dmgFloat 0.75s ease-out forwards;
+  will-change: transform, opacity;
+}
+
+@keyframes dmgFloat {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.6); }
+  20% { opacity: 1; transform: translate(-50%, -90%) scale(1.1); }
+  100% { opacity: 0; transform: translate(-50%, -165%) scale(1); }
+}
+
+/* Center-screen announcer */
+#announcer {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 900;
+  letter-spacing: 2px;
+  font-size: 2.4rem;
+  color: #ffd23d;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 3px 18px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  z-index: 13;
+}
+
+#announcer.show {
+  animation: announcePop 1.4s ease-out;
+}
+
+@keyframes announcePop {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+  12% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  25% { transform: translate(-50%, -50%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -62%) scale(1); }
+}
+
+/* Kill feed */
+#kill-feed {
+  position: absolute;
+  top: 86px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.kill-feed-item {
+  background: rgba(8, 12, 28, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 3px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #fff;
+  white-space: nowrap;
+  transition: opacity 0.5s ease;
+  font-family: 'Outfit', sans-serif;
+}
+
+.kill-feed-item.fade {
+  opacity: 0;
+}
+
+.kf-arrow {
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0 2px;
+}
+
+/* Keyboard / Gamepad focus ring for menu navigation */
+.kb-focus {
+  outline: 3px solid #00f0ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.65) !important;
+  z-index: 3;
+}
+.color-dot.kb-focus {
+  outline-width: 2px;
+  outline-offset: 1px;
+  transform: scale(1.3);
 }
 
 /* Map Selector Styling */

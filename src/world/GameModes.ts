@@ -21,6 +21,16 @@ export interface Coin {
   spillTimer: number;
 }
 
+export interface BankZone {
+  x: number;
+  y: number;
+  radius: number;
+  mesh: THREE.Group;
+  controllingTeam: 'RED' | 'BLUE' | null;
+  depositTimer: number;
+  relocateTimer: number;
+}
+
 export class GameModeManager {
   type: GameModeType;
   
@@ -47,6 +57,17 @@ export class GameModeManager {
   });
   private coinSpawnTimer: number = 0;
 
+  // Gold Rush banking (team capture-and-hold)
+  bank: BankZone | null = null;
+  goldTarget: number = 50;
+  private bankSpots: { x: number; y: number }[] = [];
+  private prevBankControl: 'RED' | 'BLUE' | null = null;
+  private bankPulse: number = 0;
+
+  // Announcements callback wired by Game to the on-screen Fx announcer
+  onAnnounce: ((text: string, color?: string) => void) | null = null;
+  private announcedFinalDuel: boolean = false;
+
   // General timers
   matchTimer: number = 120; // 2 minutes
   isGameOver: boolean = false;
@@ -56,7 +77,7 @@ export class GameModeManager {
     this.type = type;
   }
 
-  initMode(scene: THREE.Scene, casters: Caster[]) {
+  initMode(scene: THREE.Scene, casters: Caster[], bankSpots: { x: number; y: number }[] = []) {
     this.isGameOver = false;
     this.winnerText = '';
     this.matchTimer = this.type === GameModeType.BATTLE_ROYALE ? 150 : 120;
@@ -66,6 +87,9 @@ export class GameModeManager {
     this.blueScore = 0;
     this.respawnTimers.clear();
     this.safeRadius = this.maxSafeRadius;
+    this.announcedFinalDuel = false;
+    this.prevBankControl = null;
+    this.bankSpots = bankSpots;
 
     // Remove any existing mode meshes
     this.cleanup(scene);
@@ -116,15 +140,26 @@ export class GameModeManager {
       });
 
     } else if (this.type === GameModeType.GOLD_RUSH) {
-      // Free for all
-      casters.forEach((c) => {
-        c.team = 'GOLD';
+      // Two teams race to BANK coins at a capture-and-hold vault
+      casters.forEach((c, idx) => {
+        c.team = idx % 2 === 0 ? 'RED' : 'BLUE';
+        c.reset();
+        c.coins = 0;
+        if (c.team === 'RED') {
+          c.updateColors(0xff1122, 0xff1122);
+        } else {
+          c.updateColors(0x0044ff, 0x00d2ff);
+        }
       });
+
       this.coinSpawnTimer = 0;
-      // Spawn 10 initial coins
       for (let i = 0; i < 12; i++) {
         this.spawnRandomCoin(scene);
       }
+
+      // Create the Bank at a random open spawner spot
+      const spots = this.bankSpots.length > 0 ? this.bankSpots : [{ x: 0, y: 0 }];
+      this.createBank(scene, spots[Math.floor(Math.random() * spots.length)]);
     }
   }
 
@@ -138,8 +173,8 @@ export class GameModeManager {
       return;
     }
 
-    // 1. Handle Respawning for Team Battle
-    if (this.type === GameModeType.TEAM_BATTLE) {
+    // 1. Handle Respawning for Team Battle & Gold Rush
+    if (this.type === GameModeType.TEAM_BATTLE || this.type === GameModeType.GOLD_RUSH) {
       casters.forEach((c) => {
         if (c.isDead) {
           let time = this.respawnTimers.get(c.id) || 3.0;
@@ -184,13 +219,19 @@ export class GameModeManager {
 
       // Victory check: last caster alive
       const aliveCasters = casters.filter((c) => !c.isDead);
+      if (!this.announcedFinalDuel && aliveCasters.length === 2) {
+        this.announcedFinalDuel = true;
+        this.onAnnounce?.('FINAL DUEL!', '#ff5555');
+      }
       if (aliveCasters.length <= 1) {
         this.endGame(casters);
       }
     }
 
-    // 3. Handle Gold Rush Coins
+    // 3. Handle Gold Rush Coins & Bank
     if (this.type === GameModeType.GOLD_RUSH) {
+      this.updateBank(dt, casters);
+
       this.coinSpawnTimer += dt;
       if (this.coinSpawnTimer >= 3.0 && this.coins.length < 25) {
         this.coinSpawnTimer = 0;
@@ -264,13 +305,13 @@ export class GameModeManager {
       this.respawnTimers.set(deceased.id, 3.0);
       scene.remove(deceased.mesh);
 
-      // Score threshold win condition
-      if (this.redScore >= 20 || this.blueScore >= 20) {
+      // Score threshold win condition (first to 10 eliminations)
+      if (this.redScore >= 10 || this.blueScore >= 10) {
         this.endGame(allCasters);
       }
     }
 
-    // 2. Gold Rush: Spill all coins!
+    // 2. Gold Rush: spill carried coins, then queue a respawn
     if (this.type === GameModeType.GOLD_RUSH) {
       const dropCount = deceased.coins;
       deceased.coins = 0;
@@ -281,6 +322,9 @@ export class GameModeManager {
         const force = 2.0 + Math.random() * 4.0;
         this.spawnSpilledCoin(scene, deceased.x, deceased.y, Math.cos(angle) * force, Math.sin(angle) * force);
       }
+
+      this.respawnTimers.set(deceased.id, 3.0);
+      scene.remove(deceased.mesh);
     }
   }
 
@@ -329,6 +373,140 @@ export class GameModeManager {
     this.coins.push(coin);
   }
 
+  private createBank(scene: THREE.Scene, spot: { x: number; y: number }) {
+    const group = new THREE.Group();
+    const radius = 2.4;
+
+    // Ground capture ring
+    const ringGeo = new THREE.RingGeometry(radius - 0.25, radius, 48);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, side: THREE.DoubleSide, transparent: true, opacity: 0.85 });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.03;
+    group.add(ring);
+
+    // Soft column of light marking the zone
+    const colGeo = new THREE.CylinderGeometry(radius * 0.92, radius * 0.92, 3, 32, 1, true);
+    const colMat = new THREE.MeshBasicMaterial({ color: 0xffd23d, transparent: true, opacity: 0.12, side: THREE.DoubleSide, depthWrite: false });
+    const col = new THREE.Mesh(colGeo, colMat);
+    col.position.y = 1.5;
+    group.add(col);
+
+    // Central golden pedestal
+    const baseGeo = new THREE.CylinderGeometry(0.55, 0.75, 0.4, 16);
+    const baseMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0xaa8800, emissiveIntensity: 0.4, metalness: 0.85, roughness: 0.3 });
+    const base = new THREE.Mesh(baseGeo, baseMat);
+    base.position.y = 0.2;
+    base.castShadow = true;
+    group.add(base);
+
+    group.position.set(spot.x, 0, spot.y);
+    scene.add(group);
+
+    this.bank = {
+      x: spot.x,
+      y: spot.y,
+      radius,
+      mesh: group,
+      controllingTeam: null,
+      depositTimer: 0,
+      relocateTimer: 20
+    };
+  }
+
+  private updateBank(dt: number, casters: Caster[]) {
+    if (!this.bank) return;
+    const bank = this.bank;
+
+    // Periodically relocate the bank to keep fights moving
+    bank.relocateTimer -= dt;
+    if (bank.relocateTimer <= 0 && this.bankSpots.length > 1) {
+      this.relocateBank();
+    }
+
+    // Count living occupants per team
+    let red = 0;
+    let blue = 0;
+    const inside: Caster[] = [];
+    casters.forEach((c) => {
+      if (c.isDead) return;
+      const dx = c.x - bank.x;
+      const dy = c.y - bank.y;
+      if (dx * dx + dy * dy < bank.radius * bank.radius) {
+        inside.push(c);
+        if (c.team === 'RED') red++;
+        else if (c.team === 'BLUE') blue++;
+      }
+    });
+
+    let control: 'RED' | 'BLUE' | null = null;
+    if (red > 0 && blue === 0) control = 'RED';
+    else if (blue > 0 && red === 0) control = 'BLUE';
+    bank.controllingTeam = control;
+
+    if (control && control !== this.prevBankControl) {
+      this.onAnnounce?.(`${control} CONTROLS THE BANK`, control === 'RED' ? '#ff5a6e' : '#4aa8ff');
+    }
+    this.prevBankControl = control;
+
+    // Deposit carried coins for the controlling (uncontested) team
+    if (control) {
+      bank.depositTimer += dt;
+      if (bank.depositTimer >= 0.14) {
+        bank.depositTimer = 0;
+        let deposited = false;
+        inside.forEach((c) => {
+          if (c.team === control && c.coins > 0) {
+            c.coins--;
+            if (control === 'RED') this.redScore++;
+            else this.blueScore++;
+            deposited = true;
+          }
+        });
+        if (deposited) sfx.playBounce();
+        if (this.redScore >= this.goldTarget || this.blueScore >= this.goldTarget) {
+          this.endGame(casters);
+          return;
+        }
+      }
+    } else {
+      bank.depositTimer = 0;
+    }
+
+    this.updateBankVisual(dt);
+  }
+
+  private relocateBank() {
+    if (!this.bank || this.bankSpots.length === 0) return;
+    let spot = this.bankSpots[Math.floor(Math.random() * this.bankSpots.length)];
+    for (let tries = 0; tries < 4 && Math.abs(spot.x - this.bank.x) < 0.1 && Math.abs(spot.y - this.bank.y) < 0.1; tries++) {
+      spot = this.bankSpots[Math.floor(Math.random() * this.bankSpots.length)];
+    }
+    this.bank.x = spot.x;
+    this.bank.y = spot.y;
+    this.bank.mesh.position.set(spot.x, 0, spot.y);
+    this.bank.relocateTimer = 20;
+    this.prevBankControl = null;
+    this.onAnnounce?.('THE BANK MOVED!', '#ffd23d');
+  }
+
+  private updateBankVisual(dt: number) {
+    if (!this.bank) return;
+    this.bankPulse += dt * 3;
+    const color = this.bank.controllingTeam === 'RED' ? 0xff3344 : this.bank.controllingTeam === 'BLUE' ? 0x3399ff : 0xffd23d;
+    const ring = this.bank.mesh.children[0] as THREE.Mesh;
+    const col = this.bank.mesh.children[1] as THREE.Mesh;
+    if (ring && ring.material instanceof THREE.MeshBasicMaterial) {
+      ring.material.color.setHex(color);
+      ring.material.opacity = 0.7 + Math.sin(this.bankPulse) * 0.2;
+    }
+    if (col && col.material instanceof THREE.MeshBasicMaterial) {
+      col.material.color.setHex(color);
+      col.material.opacity = (this.bank.controllingTeam ? 0.2 : 0.1) + Math.sin(this.bankPulse) * 0.03;
+    }
+    this.bank.mesh.rotation.y += dt * 0.5;
+  }
+
   private endGame(casters: Caster[]) {
     this.isGameOver = true;
 
@@ -356,23 +534,15 @@ export class GameModeManager {
       }
 
     } else if (this.type === GameModeType.GOLD_RUSH) {
-      // Find player/bot with most coins
-      let best: Caster | null = null;
-      let maxCoins = -1;
-
-      casters.forEach((c) => {
-        if (c.coins > maxCoins) {
-          maxCoins = c.coins;
-          best = c;
-        }
-      });
-
-      if (best) {
-        this.winnerText = `${(best as Caster).name} WINS Gold Rush with ${maxCoins} coins!`;
-        if ((best as Caster).id === 'player') sfx.playStart();
-        else sfx.playSadGameOver();
+      // Highest banked team total wins
+      if (this.redScore > this.blueScore) {
+        this.winnerText = `RED TEAM WINS Gold Rush ${this.redScore} - ${this.blueScore}!`;
+        sfx.playStart();
+      } else if (this.blueScore > this.redScore) {
+        this.winnerText = `BLUE TEAM WINS Gold Rush ${this.blueScore} - ${this.redScore}!`;
+        sfx.playSadGameOver();
       } else {
-        this.winnerText = 'No coins collected!';
+        this.winnerText = 'TIE GAME!';
         sfx.playSadGameOver();
       }
     }
@@ -398,5 +568,17 @@ export class GameModeManager {
       c.mesh.geometry.dispose();
     });
     this.coins = [];
+
+    if (this.bank) {
+      scene.remove(this.bank.mesh);
+      this.bank.mesh.traverse((ch) => {
+        if (ch instanceof THREE.Mesh) {
+          ch.geometry.dispose();
+          (ch.material as THREE.Material).dispose();
+        }
+      });
+      this.bank = null;
+    }
+    this.prevBankControl = null;
   }
 }

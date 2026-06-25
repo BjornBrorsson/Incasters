@@ -21,6 +21,7 @@
       <div id="menu-screen" class="glass-panel">
         <h1 class="game-title">INCASTERS</h1>
         <p class="game-subtitle">The Curved Shot Isometric Arena Battler</p>
+        <div id="progress-badge" class="progress-badge"></div>
         
         <div class="menu-section">
           <h3>SELECT GAME MODE</h3>
@@ -31,11 +32,11 @@
             </button>
             <button id="btn-mode-tdm" class="mode-btn" data-mode="TEAM_BATTLE">
               <span class="mode-title">Team Battle</span>
-              <span class="mode-desc">4v4 Team Deathmatch. First to 20 eliminations wins</span>
+              <span class="mode-desc">Red vs Blue deathmatch. First team to 10 eliminations wins</span>
             </button>
             <button id="btn-mode-gold" class="mode-btn" data-mode="GOLD_RUSH">
               <span class="mode-title">Gold Rush</span>
-              <span class="mode-desc">Collect spawning coins. Hit Casters to steal theirs</span>
+              <span class="mode-desc">Two teams grab coins &amp; capture the Bank to deposit. First to 50 banked wins</span>
             </button>
           </div>
         </div>
@@ -83,17 +84,33 @@
         </div>
 
         <div class="menu-section">
-          <h3>CUSTOMIZE YOUR WIZARD (FFA Modes)</h3>
+          <h3>CUSTOMIZE YOUR WIZARD</h3>
           <div class="customizer-container glass-panel-nested">
-            <div class="customizer-row">
-              <span class="customizer-label">Robe:</span>
-              <div id="robe-color-picker" class="color-picker"></div>
-            </div>
-            <div class="customizer-row">
-              <span class="customizer-label">Spell:</span>
-              <div id="spell-color-picker" class="color-picker"></div>
+            <div id="char-preview" class="char-preview"></div>
+            <div class="customizer-controls">
+              <div class="customizer-row">
+                <span class="customizer-label">Robe</span>
+                <div id="robe-color-picker" class="color-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Spell</span>
+                <div id="spell-color-picker" class="color-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Hat</span>
+                <div id="hat-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Gear</span>
+                <div id="accessory-picker" class="part-picker"></div>
+              </div>
             </div>
           </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>DAILY CHALLENGES</h3>
+          <div id="challenges-list" class="challenges-list glass-panel-nested"></div>
         </div>
 
         <div class="instructions glass-panel-nested">
@@ -168,7 +185,7 @@
             <div id="dash-cooldown-overlay" class="dash-circle-overlay"></div>
             <span class="dash-letter">⚡</span>
           </div>
-          <span class="dash-label">SPACEBAR</span>
+          <span class="dash-label">DASH</span>
         </div>
 
       </div>
@@ -177,9 +194,15 @@
       <div id="gameover-overlay" class="gameover-overlay glass-panel" style="display: none;">
         <h2 class="gameover-title">MATCH OVER</h2>
         <p id="gameover-winner" class="gameover-winner-text">Glitch WINS Last Caster Standing!</p>
-        
+        <div id="match-summary" class="match-summary"></div>
+
         <button id="btn-restart" class="play-btn">PLAY AGAIN</button>
       </div>
+
+      <!-- FX: floating damage numbers, kill feed & announcer -->
+      <div id="fx-layer"></div>
+      <div id="kill-feed"></div>
+      <div id="announcer"></div>
 
       <!-- VIRTUAL TOUCH JOYSTICKS -->
       <div id="joy-left" class="joy-container">

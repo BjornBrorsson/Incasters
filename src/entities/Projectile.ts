@@ -11,6 +11,7 @@ export interface ProjectileStats {
   splitLevel: number;
   color: number;
   freezeLevel?: number; // Optional freeze slow stacks
+  wallRunLevel?: number; // Optional wall-gliding stacks
 }
 
 export class Projectile extends Entity {
@@ -19,6 +20,9 @@ export class Projectile extends Entity {
   bouncesRemaining: number;
   piercesRemaining: number;
   splitLevel: number;
+  wallRunLevel: number;
+  isWallRunning: boolean = false;
+  age: number = 0;
   hitCasterIds: Set<string> = new Set();
   
   // Ribbon trail particles metadata
@@ -70,6 +74,7 @@ export class Projectile extends Entity {
     this.bouncesRemaining = stats.maxBounces;
     this.piercesRemaining = stats.maxPierces;
     this.splitLevel = stats.splitLevel;
+    this.wallRunLevel = stats.wallRunLevel || 0;
     this.trailColor = color;
 
     // Set initial velocity
@@ -80,6 +85,12 @@ export class Projectile extends Entity {
   }
 
   update(dt: number) {
+    // Safety lifetime so wall-running / bouncing shots can never live forever
+    this.age += dt;
+    if (this.age > 8) {
+      this.isDead = true;
+    }
+
     // 1. Curving shot logic (steering or target tracking)
     let currentAngle = Math.atan2(this.vy, this.vx);
     const speed = this.stats.speed;
@@ -117,7 +128,32 @@ export class Projectile extends Entity {
     super.update(dt);
   }
 
-  handleWallCollision(normalX: number, normalY: number) {
+  handleWallCollision(normalX: number, normalY: number, overlapX: number = 0, overlapY: number = 0) {
+    // Wallrunner: glide along the wall surface instead of bouncing or exploding
+    if (this.wallRunLevel > 0) {
+      // Push out to the wall surface
+      this.x += overlapX;
+      this.y += overlapY;
+
+      // Project the velocity onto the wall tangent (perpendicular to the normal)
+      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy) || this.stats.speed;
+      let tx = -normalY;
+      let ty = normalX;
+      if (this.vx * tx + this.vy * ty < 0) {
+        tx = -tx;
+        ty = -ty;
+      }
+      this.vx = tx * speed;
+      this.vy = ty * speed;
+
+      // Commit to the wall: stop any curving / guidance
+      this.targetPoint = null;
+      this.steerDirection = 0;
+      this.isWallRunning = true;
+      sfx.playBounce();
+      return;
+    }
+
     if (this.bouncesRemaining > 0) {
       // Reflect projectile
       const reflected = reflectVector(this.vx, this.vy, normalX, normalY, 1.0);

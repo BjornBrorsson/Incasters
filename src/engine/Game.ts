@@ -8,6 +8,12 @@ import { Arena, MapType } from '../world/Arena';
 import { GameModeManager, GameModeType } from '../world/GameModes';
 import { testCircleVsAABB, testCircleVsCircle, reflectVector } from './Physics';
 import { sfx } from './Audio';
+import { InputManager } from './InputManager';
+import { PALETTE, createSkyDome } from './Theme';
+import { Fx } from './Fx';
+import { DEFAULT_CONFIG, randomCharacterConfig } from '../game/CharacterConfig';
+import type { CharacterConfig } from '../game/CharacterConfig';
+import type { MatchResult } from '../game/Progression';
 
 export interface GameParticle {
   position: THREE.Vector3;
@@ -26,6 +32,15 @@ export class Game {
   camera!: THREE.OrthographicCamera;
   renderer!: THREE.WebGLRenderer;
   private container: HTMLDivElement;
+  private camOffset = new THREE.Vector3(18, 25, 29);
+
+  // Game-feel state
+  private fx = new Fx();
+  private shakeTrauma = 0;
+  private hitStopTimer = 0;
+  private playerCombo = 0;
+  private playerComboTimer = 0;
+  private firstBlood = false;
 
   // Game Entities
   arena!: THREE.Group;
@@ -43,8 +58,7 @@ export class Game {
   private powerupSpawnCooldowns: number[] = [0, 0, 0, 0]; // matching arena spawners
 
   // Input states
-  private keys: Record<string, boolean> = {};
-  private mouse = new THREE.Vector2();
+  private input!: InputManager;
   private groundTarget = new THREE.Vector3(); // Mouse unprojected position
   private raycaster = new THREE.Raycaster();
   private planeY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -67,6 +81,11 @@ export class Game {
   // Custom Colors
   playerRobeColor: number = 0xff007f; // Neon Pink default
   playerSpellColor: number = 0x00f0ff; // Neon Cyan default
+  playerConfig: CharacterConfig = { ...DEFAULT_CONFIG };
+
+  // Match-end hook (wired to local progression by main.ts)
+  onMatchEnd: ((result: MatchResult) => void) | null = null;
+  private matchEndFired = false;
 
   // Match Customizer
   playerCount: number = 8;
@@ -78,12 +97,22 @@ export class Game {
     playerRobeColor?: number,
     playerSpellColor?: number,
     mapType?: MapType,
-    playerCount?: number
+    playerCount?: number,
+    playerConfig?: CharacterConfig
   ) {
     this.container = container;
     this.gameModeManager = new GameModeManager(modeType);
-    if (playerRobeColor !== undefined) this.playerRobeColor = playerRobeColor;
-    if (playerSpellColor !== undefined) this.playerSpellColor = playerSpellColor;
+    if (playerConfig) {
+      this.playerConfig = playerConfig;
+    } else {
+      this.playerConfig = {
+        ...DEFAULT_CONFIG,
+        robeColor: playerRobeColor ?? DEFAULT_CONFIG.robeColor,
+        spellColor: playerSpellColor ?? DEFAULT_CONFIG.spellColor
+      };
+    }
+    this.playerRobeColor = this.playerConfig.robeColor;
+    this.playerSpellColor = this.playerConfig.spellColor;
     if (mapType !== undefined) this.mapType = mapType;
     if (playerCount !== undefined) this.playerCount = playerCount;
     this.initThree();
@@ -93,8 +122,11 @@ export class Game {
 
   private initThree() {
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x04060f);
-    this.scene.fog = new THREE.FogExp2(0x04060f, 0.025);
+    this.scene.background = new THREE.Color(PALETTE.skyBottom);
+    this.scene.fog = new THREE.FogExp2(PALETTE.fog, PALETTE.fogDensity);
+
+    // Bright gradient sky dome (code-only, no textures)
+    this.scene.add(createSkyDome());
 
     // Setup Orthographic Isometric Camera
     const aspect = window.innerWidth / window.innerHeight;
@@ -104,8 +136,8 @@ export class Game {
       d, -d,
       1, 1000
     );
-    // Position at 45 degree tilt looking down
-    this.camera.position.set(22, 22, 22);
+    // Offset, slightly-odd isometric angle for a more dynamic, Outcasters-like view
+    this.camera.position.copy(this.camOffset);
     this.camera.lookAt(0, 0, 0);
 
     // WebGL Renderer
@@ -115,9 +147,14 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.25);
+    // Lighting — bright, soft toy-like shading
+    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.4);
     this.scene.add(ambientLight);
+
+    // Hemisphere light delivers the clean daytime / toy look
+    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.55);
+    hemiLight.position.set(0, 40, 0);
+    this.scene.add(hemiLight);
 
     // Directional Shadow Casting Light
     const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
@@ -137,7 +174,7 @@ export class Game {
     this.scene.add(dirLight);
 
     // Subtle blue background spotlight for environment depth
-    const envLight = new THREE.DirectionalLight(0x00d2ff, 0.4);
+    const envLight = new THREE.DirectionalLight(0x00d2ff, 0.2);
     envLight.position.set(15, 20, -15);
     this.scene.add(envLight);
 
@@ -165,14 +202,19 @@ export class Game {
     // 2. Build Level Arena
     this.physicsArena = new Arena(this.mapType);
     this.physicsArena.buildArena(this.scene);
+    this.physicsArena.onHazardFire = (x, y, angle) => this.spawnHazardProjectile(x, y, angle);
 
     // 3. Spawn Casters (Player + Bots)
     const sp = this.physicsArena.spawnPoints;
     const botNames = ['Glitch', 'Spike', 'Glimmer', 'Vortex', 'Echo', 'Frost', 'Blaze'];
 
+    // Keep player colours in sync with the active config (handles restart edits)
+    this.playerRobeColor = this.playerConfig.robeColor;
+    this.playerSpellColor = this.playerConfig.spellColor;
+
     // Player (Index 0)
     const playerSp = sp[0];
-    this.player = new Caster('player', 'You (Player)', playerSp.x, playerSp.y, 'GOLD', false, this.playerRobeColor, this.playerSpellColor);
+    this.player = new Caster('player', 'You (Player)', playerSp.x, playerSp.y, 'GOLD', false, this.playerRobeColor, this.playerSpellColor, this.playerConfig);
     this.scene.add(this.player.mesh);
     this.casters.push(this.player);
 
@@ -205,7 +247,8 @@ export class Game {
         botSp.y + (Math.random() - 0.5) * 0.5,
         'GOLD',
         colorPair.robe,
-        colorPair.spell
+        colorPair.spell,
+        randomCharacterConfig(colorPair.robe, colorPair.spell)
       );
       
       // Hook bot shoot capability into game loop spawner
@@ -218,10 +261,20 @@ export class Game {
     }
 
     // 4. Initialize active Game Mode
-    this.gameModeManager.initMode(this.scene, this.casters);
+    this.gameModeManager.onAnnounce = (text, color) => this.fx.announce(text, color);
+    this.gameModeManager.initMode(this.scene, this.casters, this.physicsArena.powerupSpawners);
 
     // 5. Reset power-up spawners timers
     this.powerupSpawnCooldowns = this.physicsArena.powerupSpawners.map(() => 0);
+
+    // Reset game-feel state
+    this.shakeTrauma = 0;
+    this.hitStopTimer = 0;
+    this.playerCombo = 0;
+    this.playerComboTimer = 0;
+    this.firstBlood = false;
+    this.matchEndFired = false;
+    this.fx.clear();
 
     // Reset clocks
     this.clock.getDelta();
@@ -234,49 +287,8 @@ export class Game {
   }
 
   private setupInput() {
-    // Keyboard inputs
-    window.addEventListener('keydown', (e) => {
-      this.keys[e.key.toLowerCase()] = true;
-
-      // Handle Spacebar Dash
-      if (e.key === ' ' || e.code === 'Space') {
-        e.preventDefault();
-        this.triggerPlayerDash();
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      this.keys[e.key.toLowerCase()] = false;
-    });
-
-    // Mouse movement to aim
-    window.addEventListener('mousemove', (e) => {
-      this.mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-      this.mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-      this.updateGroundTarget();
-    });
-
-    // Fire shots on click
-    window.addEventListener('mousedown', (e) => {
-      if (e.button === 0 && this.isPlaying && !this.player.isDead) { // Left click
-        this.updateGroundTarget();
-        if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
-          const angle = Math.atan2(this.groundTarget.z - this.player.y, this.groundTarget.x - this.player.x);
-          
-          // Spawn bullet
-          const proj = this.spawnProjectile(this.player, angle, this.controlMode === 'TARGET' ? this.groundTarget : null);
-          this.playerGuidedProjectile = proj;
-          this.player.shootTimer = this.player.getFireRateCooldown();
-        }
-      }
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) {
-        // Release guiding on mouse release
-        this.playerGuidedProjectile = null;
-      }
-    });
+    // Unified keyboard + mouse + gamepad input
+    this.input = new InputManager();
 
     // Touch screen / Mobile joy sticks setup
     window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
@@ -298,7 +310,7 @@ export class Game {
   }
 
   private updateGroundTarget() {
-    this.raycaster.setFromCamera(this.mouse, this.camera);
+    this.raycaster.setFromCamera(this.input.mouseNDC, this.camera);
     const intersectPoint = new THREE.Vector3();
     this.raycaster.ray.intersectPlane(this.planeY0, intersectPoint);
     this.groundTarget.copy(intersectPoint);
@@ -492,6 +504,25 @@ export class Game {
     return proj;
   }
 
+  // Neutral projectile fired by arena hazards (shooting statues) — damages everyone
+  private spawnHazardProjectile(x: number, y: number, angle: number) {
+    const stats: ProjectileStats = {
+      damage: 18,
+      speed: 7.5,
+      maxBounces: 0,
+      maxPierces: 0,
+      splitLevel: 0,
+      color: 0xff7733,
+      freezeLevel: 0,
+      wallRunLevel: 0
+    };
+    const proj = new Projectile(x, y, angle, 'hazard', stats);
+    this.scene.add(proj.mesh);
+    this.projectiles.push(proj);
+    sfx.playShoot();
+    this.spawnBlastParticles(x, y, stats.color, 5, 0.7);
+  }
+
   // Spark/trail particle system
   spawnBlastParticles(x: number, y: number, color: number, count: number = 10, scaleMultiplier = 1) {
     const particleGeometry = new THREE.SphereGeometry(0.08 * scaleMultiplier, 4, 4);
@@ -568,10 +599,30 @@ export class Game {
     }
 
     // Clamp dt to prevent massive jumps when switching tabs
-    const dt = Math.min(this.clock.getDelta(), 0.1);
+    let dt = Math.min(this.clock.getDelta(), 0.1);
+
+    // Hit-stop: briefly slow time for impact on kills
+    if (this.hitStopTimer > 0) {
+      this.hitStopTimer -= dt;
+      dt *= 0.12;
+    }
+
+    // Decay the player's multi-kill combo window
+    if (this.playerComboTimer > 0) this.playerComboTimer -= dt;
+
+    // 0. Refresh gamepad snapshot for this frame
+    this.input.pollGamepad();
 
     // 1. Process player inputs and movement
     this.updatePlayerMovement();
+
+    // Edge-triggered dash (spacebar / gamepad button)
+    if (this.input.consumeDash()) {
+      this.triggerPlayerDash();
+    }
+
+    // Continuous casting based on held fire input (mouse / trigger / touch)
+    this.handlePlayerFiring();
 
     // 2. Process active projectile curving guides for player
     this.updateGuidedProjectile();
@@ -586,7 +637,8 @@ export class Game {
           this.powerups,
           this.physicsArena.walls,
           this.gameModeManager.coins,
-          this.gameModeManager.safeRadius
+          this.gameModeManager.type === GameModeType.BATTLE_ROYALE ? this.gameModeManager.safeRadius : 0,
+          this.gameModeManager.bank
         );
       }
     });
@@ -609,17 +661,32 @@ export class Game {
     // 8. Update decorative particle trails & bursts
     this.updateParticles(dt);
 
-    // Camera follow player (smooth lerp)
+    // Camera follow player using the fixed offset angle (smooth lerp)
     if (!this.player.isDead) {
-      const targetCamX = this.player.x + 22;
-      const targetCamZ = this.player.y + 22;
-      
+      const targetCamX = this.player.x + this.camOffset.x;
+      const targetCamZ = this.player.y + this.camOffset.z;
+
       this.camera.position.x += (targetCamX - this.camera.position.x) * 4 * dt;
       this.camera.position.z += (targetCamZ - this.camera.position.z) * 4 * dt;
-      
-      // Update lookAt
+      this.camera.position.y += (this.camOffset.y - this.camera.position.y) * 4 * dt;
+
       const lookTarget = new THREE.Vector3(this.player.x, 0, this.player.y);
-      this.camera.lookAt(lookTarget);
+
+      // Screen shake (trauma-based): pan the view and add a slight roll
+      if (this.shakeTrauma > 0) {
+        const s = this.shakeTrauma * this.shakeTrauma;
+        const ox = (Math.random() * 2 - 1) * s * 1.6;
+        const oz = (Math.random() * 2 - 1) * s * 1.6;
+        this.camera.position.x += ox;
+        this.camera.position.z += oz;
+        lookTarget.x += ox;
+        lookTarget.z += oz;
+        this.camera.lookAt(lookTarget);
+        this.camera.rotation.z += (Math.random() * 2 - 1) * s * 0.04;
+        this.shakeTrauma = Math.max(0, this.shakeTrauma - dt * 1.6);
+      } else {
+        this.camera.lookAt(lookTarget);
+      }
     }
 
     // Render scene
@@ -639,38 +706,73 @@ export class Game {
       // Mobile touch stick input
       moveX = this.touchJoysticks.left.dirX;
       moveY = this.touchJoysticks.left.dirY;
+    } else if (this.input.usingGamepad) {
+      // Analog gamepad movement
+      const gm = this.input.gamepadMove();
+      moveX = gm.x;
+      moveY = gm.y;
     } else {
       // Keyboard input
-      if (this.keys['w'] || this.keys['arrowup']) moveY -= 1;
-      if (this.keys['s'] || this.keys['arrowdown']) moveY += 1;
-      if (this.keys['a'] || this.keys['arrowleft']) moveX -= 1;
-      if (this.keys['d'] || this.keys['arrowright']) moveX += 1;
+      const km = this.input.keyboardMove();
+      moveX = km.x;
+      moveY = km.y;
     }
 
-    // Normalize movement vector if diagonal
+    // Normalize direction but preserve analog magnitude for sticks
     const length = Math.sqrt(moveX * moveX + moveY * moveY);
     if (length > 0.05) {
       const speed = this.player.getSpeed();
-      this.player.vx = (moveX / length) * speed;
-      this.player.vy = (moveY / length) * speed;
+      const mag = Math.min(length, 1);
+      this.player.vx = (moveX / length) * speed * mag;
+      this.player.vy = (moveY / length) * speed * mag;
     } else {
       this.player.vx = 0;
       this.player.vy = 0;
     }
 
-    // Face aiming target
+    // Aiming source priority: touch > active gamepad stick > mouse
     if (this.touchControlsActive && this.touchJoysticks.right.active) {
       this.player.aimAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
-      
-      // Continuous shooting on mobile when right joystick is active
-      if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
-        const proj = this.spawnProjectile(this.player, this.player.aimAngle, null);
-        this.playerGuidedProjectile = proj;
-        this.player.shootTimer = this.player.getFireRateCooldown();
+    } else if (this.input.usingGamepad) {
+      const ga = this.input.gamepadAim();
+      if (ga.active) {
+        this.player.aimAngle = Math.atan2(ga.y, ga.x);
       }
+      // else keep last aim while the stick is centered
     } else {
-      // Mouse tracking
+      this.updateGroundTarget();
       this.player.aimAngle = Math.atan2(this.groundTarget.z - this.player.y, this.groundTarget.x - this.player.x);
+    }
+  }
+
+  private handlePlayerFiring() {
+    if (this.player.isDead) {
+      this.playerGuidedProjectile = null;
+      return;
+    }
+
+    const touchFiring = this.touchControlsActive && this.touchJoysticks.right.active;
+    const fireHeld = touchFiring || this.input.isFireHeld();
+
+    if (!fireHeld) {
+      // Releasing fire stops guiding the previous shot
+      this.playerGuidedProjectile = null;
+      return;
+    }
+
+    if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
+      // Mouse Target-Tracking fires toward an absolute ground point; directional
+      // sources (gamepad / touch) are steered each frame in updateGuidedProjectile.
+      const useMouseTarget = !touchFiring && !this.input.usingGamepad && this.controlMode === 'TARGET';
+      if (useMouseTarget) this.updateGroundTarget();
+
+      const proj = this.spawnProjectile(
+        this.player,
+        this.player.aimAngle,
+        useMouseTarget ? this.groundTarget : null
+      );
+      this.playerGuidedProjectile = proj;
+      this.player.shootTimer = this.player.getFireRateCooldown();
     }
   }
 
@@ -683,14 +785,19 @@ export class Game {
     if (this.touchControlsActive && this.touchJoysticks.left.active) {
       moveX = this.touchJoysticks.left.dirX;
       moveY = this.touchJoysticks.left.dirY;
+    } else if (this.input.usingGamepad) {
+      const gm = this.input.gamepadMove();
+      moveX = gm.x;
+      moveY = gm.y;
     } else {
-      if (this.keys['w'] || this.keys['arrowup']) moveY -= 1;
-      if (this.keys['s'] || this.keys['arrowdown']) moveY += 1;
-      if (this.keys['a'] || this.keys['arrowleft']) moveX -= 1;
-      if (this.keys['d'] || this.keys['arrowright']) moveX += 1;
+      const km = this.input.keyboardMove();
+      moveX = km.x;
+      moveY = km.y;
     }
 
+    const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
     this.player.dash(moveX, moveY);
+    if (canDash) this.input.rumble(90, 0.25, 0.5);
   }
 
   private updateGuidedProjectile() {
@@ -699,27 +806,100 @@ export class Game {
       return;
     }
 
+    const proj = this.playerGuidedProjectile;
+
+    // A committed wall-runner ignores further guidance and hugs the wall
+    if (proj.isWallRunning) return;
+
     if (this.touchControlsActive && this.touchJoysticks.right.active) {
       // Mobile touch: curve projectile in direction the right stick is pointing
       const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
-      this.playerGuidedProjectile.targetPoint = {
-        x: this.playerGuidedProjectile.x + Math.cos(angle) * 8,
-        y: this.playerGuidedProjectile.y + Math.sin(angle) * 8
+      proj.targetPoint = {
+        x: proj.x + Math.cos(angle) * 8,
+        y: proj.y + Math.sin(angle) * 8
       };
-      this.playerGuidedProjectile.steerDirection = 0;
+      proj.steerDirection = 0;
+    } else if (this.input.usingGamepad) {
+      // Gamepad right stick: directional curve (TARGET) or steer (MANUAL)
+      const ga = this.input.gamepadAim();
+      if (this.controlMode === 'MANUAL') {
+        proj.steerDirection = Math.abs(ga.x) > 0.2 ? Math.sign(ga.x) : 0;
+        proj.targetPoint = null;
+      } else {
+        if (ga.active) {
+          const angle = Math.atan2(ga.y, ga.x);
+          proj.targetPoint = {
+            x: proj.x + Math.cos(angle) * 8,
+            y: proj.y + Math.sin(angle) * 8
+          };
+        }
+        proj.steerDirection = 0;
+      }
     } else if (this.controlMode === 'TARGET') {
       // Track 3D cursor target coordinate
       this.updateGroundTarget();
-      this.playerGuidedProjectile.targetPoint = { x: this.groundTarget.x, y: this.groundTarget.z };
-      this.playerGuidedProjectile.steerDirection = 0;
+      proj.targetPoint = { x: this.groundTarget.x, y: this.groundTarget.z };
+      proj.steerDirection = 0;
     } else {
       // Manual steering via Q (left, counter-clockwise) and E (right, clockwise)
       let steer = 0;
-      if (this.keys['q']) steer -= 1;
-      if (this.keys['e']) steer += 1;
-      
-      this.playerGuidedProjectile.steerDirection = steer;
-      this.playerGuidedProjectile.targetPoint = null;
+      if (this.input.keys['q']) steer -= 1;
+      if (this.input.keys['e']) steer += 1;
+
+      proj.steerDirection = steer;
+      proj.targetPoint = null;
+    }
+  }
+
+  private addShake(amount: number) {
+    this.shakeTrauma = Math.min(1, this.shakeTrauma + amount);
+  }
+
+  private worldToScreen(x: number, y: number, z: number): { x: number; y: number } {
+    const v = new THREE.Vector3(x, y, z).project(this.camera);
+    return {
+      x: (v.x * 0.5 + 0.5) * window.innerWidth,
+      y: (-v.y * 0.5 + 0.5) * window.innerHeight
+    };
+  }
+
+  private teamCss(team?: 'RED' | 'BLUE' | 'GOLD'): string {
+    if (team === 'RED') return '#ff5a6e';
+    if (team === 'BLUE') return '#4aa8ff';
+    return '#ffd23d';
+  }
+
+  private registerPlayerKill() {
+    this.playerCombo = this.playerComboTimer > 0 ? this.playerCombo + 1 : 1;
+    this.playerComboTimer = 3.0;
+    if (this.playerCombo === 2) this.fx.announce('DOUBLE KILL!', '#ff8a3d');
+    else if (this.playerCombo === 3) this.fx.announce('TRIPLE KILL!', '#ff5fa2');
+    else if (this.playerCombo >= 4) this.fx.announce('RAMPAGE!', '#ffd23d', true);
+  }
+
+  private onCasterKilled(killer: Caster | null, victim: Caster) {
+    this.addShake(0.5);
+
+    const killerName = killer ? killer.name : 'The Arena';
+    this.fx.killFeedItem(
+      killerName,
+      this.teamCss(killer ? killer.team : undefined),
+      victim.name,
+      this.teamCss(victim.team)
+    );
+
+    if (!this.firstBlood) {
+      this.firstBlood = true;
+      this.fx.announce('FIRST BLOOD!', '#ff5555');
+    }
+
+    const playerInvolved = (killer !== null && killer.id === 'player') || victim.id === 'player';
+    if (playerInvolved) this.hitStopTimer = 0.07;
+
+    if (killer && killer.id === 'player') {
+      this.registerPlayerKill();
+    } else if (victim.id === 'player') {
+      this.fx.announce('YOU WERE ELIMINATED', '#ff5555');
     }
   }
 
@@ -809,7 +989,7 @@ export class Game {
             sfx.playBounce();
             this.spawnBlastParticles(proj.x, proj.y, 0xff00ff, 5, 0.6);
           } else {
-            proj.handleWallCollision(result.normalX, result.normalY);
+            proj.handleWallCollision(result.normalX, result.normalY, result.overlapX, result.overlapY);
           }
         }
       });
@@ -871,6 +1051,17 @@ export class Game {
               
               // Mode-specific damage hooks (e.g. drop coins)
               this.gameModeManager.handleCasterHit(this.scene, caster);
+
+              // Juice: damage numbers for player-involved hits + shake + rumble
+              const ownerIsPlayer = proj.ownerId === 'player';
+              if (caster.id === 'player' || ownerIsPlayer) {
+                const sp = this.worldToScreen(caster.x, 1.6, caster.y);
+                this.fx.damageNumber(sp.x, sp.y, Math.round(proj.stats.damage), caster.id === 'player' ? '#ff6b6b' : '#ffffff');
+              }
+              if (caster.id === 'player') {
+                this.input.rumble(110, 0.4, 0.7);
+                this.addShake(0.22);
+              }
             }
 
             this.spawnBlastParticles(proj.x, proj.y, proj.trailColor, 10, 0.8);
@@ -879,12 +1070,16 @@ export class Game {
             if (caster.isDead) {
               const killer = this.casters.find((c) => c.id === proj.ownerId) || null;
               if (killer) killer.score++;
+              if (killer && killer.id === 'player') this.input.rumble(220, 0.6, 0.9);
               
               this.gameModeManager.handleCasterDeath(this.scene, caster, killer, this.casters);
 
               // Spawn giant explosion of caster team color
               const casterColor = caster.team === 'RED' ? 0xff3355 : caster.team === 'BLUE' ? 0x3388ff : 0xffcc00;
               this.spawnBlastParticles(caster.x, caster.y, casterColor, 20, 1.6);
+
+              // Juice: kill feed, announcer, shake, hit-stop
+              this.onCasterKilled(killer, caster);
             }
           }
         }
@@ -932,7 +1127,8 @@ export class Game {
       PowerUpType.SPLIT,
       PowerUpType.HASTE,
       PowerUpType.SHIELD,
-      PowerUpType.FREEZE
+      PowerUpType.FREEZE,
+      PowerUpType.WALLRUN
     ];
 
     for (let i = 0; i < spawners.length; i++) {
@@ -1058,7 +1254,8 @@ export class Game {
             SPLIT: '#00dfff',
             HASTE: '#39ff14',
             SHIELD: '#ffffff',
-            FREEZE: '#4df0ff'
+            FREEZE: '#4df0ff',
+            WALLRUN: '#00e0b0'
           };
           slot.style.borderColor = colors[type];
           slot.style.boxShadow = `0 0 10px ${colors[type]}`;
@@ -1114,6 +1311,10 @@ export class Game {
         text.innerText = this.gameModeManager.winnerText;
         overlay.style.display = 'flex';
       }
+      if (!this.matchEndFired) {
+        this.matchEndFired = true;
+        if (this.onMatchEnd) this.onMatchEnd(this.computeMatchResult());
+      }
     }
   }
 
@@ -1132,6 +1333,23 @@ export class Game {
         return b.score - a.score;
       });
     } else if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+      // Team banked totals on top, then carriers below
+      const redTotal = this.gameModeManager.redScore;
+      const blueTotal = this.gameModeManager.blueScore;
+      const target = this.gameModeManager.goldTarget;
+
+      list.innerHTML = `
+        <div class="leaderboard-item" style="color: #ff5a6e; font-weight: bold;">
+          <span>RED BANKED</span>
+          <span>${redTotal} / ${target}</span>
+        </div>
+        <div class="leaderboard-item" style="color: #4aa8ff; font-weight: bold;">
+          <span>BLUE BANKED</span>
+          <span>${blueTotal} / ${target}</span>
+        </div>
+        <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 6px 0;" />
+      `;
+
       sorted.sort((a, b) => b.coins - a.coins);
     } else if (this.gameModeManager.type === GameModeType.TEAM_BATTLE) {
       // Just list TDM scores on top
@@ -1141,11 +1359,11 @@ export class Game {
       list.innerHTML = `
         <div class="leaderboard-item" style="color: #ff3355; font-weight: bold;">
           <span>RED TEAM</span>
-          <span>${redTotal} / 20</span>
+          <span>${redTotal} / 10</span>
         </div>
         <div class="leaderboard-item" style="color: #3388ff; font-weight: bold;">
           <span>BLUE TEAM</span>
-          <span>${blueTotal} / 20</span>
+          <span>${blueTotal} / 10</span>
         </div>
         <hr style="border: 0; border-top: 1px solid rgba(255,255,255,0.1); margin: 6px 0;" />
       `;
@@ -1179,15 +1397,27 @@ export class Game {
       `;
     });
 
-    if (this.gameModeManager.type === GameModeType.TEAM_BATTLE) {
+    if (this.gameModeManager.type === GameModeType.TEAM_BATTLE || this.gameModeManager.type === GameModeType.GOLD_RUSH) {
       list.innerHTML += itemsHtml;
     } else {
       list.innerHTML = itemsHtml;
     }
   }
 
+  private computeMatchResult(): MatchResult {
+    let won = false;
+    if (this.gameModeManager.type === GameModeType.BATTLE_ROYALE) {
+      won = !this.player.isDead;
+    } else {
+      // Player is always on RED in team modes
+      won = this.gameModeManager.redScore > this.gameModeManager.blueScore;
+    }
+    return { won, kills: this.player.score, mode: this.gameModeManager.type };
+  }
+
   cleanup() {
     this.isPlaying = false;
+    if (this.input) this.input.dispose();
     this.physicsArena.destroy(this.scene);
     this.casters.forEach((c) => c.destroy(this.scene));
     this.projectiles.forEach((p) => p.destroy(this.scene));

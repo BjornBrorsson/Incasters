@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { AABB } from '../engine/Physics';
+import { PALETTE } from '../engine/Theme';
 
 export interface SpawnPoint {
   x: number;
@@ -36,6 +37,31 @@ export interface JumpPad {
   mesh: THREE.Mesh | null;
 }
 
+export interface Hazard {
+  x: number;
+  y: number;
+  angle: number;
+  rotateSpeed: number;
+  fireTimer: number;
+  fireInterval: number;
+  fireRadius: number;
+  baseWallIndex: number;
+  mesh: THREE.Group | null;
+}
+
+export interface MovingWall {
+  wallIndex: number;
+  baseX: number;
+  baseY: number;
+  halfW: number;
+  halfH: number;
+  axis: 'x' | 'y';
+  range: number;
+  speed: number;
+  phase: number;
+  mesh: THREE.Mesh | null;
+}
+
 export class Arena {
   width: number = 36;
   height: number = 36;
@@ -44,13 +70,21 @@ export class Arena {
   powerupSpawners: SpawnPoint[] = [];
   doors: Door[] = [];
   jumpPads: JumpPad[] = [];
+  hazards: Hazard[] = [];
+  movingWalls: MovingWall[] = [];
   mapType: MapType = 'ARENA';
+
+  // Fired by rotating shooting statues; wired to Game's neutral projectile spawner
+  onHazardFire: ((x: number, y: number, angle: number) => void) | null = null;
   
   // ThreeJS Mesh Groups
   private arenaGroup: THREE.Group;
   private wallMaterial: THREE.MeshStandardMaterial;
   private bouncePadMaterial: THREE.MeshStandardMaterial;
   private doorMaterial: THREE.MeshStandardMaterial;
+  private hazardMaterial: THREE.MeshStandardMaterial;
+  private hazardBarrelMaterial: THREE.MeshStandardMaterial;
+  private movingWallMaterial: THREE.MeshStandardMaterial;
   private bouncePadsMeshes: THREE.Mesh[] = [];
   private pulseTime: number = 0;
 
@@ -60,26 +94,43 @@ export class Arena {
     
     // Core Neon Themes
     this.wallMaterial = new THREE.MeshStandardMaterial({
-      color: 0x111625, // Deep navy
-      roughness: 0.2,
-      metalness: 0.8,
-      bumpScale: 0.05
+      color: PALETTE.wall,
+      roughness: 0.65,
+      metalness: 0.05
     });
 
     this.bouncePadMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff007f, // Glowing magenta
-      emissive: 0xff007f,
+      color: PALETTE.bouncePad,
+      emissive: PALETTE.bouncePad,
       emissiveIntensity: 0.6,
-      roughness: 0.1
+      roughness: 0.2
     });
 
     this.doorMaterial = new THREE.MeshStandardMaterial({
-      color: 0xff5500, // Glowing orange/red gate
-      emissive: 0xff5500,
-      emissiveIntensity: 0.8,
+      color: PALETTE.door,
+      emissive: PALETTE.door,
+      emissiveIntensity: 0.7,
       transparent: true,
-      opacity: 0.75,
-      roughness: 0.1
+      opacity: 0.8,
+      roughness: 0.25
+    });
+
+    this.hazardMaterial = new THREE.MeshStandardMaterial({
+      color: 0x3a3550,
+      roughness: 0.5,
+      metalness: 0.4
+    });
+    this.hazardBarrelMaterial = new THREE.MeshStandardMaterial({
+      color: 0xff5522,
+      emissive: 0xff3300,
+      emissiveIntensity: 0.6,
+      roughness: 0.4
+    });
+    this.movingWallMaterial = new THREE.MeshStandardMaterial({
+      color: 0xb45cff,
+      emissive: 0x6a2caa,
+      emissiveIntensity: 0.35,
+      roughness: 0.4
     });
 
     this.setupLayout();
@@ -91,6 +142,8 @@ export class Arena {
     this.powerupSpawners = [];
     this.doors = [];
     this.jumpPads = [];
+    this.hazards = [];
+    this.movingWalls = [];
 
     if (this.mapType === 'COLOSSEUM') {
       this.width = 48;
@@ -163,6 +216,11 @@ export class Arena {
       this.jumpPads.push({ x: -20, y: 20, radius: 1.2, launchVx: jl, launchVy: -jl, mesh: null });
       this.jumpPads.push({ x: 20, y: 20, radius: 1.2, launchVx: -jl, launchVy: -jl, mesh: null });
 
+      // Hazards: central rotating shooting statue + two sliding walls
+      this.addHazard(0, 0, 1.1, 1.3, 1.7);
+      this.addMovingWall(0, -14, 3, 1.5, 'x', 6, 0.35);
+      this.addMovingWall(0, 14, 3, 1.5, 'x', 6, 0.35);
+
     } else if (this.mapType === 'CHAMBER') {
       // Small labyrinth-like maze
       // Central cross wall
@@ -193,6 +251,9 @@ export class Arena {
       // 2 Power-up Spawners
       this.powerupSpawners.push({ x: 0, y: -7 });
       this.powerupSpawners.push({ x: 0, y: 7 });
+
+      // Hazard: a single slow sliding wall in the lower lane
+      this.addMovingWall(0, -10.5, 2, 1, 'x', 3.5, 0.4);
 
     } else {
       // Standard ARENA
@@ -237,7 +298,46 @@ export class Arena {
       const jl = 13.0;
       this.jumpPads.push({ x: -14, y: -14, radius: 1.2, launchVx: jl, launchVy: jl, mesh: null });
       this.jumpPads.push({ x: 14, y: 14, radius: 1.2, launchVx: -jl, launchVy: -jl, mesh: null });
+
+      // Hazards: two rotating shooting statues + a sliding wall
+      this.addHazard(13, 7.5, 1.0, 1.5, 1.5);
+      this.addHazard(-13, -7.5, 1.0, 1.5, 1.5);
+      this.addMovingWall(0, -15, 3, 1.5, 'x', 5, 0.4);
     }
+  }
+
+  private addHazard(x: number, y: number, fireInterval: number, rotateSpeed: number, fireRadius: number) {
+    // The base is a solid obstacle
+    const baseWallIndex = this.walls.length;
+    this.walls.push({ minX: x - 0.6, minY: y - 0.6, maxX: x + 0.6, maxY: y + 0.6 });
+    this.hazards.push({
+      x,
+      y,
+      angle: Math.random() * Math.PI * 2,
+      rotateSpeed,
+      fireTimer: Math.random() * fireInterval,
+      fireInterval,
+      fireRadius,
+      baseWallIndex,
+      mesh: null
+    });
+  }
+
+  private addMovingWall(baseX: number, baseY: number, w: number, h: number, axis: 'x' | 'y', range: number, speed: number) {
+    const wallIndex = this.walls.length;
+    this.walls.push({ minX: baseX - w / 2, minY: baseY - h / 2, maxX: baseX + w / 2, maxY: baseY + h / 2 });
+    this.movingWalls.push({
+      wallIndex,
+      baseX,
+      baseY,
+      halfW: w / 2,
+      halfH: h / 2,
+      axis,
+      range,
+      speed,
+      phase: Math.random() * Math.PI * 2,
+      mesh: null
+    });
   }
 
   private addDoor(id: string, minX: number, minY: number, maxX: number, maxY: number, openDur: number, closeDur: number) {
@@ -265,9 +365,9 @@ export class Arena {
     // 1. Digital Grid Floor
     const floorGeo = new THREE.PlaneGeometry(this.width, this.height);
     const floorMat = new THREE.MeshStandardMaterial({
-      color: 0x070b19, // Very dark blue
-      roughness: 0.9,
-      metalness: 0.1
+      color: PALETTE.floor,
+      roughness: 0.85,
+      metalness: 0.05
     });
     const floor = new THREE.Mesh(floorGeo, floorMat);
     floor.rotation.x = -Math.PI / 2;
@@ -275,21 +375,23 @@ export class Arena {
     this.arenaGroup.add(floor);
 
     // Add glowing grid overlay
-    const grid = new THREE.GridHelper(this.width, this.width, 0x00f0ff, 0x12243d);
+    const grid = new THREE.GridHelper(this.width, this.width, PALETTE.floorGridMajor, PALETTE.floorGridMinor);
     grid.position.y = 0.01;
     if (Array.isArray(grid.material)) {
-      grid.material.forEach((m) => { m.transparent = true; m.opacity = 0.15; });
+      grid.material.forEach((m) => { m.transparent = true; m.opacity = 0.28; });
     } else {
       grid.material.transparent = true;
-      grid.material.opacity = 0.15;
+      grid.material.opacity = 0.28;
     }
     this.arenaGroup.add(grid);
 
     // 2. Instantiate all physical walls as 3D meshes
     this.walls.forEach((wall, idx) => {
-      // Check if this wall corresponds to a door
+      // Doors, moving walls and hazard bases are rendered separately below
       const isDoor = this.doors.some(d => d.wallIndex === idx);
-      if (isDoor) return; // Doors are rendered separately below
+      const isMoving = this.movingWalls.some(m => m.wallIndex === idx);
+      const isHazardBase = this.hazards.some(h => h.baseWallIndex === idx);
+      if (isDoor || isMoving || isHazardBase) return;
 
       const w = wall.maxX - wall.minX;
       const h = wall.maxY - wall.minY;
@@ -313,7 +415,7 @@ export class Arena {
         wallMesh.add(ring);
 
         // Add local spot light
-        const padLight = new THREE.PointLight(0xff007f, 1.5, 4);
+        const padLight = new THREE.PointLight(PALETTE.bouncePad, 1.5, 4);
         padLight.position.y = 1.0;
         wallMesh.add(padLight);
 
@@ -328,7 +430,7 @@ export class Arena {
 
         // Add a neon wireframe cap
         const edgeGeo = new THREE.EdgesGeometry(geom);
-        const edgeMat = new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 2 });
+        const edgeMat = new THREE.LineBasicMaterial({ color: PALETTE.wallEdge, linewidth: 2 });
         const wireframe = new THREE.LineSegments(edgeGeo, edgeMat);
         wallMesh.add(wireframe);
       }
@@ -351,7 +453,7 @@ export class Arena {
 
       // Orange glowing wireframe edges
       const edgeGeo = new THREE.EdgesGeometry(geom);
-      const edgeMat = new THREE.LineBasicMaterial({ color: 0xff5500, linewidth: 2 });
+      const edgeMat = new THREE.LineBasicMaterial({ color: PALETTE.door, linewidth: 2 });
       const wireframe = new THREE.LineSegments(edgeGeo, edgeMat);
       mesh.add(wireframe);
 
@@ -363,7 +465,7 @@ export class Arena {
     this.jumpPads.forEach((pad) => {
       const padGeo = new THREE.RingGeometry(pad.radius * 0.7, pad.radius, 32);
       const padMat = new THREE.MeshBasicMaterial({
-        color: 0x39ff14,
+        color: PALETTE.jumpPad,
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.65
@@ -374,7 +476,7 @@ export class Arena {
 
       // Add central arrow pointing in launch direction
       const arrowGeo = new THREE.ConeGeometry(0.12, 0.35, 4);
-      const arrowMat = new THREE.MeshBasicMaterial({ color: 0x39ff14 });
+      const arrowMat = new THREE.MeshBasicMaterial({ color: PALETTE.jumpPad });
       const arrow = new THREE.Mesh(arrowGeo, arrowMat);
       arrow.rotation.x = -Math.PI / 2;
       const angle = Math.atan2(pad.launchVy, pad.launchVx);
@@ -385,9 +487,59 @@ export class Arena {
       pad.mesh = padMesh;
     });
 
+    // 4b. Render rotating shooting statues
+    this.hazards.forEach((hz) => {
+      const group = new THREE.Group();
+
+      const baseGeo = new THREE.BoxGeometry(1.2, 1.7, 1.2);
+      const base = new THREE.Mesh(baseGeo, this.hazardMaterial);
+      base.position.y = 0.85;
+      base.castShadow = true;
+      base.receiveShadow = true;
+      group.add(base);
+
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(baseGeo), new THREE.LineBasicMaterial({ color: PALETTE.wallEdge }));
+      edge.position.y = 0.85;
+      group.add(edge);
+
+      // Glowing barrel points along local +x; group.rotation.y aims it
+      const barrelGeo = new THREE.ConeGeometry(0.26, 1.0, 10);
+      const barrel = new THREE.Mesh(barrelGeo, this.hazardBarrelMaterial);
+      barrel.rotation.z = -Math.PI / 2;
+      barrel.position.set(0.55, 1.55, 0);
+      group.add(barrel);
+
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.2, 10, 10), new THREE.MeshBasicMaterial({ color: 0xffdd33 }));
+      eye.position.y = 1.55;
+      group.add(eye);
+
+      const hzLight = new THREE.PointLight(0xff5522, 1.2, 5);
+      hzLight.position.y = 1.6;
+      group.add(hzLight);
+
+      group.position.set(hz.x, 0, hz.y);
+      this.arenaGroup.add(group);
+      hz.mesh = group;
+    });
+
+    // 4c. Render moving walls
+    this.movingWalls.forEach((mw) => {
+      const geom = new THREE.BoxGeometry(mw.halfW * 2, 1.5, mw.halfH * 2);
+      const mesh = new THREE.Mesh(geom, this.movingWallMaterial);
+      mesh.position.set(mw.baseX, 0.75, mw.baseY);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const edge = new THREE.LineSegments(new THREE.EdgesGeometry(geom), new THREE.LineBasicMaterial({ color: 0xe0b3ff }));
+      mesh.add(edge);
+
+      this.arenaGroup.add(mesh);
+      mw.mesh = mesh;
+    });
+
     // 5. Decorative border rings
     const borderGeo = new THREE.RingGeometry(this.width / 2, this.width / 2 + 0.5, 64);
-    const borderMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
+    const borderMat = new THREE.MeshBasicMaterial({ color: PALETTE.border, side: THREE.DoubleSide, transparent: true, opacity: 0.6 });
     const border = new THREE.Mesh(borderGeo, borderMat);
     border.rotation.x = Math.PI / 2;
     border.position.y = 0.02;
@@ -403,7 +555,7 @@ export class Arena {
       positions[i + 2] = (Math.random() - 0.5) * (this.height + 40);
     }
     particlesGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    const particlesMat = new THREE.PointsMaterial({ size: 0.15, color: 0x00ffff, transparent: true, opacity: 0.4 });
+    const particlesMat = new THREE.PointsMaterial({ size: 0.15, color: PALETTE.star, transparent: true, opacity: 0.5 });
     const starfield = new THREE.Points(particlesGeo, particlesMat);
     this.arenaGroup.add(starfield);
   }
@@ -455,6 +607,32 @@ export class Arena {
         pad.mesh.rotation.z += dt * 1.2;
       }
     });
+
+    // Rotate shooting statues and fire on interval
+    this.hazards.forEach((hz) => {
+      hz.angle += hz.rotateSpeed * dt;
+      if (hz.mesh) hz.mesh.rotation.y = -hz.angle;
+      hz.fireTimer -= dt;
+      if (hz.fireTimer <= 0) {
+        hz.fireTimer = hz.fireInterval;
+        const sx = hz.x + Math.cos(hz.angle) * hz.fireRadius;
+        const sy = hz.y + Math.sin(hz.angle) * hz.fireRadius;
+        this.onHazardFire?.(sx, sy, hz.angle);
+      }
+    });
+
+    // Slide moving walls and update their physics AABB live
+    this.movingWalls.forEach((mw) => {
+      const offset = Math.sin(this.pulseTime * mw.speed + mw.phase) * mw.range;
+      const cx = mw.baseX + (mw.axis === 'x' ? offset : 0);
+      const cy = mw.baseY + (mw.axis === 'y' ? offset : 0);
+      const wall = this.walls[mw.wallIndex];
+      wall.minX = cx - mw.halfW;
+      wall.maxX = cx + mw.halfW;
+      wall.minY = cy - mw.halfH;
+      wall.maxY = cy + mw.halfH;
+      if (mw.mesh) mw.mesh.position.set(cx, 0.75, cy);
+    });
   }
 
   destroy(scene: THREE.Scene) {
@@ -472,5 +650,7 @@ export class Arena {
     this.bouncePadsMeshes = [];
     this.doors = [];
     this.jumpPads = [];
+    this.hazards = [];
+    this.movingWalls = [];
   }
 }

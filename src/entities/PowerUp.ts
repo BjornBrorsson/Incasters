@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { Entity } from './Entity';
 
-export type PowerUpType = 'BOUNCE' | 'PIERCE' | 'SPLIT' | 'HASTE' | 'SHIELD' | 'FREEZE';
+export type PowerUpType = 'BOUNCE' | 'PIERCE' | 'SPLIT' | 'HASTE' | 'SHIELD' | 'FREEZE' | 'WALLRUN';
 export const PowerUpType = {
   BOUNCE: 'BOUNCE' as PowerUpType,
   PIERCE: 'PIERCE' as PowerUpType,
   SPLIT: 'SPLIT' as PowerUpType,
   HASTE: 'HASTE' as PowerUpType,
   SHIELD: 'SHIELD' as PowerUpType,
-  FREEZE: 'FREEZE' as PowerUpType
+  FREEZE: 'FREEZE' as PowerUpType,
+  WALLRUN: 'WALLRUN' as PowerUpType
 };
 
 
@@ -18,7 +19,8 @@ export const POWERUP_COLORS: Record<PowerUpType, number> = {
   SPLIT: 0x00dfff,  // Neon Cyan
   HASTE: 0x39ff14,  // Neon Green
   SHIELD: 0xffffff, // White
-  FREEZE: 0x4df0ff  // Ice Blue
+  FREEZE: 0x4df0ff, // Ice Blue
+  WALLRUN: 0x00e0b0 // Teal (hugs walls)
 };
 
 export class PowerUp extends Entity {

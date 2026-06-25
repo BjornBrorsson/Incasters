@@ -2,6 +2,7 @@ import { Caster } from './Caster';
 import { Projectile } from './Projectile';
 import { PowerUp } from './PowerUp';
 import { type AABB, testCircleVsAABB } from '../engine/Physics';
+import type { CharacterConfig } from '../game/CharacterConfig';
 
 export class Bot extends Caster {
   private targetCaster: Caster | null = null;
@@ -10,8 +11,8 @@ export class Bot extends Caster {
   private dodgeVx: number = 0;
   private dodgeVy: number = 0;
 
-  constructor(id: string, name: string, x: number, y: number, team: 'RED' | 'BLUE' | 'GOLD', clothingColor?: number, spellColor?: number) {
-    super(id, name, x, y, team, true, clothingColor, spellColor);
+  constructor(id: string, name: string, x: number, y: number, team: 'RED' | 'BLUE' | 'GOLD', clothingColor?: number, spellColor?: number, config?: Partial<CharacterConfig>) {
+    super(id, name, x, y, team, true, clothingColor, spellColor, config);
   }
 
   aiUpdate(
@@ -21,7 +22,8 @@ export class Bot extends Caster {
     powerups: PowerUp[],
     walls: AABB[],
     coinsList: { x: number; y: number; mesh: any }[],
-    safeRadius: number // Last Caster Standing mode
+    safeRadius: number, // Last Caster Standing mode
+    bankTarget: { x: number; y: number } | null = null // Gold Rush bank to deposit at
   ) {
     if (this.isDead) return;
 
@@ -86,6 +88,19 @@ export class Bot extends Caster {
         this.vx = Math.cos(angleToCenter) * this.getSpeed();
         this.vy = Math.sin(angleToCenter) * this.getSpeed();
         this.aimAngle = angleToCenter;
+      } else if (bankTarget && this.coins >= 3) {
+        // Gold Rush: carry coins to the Bank and hold position to deposit
+        const bdx = bankTarget.x - this.x;
+        const bdy = bankTarget.y - this.y;
+        const bdist = Math.sqrt(bdx * bdx + bdy * bdy);
+        this.aimAngle = Math.atan2(bdy, bdx);
+        if (bdist > 1.2) {
+          this.vx = Math.cos(this.aimAngle) * this.getSpeed();
+          this.vy = Math.sin(this.aimAngle) * this.getSpeed();
+        } else {
+          this.vx = 0;
+          this.vy = 0;
+        }
       } else {
         // Select nearest enemy
         this.targetCaster = this.findNearestEnemy(allCasters);
