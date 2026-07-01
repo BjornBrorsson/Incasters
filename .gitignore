@@ -25,6 +25,12 @@ dist-ssr
 
 # Local Java/JDK directory
 .java
+jdk17/
+jdk21/
+*.zip
+
+# APK build output (use the copied named version instead)
+android/app/build/
 
 # Screenshots & Local Test Output
 *.png
