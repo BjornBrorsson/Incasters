@@ -14,6 +14,9 @@ import { Fx } from './Fx';
 import { DEFAULT_CONFIG, randomCharacterConfig } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
 import type { MatchResult } from '../game/Progression';
+import { DIFFICULTY_PRESETS } from '../game/Difficulty';
+import type { DifficultyLevel, DifficultyConfig } from '../game/Difficulty';
+import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState } from '../net/LanClient';
 
 export interface GameParticle {
   position: THREE.Vector3;
@@ -90,6 +93,24 @@ export class Game {
   // Match Customizer
   playerCount: number = 8;
   mapType: MapType = 'ARENA';
+  difficulty: DifficultyLevel = 'NORMAL';
+  private difficultyConfig: DifficultyConfig = DIFFICULTY_PRESETS.NORMAL;
+
+  // ── LAN Multiplayer ──
+  /** 'offline' = single-player vs bots, 'host' = hosting a LAN match, 'client' = connected to a host. */
+  netMode: 'offline' | 'host' | 'client' = 'offline';
+  /** Maps remote player IDs to their latest input state (host mode only). */
+  private remoteInputs = new Map<string, PlayerInputState>();
+  /** Maps remote player IDs to their Caster entity (host mode only). */
+  private remoteCasters = new Map<string, Caster>();
+  /** Callback fired after each tick with serialized state (host mode). */
+  onNetBroadcast: ((state: GameStateSnapshot) => void) | null = null;
+  private netBroadcastTimer = 0;
+  private netBroadcastInterval = 0.05; // 20 Hz
+  /** Callback fired when the host declares the match over (host mode). */
+  onNetMatchEnd: ((result: any) => void) | null = null;
+  /** Projectile net ID counter for state serialization. */
+  private projectileNetId = 0;
 
   constructor(
     container: HTMLDivElement,
@@ -98,7 +119,8 @@ export class Game {
     playerSpellColor?: number,
     mapType?: MapType,
     playerCount?: number,
-    playerConfig?: CharacterConfig
+    playerConfig?: CharacterConfig,
+    difficulty?: DifficultyLevel
   ) {
     this.container = container;
     this.gameModeManager = new GameModeManager(modeType);
@@ -115,6 +137,10 @@ export class Game {
     this.playerSpellColor = this.playerConfig.spellColor;
     if (mapType !== undefined) this.mapType = mapType;
     if (playerCount !== undefined) this.playerCount = playerCount;
+    if (difficulty !== undefined) {
+      this.difficulty = difficulty;
+      this.difficultyConfig = DIFFICULTY_PRESETS[difficulty];
+    }
     this.initThree();
     this.setupInput();
     this.resetGame();
@@ -255,6 +281,9 @@ export class Game {
       bot.onAiShoot = (angle, target) => {
         this.spawnProjectile(bot, angle, target);
       };
+
+      // Apply difficulty settings to this bot
+      bot.setDifficulty(this.difficultyConfig);
 
       this.scene.add(bot.mesh);
       this.casters.push(bot);
@@ -482,6 +511,7 @@ export class Game {
     const oy = owner.y + Math.sin(angle) * (owner.radius + 0.35);
 
     const proj = new Projectile(ox, oy, angle, owner.id, stats);
+    (proj as any)._netId = ++this.projectileNetId;
     
     if (targetLoc) {
       proj.targetPoint = { x: targetLoc.x, y: (targetLoc as any).z ?? (targetLoc as any).y };
@@ -584,6 +614,111 @@ export class Game {
     sfx.playBounce();
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // LAN MULTIPLAYER: Host-side remote player management
+  // ─────────────────────────────────────────────────────────────
+
+  /** Register a remote human player and assign them to a bot slot (host mode). */
+  registerRemotePlayer(playerId: string, name: string) {
+    if (this.netMode !== 'host') return;
+    this.remoteInputs.set(playerId, { moveX: 0, moveY: 0, aimAngle: 0, firing: false, dashing: false });
+
+    // Find a bot to replace
+    for (let i = 1; i < this.casters.length; i++) {
+      const c = this.casters[i];
+      if (c instanceof Bot && !this.remoteCasters.has(c.id)) {
+        c.id = playerId;
+        c.name = name;
+        this.remoteCasters.set(playerId, c);
+        break;
+      }
+    }
+  }
+
+  /** Update a remote player's input state (host mode). */
+  setRemoteInput(playerId: string, input: PlayerInputState) {
+    if (this.netMode !== 'host') return;
+    this.remoteInputs.set(playerId, input);
+  }
+
+  /** Remove a remote player and restore their slot to a bot (host mode). */
+  removeRemotePlayer(playerId: string) {
+    this.remoteInputs.delete(playerId);
+    const caster = this.remoteCasters.get(playerId);
+    if (caster) {
+      // Restore as bot by marking it dead; it will respawn or be replaced
+      caster.isDead = true;
+    }
+    this.remoteCasters.delete(playerId);
+  }
+
+  /** Apply all remote player inputs to their caster entities (host mode). */
+  private applyRemoteInputs() {
+    this.remoteInputs.forEach((input, playerId) => {
+      const caster = this.remoteCasters.get(playerId);
+      if (!caster || caster.isDead) return;
+
+      const speed = caster.getSpeed();
+      caster.vx = input.moveX * speed;
+      caster.vy = input.moveY * speed;
+      caster.aimAngle = input.aimAngle;
+
+      if (input.firing && caster.shootTimer <= 0 && caster.ammo > 0) {
+        this.spawnProjectile(caster, input.aimAngle, null);
+      }
+
+      if (input.dashing && caster.dashCooldownTimer <= 0) {
+        const mag = Math.sqrt(input.moveX * input.moveX + input.moveY * input.moveY);
+        if (mag > 0.1) {
+          caster.dash((input.moveX / mag) * speed, (input.moveY / mag) * speed);
+        }
+      }
+    });
+  }
+
+  /** Serialize current game state for network broadcast (host mode). */
+  serializeNetState(): GameStateSnapshot {
+    const casters: CasterNetState[] = this.casters.map((c) => ({
+      id: c.id,
+      name: c.name,
+      x: c.x,
+      y: c.y,
+      health: c.health,
+      maxHealth: c.maxHealth,
+      isDead: c.isDead,
+      team: c.team,
+      score: c.score,
+      coins: c.coins,
+      ammo: c.ammo,
+      aimAngle: c.aimAngle,
+      isDashing: c.isDashing,
+      robeColor: c.clothingColor,
+      spellColor: c.spellColor,
+      shieldActive: c.shieldMesh ? c.shieldMesh.visible : false
+    }));
+
+    const projectiles: ProjectileNetState[] = this.projectiles.map((p) => ({
+      id: (p as any)._netId || 0,
+      x: p.x,
+      y: p.y,
+      ownerId: p.ownerId,
+      trailColor: p.trailColor,
+      isDead: p.isDead
+    }));
+
+    return {
+      casters,
+      projectiles,
+      powerups: [],
+      matchTimer: this.gameModeManager.matchTimer,
+      redScore: this.gameModeManager.redScore,
+      blueScore: this.gameModeManager.blueScore,
+      safeRadius: this.gameModeManager.safeRadius,
+      isGameOver: this.gameModeManager.isGameOver,
+      winnerText: this.gameModeManager.winnerText
+    };
+  }
+
   // Update loop
   tick() {
     requestAnimationFrame(this.tick.bind(this));
@@ -622,9 +757,14 @@ export class Game {
     // 2. Process active projectile curving guides for player
     this.updateGuidedProjectile();
 
-    // 3. Process AI Bot Updates
+    // 2a. LAN host: apply remote player inputs to their caster entities
+    if (this.netMode === 'host') {
+      this.applyRemoteInputs();
+    }
+
+    // 3. Process AI Bot Updates (skip casters controlled by remote humans)
     this.casters.forEach((caster) => {
-      if (caster instanceof Bot) {
+      if (caster instanceof Bot && !this.remoteCasters.has(caster.id)) {
         caster.aiUpdate(
           dt,
           this.casters,
@@ -697,6 +837,15 @@ export class Game {
 
     // Update HTML HUD
     this.updateHUD();
+
+    // LAN host: broadcast state to clients at regular intervals
+    if (this.netMode === 'host' && this.onNetBroadcast) {
+      this.netBroadcastTimer += dt;
+      if (this.netBroadcastTimer >= this.netBroadcastInterval) {
+        this.netBroadcastTimer = 0;
+        this.onNetBroadcast(this.serializeNetState());
+      }
+    }
   }
 
   private updatePlayerMovement() {

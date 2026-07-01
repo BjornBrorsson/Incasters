@@ -1010,6 +1010,221 @@ body {
   box-shadow: 0 0 12px rgba(200, 150, 10, 0.28);
 }
 
+/* DIFFICULTY SELECTOR */
+.difficulty-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.diff-btn {
+  flex: 1;
+  min-width: 120px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  border-radius: 12px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.diff-btn .diff-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.diff-btn .diff-desc {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.4);
+  line-height: 1.3;
+}
+
+.diff-btn:hover {
+  background: rgba(200, 150, 10, 0.06);
+  border-color: rgba(200, 150, 10, 0.35);
+}
+
+.diff-btn.active {
+  background: rgba(200, 150, 10, 0.14);
+  border-color: #c8960a;
+  box-shadow: 0 0 12px rgba(200, 150, 10, 0.28);
+}
+
+.diff-btn[data-diff="EASY"].active { border-color: #39ff14; box-shadow: 0 0 12px rgba(57, 255, 20, 0.25); background: rgba(57, 255, 20, 0.08); }
+.diff-btn[data-diff="HARD"].active { border-color: #ff5f1f; box-shadow: 0 0 12px rgba(255, 95, 31, 0.25); background: rgba(255, 95, 31, 0.08); }
+.diff-btn[data-diff="INSANE"].active { border-color: #ff1122; box-shadow: 0 0 12px rgba(255, 17, 34, 0.3); background: rgba(255, 17, 34, 0.1); }
+
+/* LAN MULTIPLAYER */
+.lan-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.lan-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 10px;
+  border-radius: 12px;
+  color: #ffffff;
+  font-weight: 500;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.lan-btn:hover {
+  background: rgba(100, 200, 255, 0.08);
+  border-color: rgba(100, 200, 255, 0.35);
+}
+
+.lan-btn.active {
+  background: rgba(100, 200, 255, 0.14);
+  border-color: #64c8ff;
+  box-shadow: 0 0 12px rgba(100, 200, 255, 0.28);
+}
+
+.lan-panel {
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.lan-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.lan-field label {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lan-field input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: #fff;
+  font-size: 0.85rem;
+  font-family: inherit;
+}
+
+.lan-field input:focus {
+  outline: none;
+  border-color: #64c8ff;
+}
+
+.lan-status {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 6px 0;
+}
+
+.lan-status.error { color: #ff5555; }
+.lan-status.success { color: #39ff14; }
+
+.lan-action-btn {
+  width: 100%;
+  background: rgba(100, 200, 255, 0.1);
+  border: 1px solid rgba(100, 200, 255, 0.3);
+  padding: 10px;
+  border-radius: 8px;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 6px;
+}
+
+.lan-action-btn:hover {
+  background: rgba(100, 200, 255, 0.2);
+  border-color: #64c8ff;
+}
+
+.lan-action-btn.danger {
+  background: rgba(255, 50, 50, 0.08);
+  border-color: rgba(255, 50, 50, 0.3);
+}
+
+.lan-action-btn.danger:hover {
+  background: rgba(255, 50, 50, 0.18);
+  border-color: #ff3232;
+}
+
+.lan-lobby {
+  margin-top: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+  border: 1px solid rgba(100, 200, 255, 0.15);
+}
+
+.lan-lobby h4 {
+  font-size: 0.8rem;
+  margin: 0 0 8px 0;
+  color: #64c8ff;
+  letter-spacing: 0.08em;
+}
+
+.lan-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.lan-player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.lan-player-item .player-ready {
+  font-size: 0.7rem;
+  color: #39ff14;
+}
+
+.lan-player-item .player-not-ready {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.lan-player-item .player-host {
+  font-size: 0.65rem;
+  color: #ffd23d;
+  background: rgba(255, 210, 61, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.lan-lobby-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.lan-lobby-actions .lan-action-btn {
+  flex: 1;
+  margin-top: 0;
+}
+
 /* Landscape / low-height mobile screen scaling */
 @media (max-height: 600px) {
   .customizer-container {

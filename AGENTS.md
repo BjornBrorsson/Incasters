@@ -8,7 +8,9 @@ This document captures the architecture, codebase responsibilities, build pipeli
 - **Physics:** Circle-vs-Circle and Circle-vs-AABB intersection math (`src/engine/Physics.ts`).
 - **Entity System:** Base class `Entity` with subclasses `Caster` (player + bots), `Bot` (AI controller), `Projectile`, and `PowerUp`.
 - **Game Modes:** Battle Royale (Last Caster Standing with shrinking storm), Team Battle (TDM to 10 kills), and Gold Rush (collect and bank 50 coins to win) (`src/world/GameModes.ts`).
-- **Cosmetics & Progression:** Local progression tracking XP/levels, tokens, daily challenges, and shop unlocks persisted to `localStorage` (`src/game/Progression.ts` and `src/game/CharacterConfig.ts`).
+- **Cosmetics & Progression:** Local progression tracking XP/levels, tokens, daily/weekly challenges, and shop unlocks persisted to `localStorage` (`src/game/Progression.ts` and `src/game/CharacterConfig.ts`).
+- **Difficulty System:** Four bot AI difficulty presets (Easy/Normal/Hard/Insane) tuning speed, fire rate, aim error, dodge chance, aggression, and health (`src/game/Difficulty.ts`).
+- **LAN Multiplayer:** Host-authoritative WebSocket server (`server/lan-server.js`) with client networking layer (`src/net/LanClient.ts`). Host runs the full simulation and broadcasts state at 20 Hz; clients send input and render snapshots.
 - **Platform Portability:** Capacitor (`capacitor.config.ts`) handles wrapping for Android deployment.
 
 ## Development & Build Commands
@@ -25,6 +27,9 @@ npm run build
 
 # 4. Preview production build locally
 npm run preview
+
+# 5. Start the LAN multiplayer WebSocket server (port 7070)
+npm run lan-server
 ```
 
 ## Running Automated Gametests
@@ -61,6 +66,9 @@ node test-game.js
 - `src/entities/Projectile.ts`: Flying spell bullets with guiding curve vectors, wall-running tangent glide, pierces, and splits.
 - `src/world/Arena.ts`: Arena wall boundaries (AABB) construction, floor grids, and dynamic hazard spawn logic.
 - `src/world/GameModes.ts`: Implements rule engines, respawn countdowns, storm boundaries, coin mechanics, and bank zone control.
+- `src/game/Difficulty.ts`: Four difficulty presets (Easy/Normal/Hard/Insane) that tune bot AI parameters. Persisted to `localStorage`.
+- `src/net/LanClient.ts`: WebSocket client and lightweight state renderer for LAN multiplayer. Includes `ClientGameRenderer` for client-side rendering without local simulation.
+- `server/lan-server.js`: Standalone WebSocket server for LAN multiplayer matchmaking and message routing.
 
 ## Security & Game-Feel Notes
 - **Kill-feed XSS hardening:** `src/engine/Fx.ts` constructs kill-feed entries with the DOM API (`textContent` + `appendChild`) and a `sanitizeColor` allow-list instead of `innerHTML` string interpolation, so future custom player names/colours cannot inject markup or rogue CSS.

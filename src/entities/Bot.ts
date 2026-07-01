@@ -3,6 +3,8 @@ import { Projectile } from './Projectile';
 import { PowerUp } from './PowerUp';
 import { type AABB, testCircleVsAABB } from '../engine/Physics';
 import type { CharacterConfig } from '../game/CharacterConfig';
+import type { DifficultyConfig } from '../game/Difficulty';
+import { DIFFICULTY_PRESETS } from '../game/Difficulty';
 
 export class Bot extends Caster {
   private targetCaster: Caster | null = null;
@@ -10,9 +12,19 @@ export class Bot extends Caster {
   private dodgeTimer: number = 0;
   private dodgeVx: number = 0;
   private dodgeVy: number = 0;
+  /** Active difficulty config — controls AI tuning parameters. */
+  private difficulty: DifficultyConfig = DIFFICULTY_PRESETS.NORMAL;
 
   constructor(id: string, name: string, x: number, y: number, team: 'RED' | 'BLUE' | 'GOLD', clothingColor?: number, spellColor?: number, config?: Partial<CharacterConfig>) {
     super(id, name, x, y, team, true, clothingColor, spellColor, config);
+  }
+
+  /** Set the difficulty preset for this bot. Must be called before aiUpdate. */
+  setDifficulty(diff: DifficultyConfig) {
+    this.difficulty = diff;
+    // Apply health multiplier
+    this.maxHealth = Math.round(100 * diff.botHealthMultiplier);
+    this.health = this.maxHealth;
   }
 
   aiUpdate(
@@ -31,7 +43,7 @@ export class Bot extends Caster {
 
     // 1. Scan for incoming hostile projectiles that are heading towards this bot
     let dangerousProj: Projectile | null = null;
-    let minDodgeDist = 4.5;
+    let minDodgeDist = this.difficulty.botDodgeRange;
     
     projectiles.forEach((proj) => {
       if (proj.ownerId === this.id) return;
@@ -44,8 +56,11 @@ export class Bot extends Caster {
         // Check if moving towards us (dot product of relative pos and velocity is negative)
         const dot = dx * proj.vx + dy * proj.vy;
         if (dot > 0.1) { // Moving in our general direction
-          dangerousProj = proj;
-          minDodgeDist = dist;
+          // Difficulty-gated dodge: only dodge if random check passes
+          if (Math.random() < this.difficulty.botDodgeChance) {
+            dangerousProj = proj;
+            minDodgeDist = dist;
+          }
         }
       }
     });
@@ -69,7 +84,7 @@ export class Bot extends Caster {
       }
 
       // Occassionally dash if projectile is extremely close and cooldown is up
-      if (minDodgeDist < 2.0 && this.dashCooldownTimer <= 0 && Math.random() < 0.3) {
+      if (minDodgeDist < 2.0 && this.dashCooldownTimer <= 0 && Math.random() < this.difficulty.botDashChance) {
         this.dash(this.dodgeVx, this.dodgeVy);
       }
 
@@ -114,12 +129,16 @@ export class Bot extends Caster {
           if (distance < 12) {
             this.aimAngle = Math.atan2(dy, dx);
 
+            // Apply difficulty-based aim error
+            const aimErr = (Math.random() - 0.5) * 2 * this.difficulty.botAimError;
+
             // Move towards enemy, but keep a comfortable distance
-            const targetSpeed = this.getSpeed();
+            const targetSpeed = this.getSpeed() * this.difficulty.botSpeedMultiplier;
             if (distance > 6.5) {
-              // Move closer
-              this.vx = Math.cos(this.aimAngle) * targetSpeed * 0.75;
-              this.vy = Math.sin(this.aimAngle) * targetSpeed * 0.75;
+              // Move closer — aggression scales how fast they approach
+              const approachFactor = 0.5 + this.difficulty.botAggression * 0.4;
+              this.vx = Math.cos(this.aimAngle) * targetSpeed * approachFactor;
+              this.vy = Math.sin(this.aimAngle) * targetSpeed * approachFactor;
             } else if (distance < 3.5) {
               // Move back
               this.vx = -Math.cos(this.aimAngle) * targetSpeed * 0.75;
@@ -139,14 +158,20 @@ export class Bot extends Caster {
               if (isLoSBlocked) {
                 // Deliberately shoot at an angle offset (e.g. 25 degrees) to clear obstacles
                 const shootOffset = (Math.random() < 0.5 ? -1 : 1) * (25 * Math.PI / 180);
-                const fireAngle = this.aimAngle + shootOffset;
+                const fireAngle = this.aimAngle + shootOffset + aimErr;
                 
                 // Let the engine know we want to fire a curved shot
                 // The main game loop will handle spawning the projectile and setting its targetPoint
                 this.shootCurvedProj(fireAngle, this.targetCaster);
               } else {
-                // Clear shot
-                this.shootCurvedProj(this.aimAngle, null);
+                // Difficulty-gated curve shot: sometimes curve even with clear LoS
+                if (Math.random() < this.difficulty.botCurveShotChance) {
+                  const curveOffset = (Math.random() < 0.5 ? -1 : 1) * (15 * Math.PI / 180);
+                  this.shootCurvedProj(this.aimAngle + curveOffset + aimErr, this.targetCaster);
+                } else {
+                  // Clear shot with aim error
+                  this.shootCurvedProj(this.aimAngle + aimErr, null);
+                }
               }
             }
           } else {
@@ -272,7 +297,7 @@ export class Bot extends Caster {
   private shootCurvedProj(angle: number, target: Caster | null) {
     if (this.onAiShoot) {
       this.onAiShoot(angle, target);
-      this.shootTimer = this.getFireRateCooldown();
+      this.shootTimer = this.getFireRateCooldown() * this.difficulty.botFireRateMultiplier;
     }
   }
 }

@@ -20,6 +20,8 @@ import {
 } from './game/CharacterConfig';
 import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
+import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Difficulty';
+import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo } from './net/LanClient';
 
 /**
  * Lightweight keyboard + gamepad navigator for the menu / game-over screens.
@@ -171,7 +173,15 @@ progression.grantPart(`face:${characterConfig.faceGear}`);
 progression.grantPart(`weapon:${characterConfig.weapon}`);
 let selectedMap: MapType = (localStorage.getItem('incasters_map') || 'ARENA') as MapType;
 let selectedPlayerCount = parseInt(localStorage.getItem('incasters_player_count') || '8', 10);
+let selectedDifficulty: DifficultyLevel = loadDifficulty();
 let game: Game | null = null;
+
+// LAN Multiplayer state
+let lanClient: LanClient | null = null;
+let lanRenderer: ClientGameRenderer | null = null;
+let lanMode: 'offline' | 'host' | 'client' = 'offline';
+let lanPlayers: NetPlayerInfo[] = [];
+void lanMode; // referenced in event handlers below
 
 // Initialize Menu Controls
 document.addEventListener('DOMContentLoaded', () => {
@@ -326,6 +336,308 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Difficulty selector
+  const diffBtns = document.querySelectorAll('.diff-btn');
+  diffBtns.forEach((btn) => {
+    const diff = btn.getAttribute('data-diff') as DifficultyLevel;
+    if (diff === selectedDifficulty) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+
+    btn.addEventListener('click', () => {
+      diffBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedDifficulty = diff;
+      saveDifficulty(diff);
+    });
+  });
+
+  // ── LAN Multiplayer UI ──
+  const btnLanHost = document.getElementById('btn-lan-host') as HTMLButtonElement | null;
+  const btnLanJoin = document.getElementById('btn-lan-join') as HTMLButtonElement | null;
+  const lanHostPanel = document.getElementById('lan-host-panel');
+  const lanJoinPanel = document.getElementById('lan-join-panel');
+  const lanLobby = document.getElementById('lan-lobby');
+  const btnLanStartServer = document.getElementById('btn-lan-start-server') as HTMLButtonElement | null;
+  const btnLanConnect = document.getElementById('btn-lan-connect') as HTMLButtonElement | null;
+  const btnLanReady = document.getElementById('btn-lan-ready') as HTMLButtonElement | null;
+  const btnLanStartMatch = document.getElementById('btn-lan-start-match') as HTMLButtonElement | null;
+  const btnLanLeave = document.getElementById('btn-lan-leave') as HTMLButtonElement | null;
+  const lanJoinStatus = document.getElementById('lan-join-status');
+  const lanRoomInfo = document.getElementById('lan-room-info');
+  const lanLobbyPlayers = document.getElementById('lan-lobby-players');
+
+  function renderLobbyPlayers() {
+    if (!lanLobbyPlayers) return;
+    lanLobbyPlayers.innerHTML = lanPlayers
+      .map((p) => {
+        const isHost = lanClient?.roomInfo?.hostId === p.id;
+        const readyClass = p.ready ? 'player-ready' : 'player-not-ready';
+        const readyText = p.ready ? 'Ready' : 'Not Ready';
+        const hostBadge = isHost ? '<span class="player-host">HOST</span>' : '';
+        return '<div class="lan-player-item"><span>' + p.name + ' ' + hostBadge + '</span><span class="' + readyClass + '">' + readyText + '</span></div>';
+      })
+      .join('');
+  }
+
+  function showLobby() {
+    if (lanHostPanel) lanHostPanel.style.display = 'none';
+    if (lanJoinPanel) lanJoinPanel.style.display = 'none';
+    if (lanLobby) lanLobby.style.display = 'block';
+    renderLobbyPlayers();
+    // Only host sees the Start Match button
+    if (btnLanStartMatch) btnLanStartMatch.style.display = lanClient?.isHost ? 'block' : 'none';
+  }
+
+  function hideLobby() {
+    if (lanLobby) lanLobby.style.display = 'none';
+  }
+
+  function updateLobbyFromRoom(roomInfo: any) {
+    lanPlayers = roomInfo.players || [];
+    renderLobbyPlayers();
+    if (btnLanStartMatch) btnLanStartMatch.style.display = lanClient?.isHost ? 'block' : 'none';
+  }
+
+  btnLanHost?.addEventListener('click', () => {
+    if (btnLanHost) btnLanHost.classList.add('active');
+    if (btnLanJoin) btnLanJoin.classList.remove('active');
+    if (lanHostPanel) lanHostPanel.style.display = 'block';
+    if (lanJoinPanel) lanJoinPanel.style.display = 'none';
+    if (lanLobby) lanLobby.style.display = 'none';
+  });
+
+  btnLanJoin?.addEventListener('click', () => {
+    if (btnLanJoin) btnLanJoin.classList.add('active');
+    if (btnLanHost) btnLanHost.classList.remove('active');
+    if (lanJoinPanel) lanJoinPanel.style.display = 'block';
+    if (lanHostPanel) lanHostPanel.style.display = 'none';
+    if (lanLobby) lanLobby.style.display = 'none';
+  });
+
+  // Host: Start LAN Server
+  btnLanStartServer?.addEventListener('click', async () => {
+    if (!btnLanStartServer) return;
+    btnLanStartServer.disabled = true;
+    btnLanStartServer.textContent = 'Starting server...';
+
+    try {
+      // The server runs as a separate Node process. On desktop, we can spawn it.
+      // On mobile (Capacitor), the host would need a separate server device.
+      const port = (document.getElementById('lan-host-port') as HTMLInputElement)?.value || '7070';
+
+      // Try to start the server via a fetch to a local helper, or spawn a child process
+      // For now, we connect to the server URL (server must be started separately)
+      const serverUrl = 'ws://localhost:' + port;
+      lanClient = new LanClient(serverUrl);
+      lanMode = 'host';
+
+      await lanClient.connect('Host', characterConfig);
+      lanPlayers = lanClient.roomInfo?.players || [];
+
+      if (lanRoomInfo) {
+        lanRoomInfo.innerHTML = '<p class="lan-status success">Server connected! Your LAN game is live.</p><div id="lan-player-list" class="lan-player-list"></div>';
+      }
+
+      showLobby();
+      setupLanHandlers();
+    } catch (e: any) {
+      if (lanRoomInfo) {
+        lanRoomInfo.innerHTML = '<p class="lan-status error">Failed to start: ' + e.message + '</p><p class="lan-status">Make sure to run the LAN server first: <code>node server/lan-server.js</code></p>';
+      }
+      btnLanStartServer.disabled = false;
+      btnLanStartServer.textContent = 'Start LAN Server';
+    }
+  });
+
+  // Join: Connect to host
+  btnLanConnect?.addEventListener('click', async () => {
+    if (!btnLanConnect) return;
+    const ip = (document.getElementById('lan-join-ip') as HTMLInputElement)?.value || 'localhost';
+    const port = (document.getElementById('lan-join-port') as HTMLInputElement)?.value || '7070';
+    const serverUrl = 'ws://' + ip + ':' + port;
+
+    if (lanJoinStatus) {
+      lanJoinStatus.textContent = 'Connecting to ' + ip + ':' + port + '...';
+      lanJoinStatus.className = 'lan-status';
+    }
+    btnLanConnect.disabled = true;
+
+    try {
+      lanClient = new LanClient(serverUrl);
+      lanMode = 'client';
+
+      await lanClient.connect('Player', characterConfig);
+      lanPlayers = lanClient.roomInfo?.players || [];
+
+      if (lanJoinStatus) {
+        lanJoinStatus.textContent = 'Connected!';
+        lanJoinStatus.className = 'lan-status success';
+      }
+
+      showLobby();
+      setupLanHandlers();
+    } catch (e: any) {
+      if (lanJoinStatus) {
+        lanJoinStatus.textContent = 'Connection failed: ' + e.message;
+        lanJoinStatus.className = 'lan-status error';
+      }
+      btnLanConnect.disabled = false;
+    }
+  });
+
+  // Ready button
+  btnLanReady?.addEventListener('click', () => {
+    if (!lanClient) return;
+    const isReady = btnLanReady.textContent === 'Ready';
+    lanClient.setReady(!isReady);
+    btnLanReady.textContent = isReady ? 'Not Ready' : 'Ready';
+  });
+
+  // Start Match (host only)
+  btnLanStartMatch?.addEventListener('click', () => {
+    if (!lanClient || !lanClient.isHost) return;
+    lanClient.startMatch({
+      mode: selectedMode,
+      map: selectedMap,
+      playerCount: selectedPlayerCount,
+      difficulty: selectedDifficulty
+    });
+  });
+
+  // Leave lobby
+  btnLanLeave?.addEventListener('click', () => {
+    if (lanClient) {
+      lanClient.disconnect();
+      lanClient = null;
+    }
+    lanMode = 'offline';
+    lanPlayers = [];
+    hideLobby();
+    if (btnLanHost) btnLanHost.classList.remove('active');
+    if (btnLanJoin) btnLanJoin.classList.remove('active');
+    if (lanHostPanel) lanHostPanel.style.display = 'block';
+    if (lanJoinPanel) lanJoinPanel.style.display = 'none';
+    if (btnLanStartServer) {
+      btnLanStartServer.disabled = false;
+      btnLanStartServer.textContent = 'Start LAN Server';
+    }
+    if (btnLanConnect) btnLanConnect.disabled = false;
+  });
+
+  function setupLanHandlers() {
+    if (!lanClient) return;
+
+    lanClient.on('playerJoin', (msg: any) => {
+      lanPlayers.push({ id: msg.player.id, name: msg.player.name, ready: msg.player.ready });
+      renderLobbyPlayers();
+    });
+
+    lanClient.on('playerLeave', (msg: any) => {
+      lanPlayers = lanPlayers.filter((p) => p.id !== msg.playerId);
+      if (msg.roomInfo) updateLobbyFromRoom(msg.roomInfo);
+      renderLobbyPlayers();
+    });
+
+    lanClient.on('playerReady', (msg: any) => {
+      const p = lanPlayers.find((p) => p.id === msg.playerId);
+      if (p) p.ready = msg.ready;
+      renderLobbyPlayers();
+    });
+
+    lanClient.on('matchStart', (msg: any) => {
+      // Start the game in the appropriate mode
+      const config = msg.config || {};
+      const matchMode = (config.mode || selectedMode) as GameModeType;
+      const matchMap = (config.map || selectedMap) as MapType;
+      const matchPlayerCount = config.playerCount || selectedPlayerCount;
+      const matchDifficulty = (config.difficulty || selectedDifficulty) as DifficultyLevel;
+
+      if (lanClient?.isHost) {
+        // Host: start the real game with networking hooks
+        startLanHostGame(matchMode, matchMap, matchPlayerCount, matchDifficulty);
+      } else {
+        // Client: start the lightweight renderer
+        startLanClientGame(matchMode, matchMap);
+      }
+    });
+
+    lanClient.on('state', (state: GameStateSnapshot) => {
+      if (lanRenderer) {
+        lanRenderer.applyState(state);
+      }
+    });
+
+    lanClient.on('matchEnd', (result: any) => {
+      // Show game over screen
+      if (lanRenderer) {
+        lanRenderer.destroy();
+        lanRenderer = null;
+      }
+      showLanGameOver(result);
+    });
+
+    lanClient.on('disconnect', () => {
+      if (lanRenderer) {
+        lanRenderer.destroy();
+        lanRenderer = null;
+      }
+      hideLobby();
+      lanMode = 'offline';
+    });
+  }
+
+  function startLanHostGame(mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel) {
+    if (menuScreen) menuScreen.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'block';
+
+    game = new Game(
+      gameContainer,
+      mode,
+      characterConfig.robeColor,
+      characterConfig.spellColor,
+      map,
+      playerCount,
+      { ...characterConfig },
+      difficulty
+    );
+    game.netMode = 'host';
+
+    // Register connected remote players
+    lanPlayers.forEach((p) => {
+      if (p.id !== lanClient?.playerId) {
+        game?.registerRemotePlayer(p.id, p.name);
+      }
+    });
+
+    // Set up state broadcasting
+    if (lanClient) {
+      game.onNetBroadcast = (state: GameStateSnapshot) => {
+        lanClient!.broadcastState(state);
+      };
+    }
+
+    game.startGame();
+  }
+
+  function startLanClientGame(_mode: GameModeType, _map: MapType) {
+    if (menuScreen) menuScreen.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'block';
+
+    // Client uses the lightweight renderer
+    lanRenderer = new ClientGameRenderer(gameContainer);
+    if (lanClient) lanRenderer.setLocalPlayerId(lanClient.playerId);
+  }
+
+  function showLanGameOver(result: any) {
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'flex';
+    const winnerEl = document.getElementById('winner-text');
+    if (winnerEl) winnerEl.textContent = result?.winnerText || 'Match Over';
+  }
+
   // Live 3D preview of the customised wizard (guarded so a WebGL failure can't break the menu)
   let preview: CharacterPreview | null = null;
   if (previewContainer) {
@@ -473,7 +785,8 @@ document.addEventListener('DOMContentLoaded', () => {
       characterConfig.spellColor,
       selectedMap,
       selectedPlayerCount,
-      { ...characterConfig }
+      { ...characterConfig },
+      selectedDifficulty
     );
     game.controlMode = selectedControl;
     game.onMatchEnd = (result) => {
@@ -499,6 +812,7 @@ document.addEventListener('DOMContentLoaded', () => {
       game.playerSpellColor = characterConfig.spellColor;
       game.mapType = selectedMap;
       game.playerCount = selectedPlayerCount;
+      game.difficulty = selectedDifficulty;
       game.resetGame();
       game.startGame();
     }

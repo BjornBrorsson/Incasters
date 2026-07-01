@@ -84,6 +84,68 @@
         </div>
 
         <div class="menu-section">
+          <h3>DIFFICULTY</h3>
+          <div class="difficulty-selector">
+            <button id="btn-diff-easy" class="diff-btn" data-diff="EASY">
+              <span class="diff-title">Easy</span>
+              <span class="diff-desc">Slow bots, poor aim. For learning.</span>
+            </button>
+            <button id="btn-diff-normal" class="diff-btn active" data-diff="NORMAL">
+              <span class="diff-title">Normal</span>
+              <span class="diff-desc">Balanced challenge. Intended experience.</span>
+            </button>
+            <button id="btn-diff-hard" class="diff-btn" data-diff="HARD">
+              <span class="diff-title">Hard</span>
+              <span class="diff-desc">Fast, accurate, aggressive bots.</span>
+            </button>
+            <button id="btn-diff-insane" class="diff-btn" data-diff="INSANE">
+              <span class="diff-title">Insane</span>
+              <span class="diff-desc">Nightmare bots. Near-perfect aim.</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="menu-section">
+          <h3>LAN MULTIPLAYER</h3>
+          <div class="lan-controls">
+            <button id="btn-lan-host" class="lan-btn">Host Game</button>
+            <button id="btn-lan-join" class="lan-btn">Join Game</button>
+          </div>
+          <div id="lan-host-panel" class="lan-panel" style="display:none;">
+            <div class="lan-field">
+              <label>Server Port</label>
+              <input id="lan-host-port" type="text" value="7070" />
+            </div>
+            <div id="lan-room-info" class="lan-room-info">
+              <p class="lan-status">Start the server, then share your IP with friends on the same network.</p>
+              <div id="lan-player-list" class="lan-player-list"></div>
+            </div>
+            <button id="btn-lan-start-server" class="lan-action-btn">Start LAN Server</button>
+          </div>
+          <div id="lan-join-panel" class="lan-panel" style="display:none;">
+            <div class="lan-field">
+              <label>Host IP Address</label>
+              <input id="lan-join-ip" type="text" placeholder="e.g. 192.168.1.100" />
+            </div>
+            <div class="lan-field">
+              <label>Port</label>
+              <input id="lan-join-port" type="text" value="7070" />
+            </div>
+            <div id="lan-join-status" class="lan-status"></div>
+            <button id="btn-lan-connect" class="lan-action-btn">Connect</button>
+          </div>
+          <div id="lan-lobby" class="lan-lobby" style="display:none;">
+            <h4>LOBBY</h4>
+            <div id="lan-lobby-players" class="lan-player-list"></div>
+            <div class="lan-lobby-actions">
+              <button id="btn-lan-ready" class="lan-action-btn">Ready</button>
+              <button id="btn-lan-start-match" class="lan-action-btn" style="display:none;">Start Match</button>
+              <button id="btn-lan-leave" class="lan-action-btn danger">Leave</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-section">
           <h3>CUSTOMIZE YOUR WIZARD</h3>
           <div class="customizer-container glass-panel-nested">
             <div id="char-preview" class="char-preview"></div>
