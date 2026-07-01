@@ -1294,6 +1294,12 @@ export class Game {
       }
     }
 
+    // Gamepad connection indicator
+    const gpIndicator = document.getElementById('gamepad-indicator');
+    if (gpIndicator) {
+      gpIndicator.classList.toggle('connected', this.input.gamepadConnected);
+    }
+
     // 4. Timer & Game Mode Info
     const matchTimerEl = document.getElementById('match-timer');
     if (matchTimerEl) {

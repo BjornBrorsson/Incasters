@@ -492,6 +492,48 @@ body {
   color: rgba(255,255,255,0.4);
 }
 
+/* GAMEPAD INDICATOR */
+.gamepad-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.3);
+  transition: all 0.25s ease;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.gamepad-indicator.connected {
+  color: #39ff14;
+  border-color: rgba(57, 255, 20, 0.4);
+  background: rgba(57, 255, 20, 0.08);
+  box-shadow: 0 0 12px rgba(57, 255, 20, 0.25);
+  opacity: 1;
+}
+
+.gamepad-indicator .gp-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.gamepad-indicator.connected .gp-icon {
+  animation: gp-pulse 2s ease-in-out infinite;
+}
+
+@keyframes gp-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+
 /* GAME OVER OVERLAY SCREEN */
 .gameover-overlay {
   width: 90%;
@@ -686,13 +728,24 @@ body {
 }
 .pb-tokens { color: #ffd23d; font-weight: 600; }
 
-/* Daily challenges */
+/* Daily & weekly challenges */
 .challenges-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 10px 12px;
 }
+.challenge-group-label {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 210, 61, 0.7);
+  text-transform: uppercase;
+  margin-top: 6px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid rgba(255, 210, 61, 0.15);
+}
+.challenge-group-label:first-child { margin-top: 0; }
 .challenge-item {
   display: flex;
   flex-direction: column;

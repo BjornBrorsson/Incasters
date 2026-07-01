@@ -3,7 +3,7 @@ import { Entity } from './Entity';
 import { PowerUpType, POWERUP_COLORS } from './PowerUp';
 import type { ProjectileStats } from './Projectile';
 import { sfx } from '../engine/Audio';
-import { buildHat, buildAccessory } from '../game/CharacterConfig';
+import { buildHat, buildAccessory, buildHair, buildFaceGear, buildWeapon } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
 
 export class Caster extends Entity {
@@ -50,7 +50,11 @@ export class Caster extends Entity {
   robeMesh: THREE.Mesh | null = null;
   hatGroup: THREE.Object3D | null = null;
   accessoryGroup: THREE.Object3D | null = null;
+  hairGroup: THREE.Object3D | null = null;
+  faceGearGroup: THREE.Object3D | null = null;
   shieldMesh: THREE.Mesh | null = null;
+  weaponCrystal: THREE.Object3D | null = null;
+  weaponLight: THREE.Object3D | null = null;
   clothingColor!: number;
   spellColor!: number;
   private wobbleTime: number = 0;
@@ -89,6 +93,11 @@ export class Caster extends Entity {
     const hatStyle = config?.hat ?? 'WIZARD';
     const accessoryStyle = config?.accessory ?? 'NONE';
     const eyeColorVal = config?.eyeColor ?? 0xfff000;
+    const hairStyle = config?.hair ?? 'NONE';
+    const hairColorVal = config?.hairColor ?? 0x2b1b0e;
+    const faceGearStyle = config?.faceGear ?? 'NONE';
+    const weaponStyle = config?.weapon ?? 'STAFF';
+    const hatRotation = config?.hatRotation ?? 0;
 
     // 1. Robe (Body) - conical shape
     const robeGeo = new THREE.ConeGeometry(0.4, 0.9, 8);
@@ -116,11 +125,20 @@ export class Caster extends Entity {
     head.castShadow = true;
     bodyGroup.add(head);
 
-    // 3. Head gear (configurable cosmetic part)
+    // 3. Hair (rendered under the hat so it peeks out)
+    const hairGroup = buildHair(hairStyle, hairColorVal);
+    bodyGroup.add(hairGroup);
+
+    // 3b. Head gear (configurable cosmetic part)
     const hatGroup = buildHat(hatStyle, finalClothing);
+    if (hatRotation) hatGroup.rotation.y = hatRotation;
     bodyGroup.add(hatGroup);
 
-    // 3b. Back accessory (wings / cape / jetpack), tinted with the spell colour
+    // 3c. Face gear (shades / eyepatch / beard / mask)
+    const faceGearGroup = buildFaceGear(faceGearStyle, finalClothing);
+    bodyGroup.add(faceGearGroup);
+
+    // 3d. Back accessory (wings / cape / jetpack / banner), tinted with the spell colour
     const accessoryGroup = buildAccessory(accessoryStyle, finalSpell);
     bodyGroup.add(accessoryGroup);
 
@@ -136,29 +154,9 @@ export class Caster extends Entity {
     rightEye.position.set(0.09, 0.9, 0.22);
     bodyGroup.add(rightEye);
 
-    // 5. Wizard Staff (aiming indicator)
-    const staffGroup = new THREE.Group();
-    // Offset staff to the side
-    staffGroup.position.set(0.4, 0.45, 0.1);
-
-    const staffPoleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.0, 6);
-    const staffPoleMat = new THREE.MeshStandardMaterial({ color: 0x5c4033, roughness: 0.9 }); // Wooden rod
-    const staffPole = new THREE.Mesh(staffPoleGeo, staffPoleMat);
-    staffPole.rotation.x = Math.PI / 2; // Point forward
-    staffGroup.add(staffPole);
-
-    // Crystal bulb at the tip
-    const crystalGeo = new THREE.DodecahedronGeometry(0.12, 0);
-    const crystalMat = new THREE.MeshBasicMaterial({ color: finalSpell });
-    const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-    crystal.position.set(0, 0, 0.55); // Top of the staff
-    staffGroup.add(crystal);
-
-    // Add a point light to staff crystal for dynamic color casting
-    const staffLight = new THREE.PointLight(finalSpell, 0.8, 1.5);
-    staffLight.position.set(0, 0, 0.55);
-    staffGroup.add(staffLight);
-
+    // 5. Weapon (aiming indicator) — staff / wand / sword / scythe
+    const weapon = buildWeapon(weaponStyle, finalSpell);
+    const staffGroup = weapon.group;
     bodyGroup.add(staffGroup);
 
     // 6. Shield bubble mesh (wireframe glow sphere, hidden initially)
@@ -186,6 +184,10 @@ export class Caster extends Entity {
     this.robeMesh = robe;
     this.hatGroup = hatGroup;
     this.accessoryGroup = accessoryGroup;
+    this.hairGroup = hairGroup;
+    this.faceGearGroup = faceGearGroup;
+    this.weaponCrystal = weapon.crystal;
+    this.weaponLight = weapon.light;
     this.shieldMesh = shieldBubble;
   }
 
@@ -307,20 +309,20 @@ export class Caster extends Entity {
   }
 
   private updateStaffVisuals() {
-    if (!this.staffMesh) return;
-    const crystal = this.staffMesh.children[1] as THREE.Mesh;
-    const light = this.staffMesh.children[2] as THREE.PointLight;
-    
-    if (crystal && light) {
+    if (!this.weaponCrystal || !this.weaponLight) return;
+    const crystalMesh = this.weaponCrystal.children[0] as THREE.Mesh | undefined;
+    const lightObj = this.weaponLight.children[0] as THREE.PointLight | undefined;
+
+    if (crystalMesh && lightObj) {
       let color = this.spellColor;
       if (this.powerupSlotsOrder.length > 0) {
         color = POWERUP_COLORS[this.powerupSlotsOrder[this.powerupSlotsOrder.length - 1]];
       }
-      
-      if (crystal.material instanceof THREE.MeshBasicMaterial) {
-        crystal.material.color.setHex(color);
+
+      if (crystalMesh.material instanceof THREE.MeshBasicMaterial) {
+        crystalMesh.material.color.setHex(color);
       }
-      light.color.setHex(color);
+      lightObj.color.setHex(color);
     }
   }
 

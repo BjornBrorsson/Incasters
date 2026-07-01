@@ -16,6 +16,8 @@ export interface Challenge {
   reward: number;
   metric: 'kills' | 'wins' | 'games';
   done: boolean;
+  /** 'daily' or 'weekly' — controls refresh cadence and UI grouping. */
+  cadence: 'daily' | 'weekly';
 }
 
 export interface MatchSummary {
@@ -34,6 +36,7 @@ interface ProgressionState {
   unlocked: string[];
   challenges: Challenge[];
   challengeDate: string;
+  challengeWeek: string;
 }
 
 // Cosmetic part unlock costs (in tokens). 0 = free / always available.
@@ -42,20 +45,46 @@ export const PART_COST: Record<string, number> = {
   'hat:NONE': 0,
   'hat:TOP': 20,
   'hat:CROWN': 40,
+  'hat:HOOD': 30,
+  'hat:HELMET': 35,
   'acc:NONE': 0,
   'acc:WINGS': 25,
   'acc:CAPE': 25,
-  'acc:PACK': 40
+  'acc:PACK': 40,
+  'acc:BANNER': 30,
+  'hair:NONE': 0,
+  'hair:BUZZ': 10,
+  'hair:MOHAWK': 20,
+  'hair:LONG': 20,
+  'hair:PONYTAIL': 25,
+  'face:NONE': 0,
+  'face:SHADES': 25,
+  'face:EYEPATCH': 20,
+  'face:BEARD': 15,
+  'face:MASK': 30,
+  'weapon:STAFF': 0,
+  'weapon:WAND': 15,
+  'weapon:SWORD': 30,
+  'weapon:SCYTHE': 40
 };
 
 type ChallengeTemplate = Omit<Challenge, 'progress' | 'done'>;
 
 const CHALLENGE_POOL: ChallengeTemplate[] = [
-  { desc: 'Land 10 eliminations', goal: 10, reward: 15, metric: 'kills' },
-  { desc: 'Land 20 eliminations', goal: 20, reward: 30, metric: 'kills' },
-  { desc: 'Win 1 match', goal: 1, reward: 15, metric: 'wins' },
-  { desc: 'Win 2 matches', goal: 2, reward: 25, metric: 'wins' },
-  { desc: 'Play 3 matches', goal: 3, reward: 10, metric: 'games' }
+  { desc: 'Land 10 eliminations', goal: 10, reward: 15, metric: 'kills', cadence: 'daily' },
+  { desc: 'Land 20 eliminations', goal: 20, reward: 30, metric: 'kills', cadence: 'daily' },
+  { desc: 'Win 1 match', goal: 1, reward: 15, metric: 'wins', cadence: 'daily' },
+  { desc: 'Win 2 matches', goal: 2, reward: 25, metric: 'wins', cadence: 'daily' },
+  { desc: 'Play 3 matches', goal: 3, reward: 10, metric: 'games', cadence: 'daily' }
+];
+
+const WEEKLY_CHALLENGE_POOL: ChallengeTemplate[] = [
+  { desc: 'Land 50 eliminations this week', goal: 50, reward: 60, metric: 'kills', cadence: 'weekly' },
+  { desc: 'Land 100 eliminations this week', goal: 100, reward: 120, metric: 'kills', cadence: 'weekly' },
+  { desc: 'Win 5 matches this week', goal: 5, reward: 80, metric: 'wins', cadence: 'weekly' },
+  { desc: 'Win 10 matches this week', goal: 10, reward: 160, metric: 'wins', cadence: 'weekly' },
+  { desc: 'Play 15 matches this week', goal: 15, reward: 50, metric: 'games', cadence: 'weekly' },
+  { desc: 'Play 30 matches this week', goal: 30, reward: 100, metric: 'games', cadence: 'weekly' }
 ];
 
 const XP_PER_LEVEL = 250;
@@ -64,6 +93,19 @@ const STORAGE_KEY = 'incasters_progression';
 function todayStr(): string {
   const d = new Date();
   return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+/** Returns a stable week identifier (ISO year-week). Weeks run Monday→Sunday. */
+function weekStr(): string {
+  const d = new Date();
+  // Set to nearest Thursday: current date + 4 - current day number
+  // Makes Sunday(0) → 3, Monday(1) → 3, etc. — standard ISO week calculation.
+  const dayNum = d.getDay() || 7;
+  const thursday = new Date(d);
+  thursday.setDate(d.getDate() + 4 - dayNum);
+  const yearStart = new Date(thursday.getFullYear(), 0, 1);
+  const weekNum = Math.ceil(((thursday.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+  return `${thursday.getFullYear()}-W${weekNum}`;
 }
 
 function hashStr(s: string): number {
@@ -79,7 +121,7 @@ class Progression {
 
   constructor() {
     this.state = this.load();
-    this.ensureDailyChallenges();
+    this.ensureChallenges();
   }
 
   private load(): ProgressionState {
@@ -95,13 +137,14 @@ class Progression {
           kills: parsed.kills ?? 0,
           unlocked: parsed.unlocked ?? [],
           challenges: parsed.challenges ?? [],
-          challengeDate: parsed.challengeDate ?? ''
+          challengeDate: parsed.challengeDate ?? '',
+          challengeWeek: parsed.challengeWeek ?? ''
         };
       }
     } catch {
       // ignore malformed storage
     }
-    return { xp: 0, tokens: 0, games: 0, wins: 0, kills: 0, unlocked: [], challenges: [], challengeDate: '' };
+    return { xp: 0, tokens: 0, games: 0, wins: 0, kills: 0, unlocked: [], challenges: [], challengeDate: '', challengeWeek: '' };
   }
 
   private save() {
@@ -112,21 +155,57 @@ class Progression {
     }
   }
 
-  private ensureDailyChallenges() {
+  /** Refresh daily and weekly challenges whose cadence window has elapsed. */
+  private ensureChallenges() {
     const today = todayStr();
-    if (this.state.challengeDate === today && this.state.challenges.length > 0) return;
+    const week = weekStr();
 
-    const idxs: number[] = [];
-    let seed = hashStr(today);
-    while (idxs.length < 3 && idxs.length < CHALLENGE_POOL.length) {
-      seed = (seed * 1103515245 + 12345) >>> 0;
-      const i = seed % CHALLENGE_POOL.length;
-      if (!idxs.includes(i)) idxs.push(i);
+    // Preserve challenges that are still within their cadence window; replace
+    // those whose day/week identifier has rolled over.
+    const surviving = this.state.challenges.filter((ch) => {
+      if (ch.cadence === 'weekly') return this.state.challengeWeek === week;
+      return this.state.challengeDate === today;
+    });
+
+    const needDaily = !surviving.some((ch) => ch.cadence === 'daily');
+    const needWeekly = !surviving.some((ch) => ch.cadence === 'weekly');
+
+    const fresh: Challenge[] = [];
+
+    if (needDaily) {
+      const idxs: number[] = [];
+      let seed = hashStr(today);
+      while (idxs.length < 3 && idxs.length < CHALLENGE_POOL.length) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        const i = seed % CHALLENGE_POOL.length;
+        if (!idxs.includes(i)) idxs.push(i);
+      }
+      idxs.forEach((i) => {
+        const t = CHALLENGE_POOL[i];
+        fresh.push({ ...t, progress: 0, done: false });
+      });
+      this.state.challengeDate = today;
     }
 
-    this.state.challenges = idxs.map((i) => ({ ...CHALLENGE_POOL[i], progress: 0, done: false }));
-    this.state.challengeDate = today;
-    this.save();
+    if (needWeekly) {
+      const idxs: number[] = [];
+      let seed = hashStr(week);
+      while (idxs.length < 2 && idxs.length < WEEKLY_CHALLENGE_POOL.length) {
+        seed = (seed * 1103515245 + 12345) >>> 0;
+        const i = seed % WEEKLY_CHALLENGE_POOL.length;
+        if (!idxs.includes(i)) idxs.push(i);
+      }
+      idxs.forEach((i) => {
+        const t = WEEKLY_CHALLENGE_POOL[i];
+        fresh.push({ ...t, progress: 0, done: false });
+      });
+      this.state.challengeWeek = week;
+    }
+
+    if (fresh.length > 0) {
+      this.state.challenges = [...surviving, ...fresh];
+      this.save();
+    }
   }
 
   get level(): number {
@@ -184,7 +263,7 @@ class Progression {
 
     let challengeTokens = 0;
     const completed: Challenge[] = [];
-    this.ensureDailyChallenges();
+    this.ensureChallenges();
     this.state.challenges.forEach((ch) => {
       if (ch.done) return;
       if (ch.metric === 'kills') ch.progress += result.kills;

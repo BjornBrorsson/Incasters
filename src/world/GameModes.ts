@@ -39,6 +39,10 @@ export class GameModeManager {
   maxSafeRadius: number = 18;
   private stormMesh: THREE.Mesh | null = null;
   private stormWallMesh: THREE.Mesh | null = null;
+  private stormFlames: THREE.Points | null = null;
+  private stormFlameData: Float32Array | null = null;
+  private stormFlameCount = 180;
+  private stormPulseTime = 0;
   
   // Team Battle variables
   redScore: number = 0;
@@ -95,30 +99,51 @@ export class GameModeManager {
     this.cleanup(scene);
 
     if (this.type === GameModeType.BATTLE_ROYALE) {
-      // Create Red fire ring border
-      const ringGeo = new THREE.RingGeometry(this.safeRadius - 0.1, this.safeRadius + 0.2, 64);
+      // Create glowing fire ring border with pulsing emissive
+      const ringGeo = new THREE.RingGeometry(this.safeRadius - 0.3, this.safeRadius + 0.4, 80);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: 0xff1100,
+        color: 0xff3300,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.85
       });
       this.stormMesh = new THREE.Mesh(ringGeo, ringMat);
       this.stormMesh.rotation.x = Math.PI / 2;
       this.stormMesh.position.y = 0.03;
       scene.add(this.stormMesh);
 
-      // Create transparent red cylinder wall
-      const wallGeo = new THREE.CylinderGeometry(this.safeRadius, this.safeRadius, 10, 64, 1, true);
-      const wallMat = new THREE.MeshBasicMaterial({
-        color: 0xff1100,
+      // Inner glow ring (slightly smaller, additive blending for bloom-like effect)
+      const glowGeo = new THREE.RingGeometry(this.safeRadius - 0.6, this.safeRadius - 0.1, 80);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0xff6600,
+        side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.15,
-        side: THREE.DoubleSide
+        opacity: 0.3,
+        blending: THREE.AdditiveBlending
+      });
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      glowMesh.rotation.x = Math.PI / 2;
+      glowMesh.position.y = 0.02;
+      glowMesh.name = 'stormGlow';
+      scene.add(glowMesh);
+      this.stormMesh.add(glowMesh);
+
+      // Create transparent fire cylinder wall with gradient feel
+      const wallGeo = new THREE.CylinderGeometry(this.safeRadius, this.safeRadius, 12, 80, 1, true);
+      const wallMat = new THREE.MeshBasicMaterial({
+        color: 0xff2200,
+        transparent: true,
+        opacity: 0.18,
+        side: THREE.DoubleSide,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
       });
       this.stormWallMesh = new THREE.Mesh(wallGeo, wallMat);
-      this.stormWallMesh.position.y = 5;
+      this.stormWallMesh.position.y = 6;
       scene.add(this.stormWallMesh);
+
+      // Animated flame particles around the ring perimeter
+      this.createStormFlames(scene);
 
       // Distribute teams to FFA (Gold/Neutral)
       casters.forEach((c) => {
@@ -200,20 +225,42 @@ export class GameModeManager {
       // Slowly shrink radius down to 1.5
       this.safeRadius = Math.max(1.5, this.safeRadius - dt * 0.15);
 
+      // Pulsing animation for the ring opacity
+      this.stormPulseTime += dt;
+      const pulse = 0.75 + Math.sin(this.stormPulseTime * 3.0) * 0.15;
+
       // Sync visual ring/cylinder scales
       if (this.stormMesh && this.stormWallMesh) {
         const scale = this.safeRadius / this.maxSafeRadius;
         this.stormMesh.scale.set(scale, scale, 1.0);
         this.stormWallMesh.scale.set(scale, 1.0, scale);
+
+        // Pulse the ring opacity for a "breathing" fire effect
+        const ringMat = this.stormMesh.material as THREE.MeshBasicMaterial;
+        ringMat.opacity = 0.85 * pulse;
+
+        // Pulse the wall too, slightly out of phase
+        const wallMat = this.stormWallMesh.material as THREE.MeshBasicMaterial;
+        wallMat.opacity = 0.18 * (0.7 + Math.sin(this.stormPulseTime * 2.0 + 1.0) * 0.3);
+
+        // Pulse the inner glow
+        const glow = this.stormMesh.getObjectByName('stormGlow') as THREE.Mesh | null;
+        if (glow) {
+          (glow.material as THREE.MeshBasicMaterial).opacity = 0.3 * pulse;
+        }
       }
+
+      // Animate flame particles
+      this.updateStormFlames(dt);
 
       // Damage casters outside the storm
       casters.forEach((c) => {
         if (c.isDead) return;
         const dist = Math.sqrt(c.x * c.x + c.y * c.y);
         if (dist > this.safeRadius) {
-          // 12 damage per second
-          c.takeDamage(12 * dt);
+          // 12 damage per second, increasing as the ring shrinks
+          const shrinkFactor = 1 + (1 - this.safeRadius / this.maxSafeRadius) * 0.5;
+          c.takeDamage(12 * shrinkFactor * dt);
         }
       });
 
@@ -548,8 +595,96 @@ export class GameModeManager {
     }
   }
 
+  /** Create animated flame particles that orbit the storm ring. */
+  private createStormFlames(scene: THREE.Scene) {
+    const count = this.stormFlameCount;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const data = new Float32Array(count * 4); // angle, baseHeight, flickerSpeed, flickerPhase
+
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + Math.random() * 0.1;
+      const r = this.safeRadius;
+      positions[i * 3] = Math.cos(angle) * r;
+      positions[i * 3 + 1] = Math.random() * 2.0;
+      positions[i * 3 + 2] = Math.sin(angle) * r;
+
+      // Flame colors: orange to yellow gradient
+      const t = Math.random();
+      colors[i * 3] = 1.0; // R
+      colors[i * 3 + 1] = 0.2 + t * 0.5; // G
+      colors[i * 3 + 2] = 0.0; // B
+
+      data[i * 4] = angle;
+      data[i * 4 + 1] = positions[i * 3 + 1];
+      data[i * 4 + 2] = 2.0 + Math.random() * 3.0; // flicker speed
+      data[i * 4 + 3] = Math.random() * Math.PI * 2; // phase
+    }
+
+    this.stormFlameData = data;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.5,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.8,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+
+    this.stormFlames = new THREE.Points(geo, mat);
+    this.stormFlames.name = 'stormFlames';
+    scene.add(this.stormFlames);
+  }
+
+  /** Animate the flame particles: flicker height, orbit slowly, follow ring shrink. */
+  private updateStormFlames(_dt: number) {
+    if (!this.stormFlames || !this.stormFlameData) return;
+    const posAttr = this.stormFlames.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const colAttr = this.stormFlames.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const positions = posAttr.array as Float32Array;
+    const colors = colAttr.array as Float32Array;
+    const data = this.stormFlameData;
+    const count = this.stormFlameCount;
+    const r = this.safeRadius;
+    const scale = r / this.maxSafeRadius;
+
+    for (let i = 0; i < count; i++) {
+      const angle = data[i * 4] + this.stormPulseTime * 0.15;
+      const flicker = Math.sin(this.stormPulseTime * data[i * 4 + 2] + data[i * 4 + 3]);
+      const height = data[i * 4 + 1] + flicker * 1.2 + 1.0;
+
+      positions[i * 3] = Math.cos(angle) * r;
+      positions[i * 3 + 1] = height;
+      positions[i * 3 + 2] = Math.sin(angle) * r;
+
+      // Flicker color intensity
+      const intensity = 0.7 + flicker * 0.3;
+      colors[i * 3] = intensity;
+      colors[i * 3 + 1] = (0.2 + (flicker * 0.5 + 0.5) * 0.5) * intensity;
+    }
+
+    posAttr.needsUpdate = true;
+    colAttr.needsUpdate = true;
+
+    // Scale particle size down as the ring shrinks
+    (this.stormFlames.material as THREE.PointsMaterial).size = 0.5 * Math.max(0.4, scale);
+  }
+
   cleanup(scene: THREE.Scene) {
     if (this.stormMesh) {
+      // Remove child glow mesh
+      const glow = this.stormMesh.getObjectByName('stormGlow') as THREE.Mesh | null;
+      if (glow) {
+        this.stormMesh.remove(glow);
+        glow.geometry.dispose();
+        (glow.material as THREE.Material).dispose();
+      }
       scene.remove(this.stormMesh);
       this.stormMesh.geometry.dispose();
       (this.stormMesh.material as THREE.Material).dispose();
@@ -562,6 +697,14 @@ export class GameModeManager {
       (this.stormWallMesh.material as THREE.Material).dispose();
       this.stormWallMesh = null;
     }
+
+    if (this.stormFlames) {
+      scene.remove(this.stormFlames);
+      this.stormFlames.geometry.dispose();
+      (this.stormFlames.material as THREE.Material).dispose();
+      this.stormFlames = null;
+    }
+    this.stormFlameData = null;
 
     this.coins.forEach((c) => {
       scene.remove(c.mesh);

@@ -7,9 +7,16 @@ import {
   saveCharacterConfig,
   HAT_STYLES,
   ACCESSORY_STYLES,
+  HAIR_STYLES,
+  FACE_GEAR_STYLES,
+  WEAPON_STYLES,
+  EYE_COLORS,
   type CharacterConfig,
   type HatStyle,
-  type AccessoryStyle
+  type AccessoryStyle,
+  type HairStyle,
+  type FaceGearStyle,
+  type WeaponStyle
 } from './game/CharacterConfig';
 import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
@@ -159,6 +166,9 @@ const characterConfig: CharacterConfig = loadCharacterConfig();
 // Grandfather the player's currently-selected cosmetics so they stay usable
 progression.grantPart(`hat:${characterConfig.hat}`);
 progression.grantPart(`acc:${characterConfig.accessory}`);
+progression.grantPart(`hair:${characterConfig.hair}`);
+progression.grantPart(`face:${characterConfig.faceGear}`);
+progression.grantPart(`weapon:${characterConfig.weapon}`);
 let selectedMap: MapType = (localStorage.getItem('incasters_map') || 'ARENA') as MapType;
 let selectedPlayerCount = parseInt(localStorage.getItem('incasters_player_count') || '8', 10);
 let game: Game | null = null;
@@ -180,7 +190,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const robePicker = document.getElementById('robe-color-picker');
   const spellPicker = document.getElementById('spell-color-picker');
+  const eyePicker = document.getElementById('eye-color-picker');
+  const hairPicker = document.getElementById('hair-picker');
   const hatPicker = document.getElementById('hat-picker');
+  const faceGearPicker = document.getElementById('facegear-picker');
+  const weaponPicker = document.getElementById('weapon-picker');
   const accessoryPicker = document.getElementById('accessory-picker');
   const previewContainer = document.getElementById('char-preview');
   const progressBadge = document.getElementById('progress-badge');
@@ -207,17 +221,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const renderChallenges = () => {
     if (!challengesList) return;
-    challengesList.innerHTML = progression.challenges
-      .map((c) => {
-        const pct = Math.round((c.progress / c.goal) * 100);
-        return (
-          `<div class="challenge-item ${c.done ? 'done' : ''}">` +
-          `<div class="challenge-top"><span>${c.desc}</span><span>${c.progress}/${c.goal} \u00B7 ${c.reward}\u{1FA99}</span></div>` +
-          `<div class="challenge-bar"><span style="width:${pct}%"></span></div>` +
-          `</div>`
-        );
-      })
-      .join('');
+    const daily = progression.challenges.filter((c) => c.cadence === 'daily');
+    const weekly = progression.challenges.filter((c) => c.cadence === 'weekly');
+    const renderGroup = (label: string, items: typeof daily) => {
+      if (items.length === 0) return '';
+      const header = '<div class="challenge-group-label">' + label + '</div>';
+      const rows = items
+        .map((c) => {
+          const pct = Math.round((c.progress / c.goal) * 100);
+          const cls = c.done ? 'challenge-item done' : 'challenge-item';
+          return (
+            '<div class="' + cls + '">' +
+            '<div class="challenge-top"><span>' + c.desc + '</span><span>' + c.progress + '/' + c.goal + ' \u00B7 ' + c.reward + '\u{1FA99}</span></div>' +
+            '<div class="challenge-bar"><span style="width:' + pct + '%"></span></div>' +
+            '</div>'
+          );
+        })
+        .join('');
+      return header + rows;
+    };
+    challengesList.innerHTML = renderGroup('DAILY', daily) + renderGroup('WEEKLY', weekly);
   };
 
   const showMatchSummary = (result: MatchResult, summary: MatchSummary) => {
@@ -346,6 +369,35 @@ document.addEventListener('DOMContentLoaded', () => {
   setupColorPicker(robePicker, characterConfig.robeColor, (val) => { characterConfig.robeColor = val; });
   setupColorPicker(spellPicker, characterConfig.spellColor, (val) => { characterConfig.spellColor = val; });
 
+  // Eye colour picker (uses EYE_COLORS list)
+  const setupEyeColorPicker = (pickerEl: HTMLElement | null, currentValue: number, onSelect: (val: number) => void) => {
+    if (!pickerEl) return;
+    EYE_COLORS.forEach((hex) => {
+      const css = '#' + hex.toString(16).padStart(6, '0');
+      const dot = document.createElement('div');
+      dot.className = 'color-dot';
+      dot.style.backgroundColor = css;
+      dot.style.color = css;
+      if (hex === currentValue) {
+        dot.classList.add('active');
+        dot.style.boxShadow = `0 0 10px ${css}`;
+      }
+      dot.addEventListener('click', () => {
+        pickerEl.querySelectorAll('.color-dot').forEach((d) => {
+          d.classList.remove('active');
+          (d as HTMLElement).style.boxShadow = '';
+        });
+        dot.classList.add('active');
+        dot.style.boxShadow = `0 0 10px ${css}`;
+        onSelect(hex);
+        saveCharacterConfig(characterConfig);
+        refreshPreview();
+      });
+      pickerEl.appendChild(dot);
+    });
+  };
+  setupEyeColorPicker(eyePicker, characterConfig.eyeColor, (val) => { characterConfig.eyeColor = val; });
+
   // Part pickers (hat + accessory) with token-gated unlocks
   const setupPartPicker = <T extends string>(
     pickerEl: HTMLElement | null,
@@ -395,6 +447,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   setupPartPicker<HatStyle>(hatPicker, 'hat', HAT_STYLES, characterConfig.hat, (id) => { characterConfig.hat = id; });
   setupPartPicker<AccessoryStyle>(accessoryPicker, 'acc', ACCESSORY_STYLES, characterConfig.accessory, (id) => { characterConfig.accessory = id; });
+  setupPartPicker<HairStyle>(hairPicker, 'hair', HAIR_STYLES, characterConfig.hair, (id) => { characterConfig.hair = id; });
+  setupPartPicker<FaceGearStyle>(faceGearPicker, 'face', FACE_GEAR_STYLES, characterConfig.faceGear, (id) => { characterConfig.faceGear = id; });
+  setupPartPicker<WeaponStyle>(weaponPicker, 'weapon', WEAPON_STYLES, characterConfig.weapon, (id) => { characterConfig.weapon = id; });
 
   refreshBadge();
   renderChallenges();
