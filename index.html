@@ -280,7 +280,10 @@
         <p id="gameover-winner" class="gameover-winner-text">Glitch WINS Last Caster Standing!</p>
         <div id="match-summary" class="match-summary"></div>
 
-        <button id="btn-restart" class="play-btn">PLAY AGAIN</button>
+        <div class="gameover-buttons">
+          <button id="btn-restart" class="play-btn">PLAY AGAIN</button>
+          <button id="btn-back-menu" class="play-btn secondary">BACK TO MENU</button>
+        </div>
       </div>
 
       <!-- FX: floating damage numbers, kill feed & announcer -->
@@ -295,6 +298,12 @@
       <div id="joy-right" class="joy-container">
         <div id="joy-right-knob" class="joy-knob"></div>
       </div>
+
+      <!-- DEDICATED FIRE BUTTON (touch) -->
+      <button id="fire-btn" class="fire-btn" aria-label="Fire"></button>
+
+      <!-- DASH BUTTON (touch) -->
+      <button id="dash-btn" class="dash-btn" aria-label="Dash">DASH</button>
 
     </div>
 

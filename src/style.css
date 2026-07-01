@@ -551,6 +551,28 @@ body {
   animation: fadeIn 0.4s ease-out;
 }
 
+.gameover-buttons {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.gameover-buttons .play-btn {
+  flex: 1;
+  min-width: 140px;
+}
+
+.play-btn.secondary {
+  background: linear-gradient(135deg, #3a4a6a 0%, #1a2a4a 100%);
+  box-shadow: 0 6px 20px rgba(30, 50, 100, 0.35);
+}
+
+.play-btn.secondary:hover {
+  box-shadow: 0 8px 25px rgba(60, 100, 180, 0.45);
+  filter: brightness(1.15);
+}
+
 .gameover-title {
   font-family: 'Outfit', sans-serif;
   font-weight: 900;
@@ -586,6 +608,73 @@ body {
   background: rgba(255, 255, 255, 0.35);
   border-radius: 50%;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+/* DEDICATED FIRE BUTTON (touch) */
+.fire-btn {
+  position: absolute;
+  bottom: 30px;
+  right: 130px;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(255, 80, 40, 0.85), rgba(180, 30, 10, 0.7));
+  border: 3px solid rgba(255, 120, 60, 0.5);
+  box-shadow: 0 0 20px rgba(255, 60, 20, 0.4), inset 0 2px 8px rgba(255, 200, 100, 0.3);
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 800;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  display: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  z-index: 100;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.fire-btn::before {
+  content: 'FIRE';
+}
+
+.fire-btn:active,
+.fire-btn.pressed {
+  transform: scale(0.92);
+  box-shadow: 0 0 30px rgba(255, 100, 40, 0.6), inset 0 2px 12px rgba(255, 230, 150, 0.5);
+  background: radial-gradient(circle at 35% 35%, rgba(255, 120, 60, 0.95), rgba(200, 50, 20, 0.85));
+}
+
+/* DASH BUTTON (touch) */
+.dash-btn {
+  position: absolute;
+  bottom: 120px;
+  right: 40px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, rgba(80, 180, 255, 0.8), rgba(20, 80, 160, 0.65));
+  border: 2px solid rgba(100, 200, 255, 0.4);
+  box-shadow: 0 0 15px rgba(60, 160, 255, 0.3);
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  display: none;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  z-index: 100;
+  transition: transform 0.08s ease;
+}
+
+.dash-btn:active,
+.dash-btn.pressed {
+  transform: scale(0.9);
+  box-shadow: 0 0 25px rgba(80, 200, 255, 0.5);
 }
 
 /* Responsive adjustments */

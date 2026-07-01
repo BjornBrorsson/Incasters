@@ -818,6 +818,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Back to Menu callback
+  const backMenuBtn = document.getElementById('btn-back-menu');
+  backMenuBtn?.addEventListener('click', () => {
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+
+    // Destroy the current game instance to free WebGL resources
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+  });
+
   // Enable keyboard + gamepad navigation of menu & game-over screens
   new MenuNavigator();
 });

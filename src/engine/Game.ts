@@ -76,6 +76,10 @@ export class Game {
     left: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 },
     right: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 }
   };
+  /** Touch fire button state (decoupled from right stick). */
+  private touchFireHeld = false;
+  /** Touch dash button state. */
+  private touchDashQueued = false;
 
   // State
   isPlaying: boolean = false;
@@ -313,6 +317,14 @@ export class Game {
     this.isPlaying = true;
     this.clock.getDelta();
     sfx.playStart();
+
+    // Show touch fire/dash buttons on touch devices
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+      const fireBtn = document.getElementById('fire-btn');
+      if (fireBtn) fireBtn.style.display = 'block';
+      const dashBtn = document.getElementById('dash-btn');
+      if (dashBtn) dashBtn.style.display = 'flex';
+    }
   }
 
   private setupInput() {
@@ -335,6 +347,43 @@ export class Game {
       };
       dashCircle.addEventListener('touchstart', handleMobileDash, { passive: false });
       dashCircle.addEventListener('click', handleMobileDash);
+    }
+
+    // Dedicated Fire button (touch)
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      const onFireStart = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchFireHeld = true;
+        fireBtn.classList.add('pressed');
+      };
+      const onFireEnd = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchFireHeld = false;
+        fireBtn.classList.remove('pressed');
+      };
+      fireBtn.addEventListener('touchstart', onFireStart, { passive: false });
+      fireBtn.addEventListener('touchend', onFireEnd, { passive: false });
+      fireBtn.addEventListener('touchcancel', onFireEnd, { passive: false });
+      fireBtn.addEventListener('mousedown', onFireStart);
+      fireBtn.addEventListener('mouseup', onFireEnd);
+      fireBtn.addEventListener('mouseleave', onFireEnd);
+    }
+
+    // Dedicated Dash button (touch)
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) {
+      const onDash = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchDashQueued = true;
+        dashBtn.classList.add('pressed');
+        setTimeout(() => dashBtn.classList.remove('pressed'), 120);
+      };
+      dashBtn.addEventListener('touchstart', onDash, { passive: false });
+      dashBtn.addEventListener('mousedown', onDash);
     }
   }
 
@@ -360,9 +409,17 @@ export class Game {
   private onTouchStart(e: TouchEvent) {
     if (!this.isPlaying) return;
     this.touchControlsActive = true;
-    
+
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
+
+      // Ignore touches that land on the fire/dash buttons (they have their own handlers)
+      const target = touch.target as HTMLElement | null;
+      if (target && (target.id === 'fire-btn' || target.id === 'dash-btn' ||
+                     target.closest('#fire-btn') || target.closest('#dash-btn'))) {
+        continue;
+      }
+
       const screenWidthHalf = window.innerWidth / 2;
 
       // Left half = movement stick
@@ -466,7 +523,8 @@ export class Game {
         this.touchJoysticks.right.id = -1;
         this.touchJoysticks.right.dirX = 0;
         this.touchJoysticks.right.dirY = 0;
-        this.playerGuidedProjectile = null;
+        // Do NOT clear playerGuidedProjectile here — the fire button controls guiding.
+        // The right stick only steers; releasing it just stops steering.
         this.hideJoystickUI('right');
       }
     }
@@ -746,8 +804,9 @@ export class Game {
     // 1. Process player inputs and movement
     this.updatePlayerMovement();
 
-    // Edge-triggered dash (spacebar / gamepad button)
-    if (this.input.consumeDash()) {
+    // Edge-triggered dash (spacebar / gamepad button / touch dash button)
+    if (this.input.consumeDash() || this.touchDashQueued) {
+      this.touchDashQueued = false;
       this.triggerPlayerDash();
     }
 
@@ -903,7 +962,10 @@ export class Game {
       return;
     }
 
-    const touchFiring = this.touchControlsActive && this.touchJoysticks.right.active;
+    // Touch: fire button is decoupled from the right stick.
+    // Gamepad: trigger/A button fires.
+    // Mouse: left-click fires.
+    const touchFiring = this.touchControlsActive && this.touchFireHeld;
     const fireHeld = touchFiring || this.input.isFireHeld();
 
     if (!fireHeld) {
@@ -915,12 +977,19 @@ export class Game {
     if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
       // Mouse Target-Tracking fires toward an absolute ground point; directional
       // sources (gamepad / touch) are steered each frame in updateGuidedProjectile.
-      const useMouseTarget = !touchFiring && !this.input.usingGamepad && this.controlMode === 'TARGET';
+      const useMouseTarget = !touchFiring && !this.input.usingGamepad && !this.touchControlsActive && this.controlMode === 'TARGET';
       if (useMouseTarget) this.updateGroundTarget();
+
+      // For touch: aim in the direction of the right stick if active, else aim straight ahead
+      let aimAngle = this.player.aimAngle;
+      if (this.touchControlsActive && this.touchJoysticks.right.active) {
+        aimAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+        this.player.aimAngle = aimAngle;
+      }
 
       const proj = this.spawnProjectile(
         this.player,
-        this.player.aimAngle,
+        aimAngle,
         useMouseTarget ? this.groundTarget : null
       );
       this.playerGuidedProjectile = proj;
@@ -964,7 +1033,8 @@ export class Game {
     if (proj.isWallRunning) return;
 
     if (this.touchControlsActive && this.touchJoysticks.right.active) {
-      // Mobile touch: curve projectile in direction the right stick is pointing
+      // Mobile touch right stick: steer the fireball in the direction the stick is pointing.
+      // This is decoupled from firing — the fire button fires, the right stick steers.
       const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
       proj.targetPoint = {
         x: proj.x + Math.cos(angle) * 8,
@@ -988,7 +1058,7 @@ export class Game {
         proj.steerDirection = 0;
       }
     } else if (this.controlMode === 'TARGET') {
-      // Track 3D cursor target coordinate
+      // Mouse + Keyboard: ball follows the mouse cursor direction
       this.updateGroundTarget();
       proj.targetPoint = { x: this.groundTarget.x, y: this.groundTarget.z };
       proj.steerDirection = 0;
@@ -1469,6 +1539,11 @@ export class Game {
         text.innerText = this.gameModeManager.winnerText;
         overlay.style.display = 'flex';
       }
+      // Hide touch fire/dash buttons
+      const fireBtn = document.getElementById('fire-btn');
+      if (fireBtn) fireBtn.style.display = 'none';
+      const dashBtn = document.getElementById('dash-btn');
+      if (dashBtn) dashBtn.style.display = 'none';
       if (!this.matchEndFired) {
         this.matchEndFired = true;
         if (this.onMatchEnd) this.onMatchEnd(this.computeMatchResult());
