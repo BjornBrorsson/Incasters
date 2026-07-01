@@ -6,32 +6,32 @@ import * as THREE from 'three';
  */
 export const PALETTE = {
   // Sky / atmosphere
-  skyTop: 0x3f9bff,
-  skyBottom: 0xd9f2ff,
-  fog: 0xcfe9ff,
-  fogDensity: 0.0072,
+  skyTop: 0x7b9fd4,
+  skyBottom: 0xd4b483,
+  fog: 0xc8a86e,
+  fogDensity: 0.006,
 
   // Ground
-  floor: 0x47699f,
-  floorGridMajor: 0xeaf6ff,
-  floorGridMinor: 0x6f93c4,
+  floor: 0x5a7a3a,
+  floorGridMajor: 0x7aaa4a,
+  floorGridMinor: 0x4a6a2a,
 
   // Structures
-  wall: 0xeef2fb,
-  wallEdge: 0x243049,
+  wall: 0xa09070,
+  wallEdge: 0x4a3820,
 
   // Interactive elements
-  bouncePad: 0xff4f9a,
-  bouncePadRing: 0xffffff,
-  door: 0xffa733,
-  jumpPad: 0x39ff7a,
-  border: 0x21d4ff,
-  star: 0xffffff,
+  bouncePad: 0xc86428,
+  bouncePadRing: 0xffe0a0,
+  door: 0xd4a020,
+  jumpPad: 0x58c040,
+  border: 0xd4a020,
+  star: 0xffe080,
 
   // Lighting
-  ambient: 0xffffff,
-  hemiSky: 0xdaf0ff,
-  hemiGround: 0x4a5d82
+  ambient: 0xfff5e0,
+  hemiSky: 0xc8d4f0,
+  hemiGround: 0x5a4a20
 } as const;
 
 /**

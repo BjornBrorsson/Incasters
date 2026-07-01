@@ -31,11 +31,11 @@ export const ACCESSORY_STYLES: { id: AccessoryStyle; label: string }[] = [
   { id: 'PACK', label: 'Jetpack' }
 ];
 
-export const EYE_COLORS = [0xfff000, 0x00f0ff, 0xff3366, 0x39ff14, 0xffffff];
+export const EYE_COLORS = [0xfff000, 0xe0a020, 0xff3366, 0x58c040, 0xffffff];
 
 export const DEFAULT_CONFIG: CharacterConfig = {
-  robeColor: 0xff007f,
-  spellColor: 0x00f0ff,
+  robeColor: 0x6b2fa0,
+  spellColor: 0xe0a020,
   hat: 'WIZARD',
   accessory: 'NONE',
   eyeColor: 0xfff000

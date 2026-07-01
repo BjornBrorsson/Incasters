@@ -31,7 +31,7 @@ export class Caster extends Entity {
   dashVy: number = 0;
 
   // Shooting Cooldowns
-  shootCooldown: number = 0.45; // seconds
+  shootCooldown: number = 0.6; // seconds
   shootTimer: number = 0;
   ammo: number = 3;
   maxAmmo: number = 3;
@@ -190,7 +190,7 @@ export class Caster extends Entity {
   }
 
   getSpeed(): number {
-    const baseSpeed = 4.8;
+    const baseSpeed = 3.6;
     const hasteStack = this.powerups.get(PowerUpType.HASTE) || 0;
     // +22% move speed per stack
     let speed = baseSpeed * (1 + hasteStack * 0.22);
@@ -207,7 +207,7 @@ export class Caster extends Entity {
   getProjectileStats(): ProjectileStats {
     const stats: ProjectileStats = {
       damage: 25,
-      speed: 8.5,
+      speed: 7.0,
       maxBounces: 0,
       maxPierces: 0,
       splitLevel: 0,

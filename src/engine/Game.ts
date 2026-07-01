@@ -79,8 +79,8 @@ export class Game {
   private clock = new THREE.Clock();
 
   // Custom Colors
-  playerRobeColor: number = 0xff007f; // Neon Pink default
-  playerSpellColor: number = 0x00f0ff; // Neon Cyan default
+  playerRobeColor: number = 0x6b2fa0; // Deep Violet default
+  playerSpellColor: number = 0xe0a020; // Arcane Gold default
   playerConfig: CharacterConfig = { ...DEFAULT_CONFIG };
 
   // Match-end hook (wired to local progression by main.ts)
@@ -147,17 +147,17 @@ export class Game {
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting — bright, soft toy-like shading
-    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.4);
+    // Lighting — warm fantasy daytime shading
+    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.45);
     this.scene.add(ambientLight);
 
-    // Hemisphere light delivers the clean daytime / toy look
-    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.55);
+    // Hemisphere light delivers warm sky / earthy ground tones
+    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.6);
     hemiLight.position.set(0, 40, 0);
     this.scene.add(hemiLight);
 
-    // Directional Shadow Casting Light
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.85);
+    // Directional Shadow Casting Light — warm golden sun
+    const dirLight = new THREE.DirectionalLight(0xffe8b0, 0.9);
     dirLight.position.set(-15, 30, 15);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
@@ -173,8 +173,8 @@ export class Game {
     dirLight.shadow.bias = -0.0005;
     this.scene.add(dirLight);
 
-    // Subtle blue background spotlight for environment depth
-    const envLight = new THREE.DirectionalLight(0x00d2ff, 0.2);
+    // Subtle warm fill light for environment depth
+    const envLight = new THREE.DirectionalLight(0xffa040, 0.15);
     envLight.position.set(15, 20, -15);
     this.scene.add(envLight);
 
@@ -220,14 +220,14 @@ export class Game {
 
     // Pre-defined color pairs (robe, spell) for bots in FFA
     const botColorPairs = [
-      { robe: 0x39ff14, spell: 0xffe200 }, // Lime Green + Yellow
-      { robe: 0xff5f1f, spell: 0xb026ff }, // Orange + Purple
-      { robe: 0xb026ff, spell: 0x39ff14 }, // Purple + Green
-      { robe: 0xffe200, spell: 0xff007f }, // Yellow + Pink
-      { robe: 0x00f0ff, spell: 0xff5f1f }, // Cyan + Orange
-      { robe: 0xff007f, spell: 0x00f0ff }, // Pink + Cyan
-      { robe: 0xff1122, spell: 0x0044ff }, // Red + Blue
-      { robe: 0x0044ff, spell: 0xff1122 }  // Blue + Red
+      { robe: 0x2e7d32, spell: 0xd4a020 }, // Forest Green + Gold
+      { robe: 0x8b2500, spell: 0x6b2fa0 }, // Crimson + Violet
+      { robe: 0x4a3080, spell: 0x58c040 }, // Deep Purple + Sage
+      { robe: 0xb07820, spell: 0xc84030 }, // Ochre + Scarlet
+      { robe: 0x1a5c8a, spell: 0xe0a020 }, // Slate Blue + Amber
+      { robe: 0x6b2fa0, spell: 0x2e7d32 }, // Violet + Forest
+      { robe: 0xc84030, spell: 0x1a5c8a }, // Scarlet + Slate
+      { robe: 0x4a7020, spell: 0x8b2500 }  // Olive + Crimson
     ];
 
     // Filter out pairs that match player's colors to avoid duplication
@@ -363,12 +363,7 @@ export class Game {
         this.touchJoysticks.right.dirY = 0;
         this.showJoystickUI('right', touch.clientX, touch.clientY);
 
-        // Instantly fire on right stick touch down
-        if (!this.player.isDead && this.player.shootTimer <= 0 && this.player.ammo > 0) {
-          const proj = this.spawnProjectile(this.player, this.player.aimAngle, null);
-          this.playerGuidedProjectile = proj;
-          this.player.shootTimer = this.player.getFireRateCooldown();
-        }
+        // Firing is handled by handlePlayerFiring() each tick once aim direction is set
       }
     }
   }
