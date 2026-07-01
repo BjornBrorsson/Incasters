@@ -656,8 +656,16 @@ export class Game {
     // 8. Update decorative particle trails & bursts
     this.updateParticles(dt);
 
-    // Camera follow player using the fixed offset angle (smooth lerp)
+    // Camera follow player using the fixed offset angle (smooth lerp).
+    // The camera subtly leads toward the player's aim/facing direction to give
+    // more visibility in the direction they're engaging — a hallmark of the
+    // Outcasters isometric camera.
     if (!this.player.isDead) {
+      // Aim-direction lead: nudge the look target a few units in the aim dir.
+      const leadDist = 3.2;
+      const leadX = this.player.x + Math.cos(this.player.aimAngle) * leadDist;
+      const leadZ = this.player.y + Math.sin(this.player.aimAngle) * leadDist;
+
       const targetCamX = this.player.x + this.camOffset.x;
       const targetCamZ = this.player.y + this.camOffset.z;
 
@@ -665,7 +673,7 @@ export class Game {
       this.camera.position.z += (targetCamZ - this.camera.position.z) * 4 * dt;
       this.camera.position.y += (this.camOffset.y - this.camera.position.y) * 4 * dt;
 
-      const lookTarget = new THREE.Vector3(this.player.x, 0, this.player.y);
+      const lookTarget = new THREE.Vector3(leadX, 0, leadZ);
 
       // Screen shake (trauma-based): pan the view and add a slight roll
       if (this.shakeTrauma > 0) {

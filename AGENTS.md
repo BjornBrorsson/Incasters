@@ -61,3 +61,8 @@ node test-game.js
 - `src/entities/Projectile.ts`: Flying spell bullets with guiding curve vectors, wall-running tangent glide, pierces, and splits.
 - `src/world/Arena.ts`: Arena wall boundaries (AABB) construction, floor grids, and dynamic hazard spawn logic.
 - `src/world/GameModes.ts`: Implements rule engines, respawn countdowns, storm boundaries, coin mechanics, and bank zone control.
+
+## Security & Game-Feel Notes
+- **Kill-feed XSS hardening:** `src/engine/Fx.ts` constructs kill-feed entries with the DOM API (`textContent` + `appendChild`) and a `sanitizeColor` allow-list instead of `innerHTML` string interpolation, so future custom player names/colours cannot inject markup or rogue CSS.
+- **Aim-direction camera lead:** The isometric camera subtly shifts its look-target a few units in the player's aim/facing direction, mirroring the Outcasters camera that "provides more visibility in whichever direction you're facing."
+- **Input parity:** Keyboard+mouse, dual-stick gamepad (triggers/face buttons fire, bumpers/B dash, D-pad fallback, rumble haptics), and twin virtual touch joysticks all feed into the same movement/aim/fire pipelines.
