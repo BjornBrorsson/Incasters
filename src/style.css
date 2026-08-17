@@ -646,6 +646,12 @@ body {
   background: radial-gradient(circle at 35% 35%, rgba(255, 120, 60, 0.95), rgba(200, 50, 20, 0.85));
 }
 
+.fire-btn.empty {
+  opacity: 0.4;
+  filter: grayscale(0.7);
+  box-shadow: 0 0 5px rgba(255, 60, 20, 0.2);
+}
+
 /* DASH BUTTON (touch) */
 .dash-btn {
   position: absolute;

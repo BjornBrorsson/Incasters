@@ -147,3 +147,32 @@ export function reflectVector(vx: number, vy: number, nx: number, ny: number, bo
     y: vy - 2 * dot * ny * bounciness
   };
 }
+
+const INV_SQRT2 = 0.7071067811865475;
+
+/**
+ * Converts a 2D screen/stick vector (where sx = +1 is screen right, sy = -1 is screen up)
+ * to 2D simulation world coordinates under the isometric 45° camera (camera at (x+22, 22, z+22)).
+ */
+export function screenToWorldIso(sx: number, sy: number): { x: number; y: number } {
+  return {
+    x: (sx + sy) * INV_SQRT2,
+    y: (sy - sx) * INV_SQRT2
+  };
+}
+
+/**
+ * Converts a 2D screen angle (where 0 is screen right, -PI/2 is screen up, +PI/2 is screen down)
+ * to simulation world angle under the isometric 45° camera.
+ */
+export function screenAngleToWorldIso(screenAngle: number): number {
+  return screenAngle - Math.PI / 4;
+}
+
+/**
+ * Converts a simulation world angle to 2D screen angle under the isometric 45° camera.
+ */
+export function worldAngleToScreenIso(worldAngle: number): number {
+  return worldAngle + Math.PI / 4;
+}
+

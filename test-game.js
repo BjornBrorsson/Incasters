@@ -1,11 +1,53 @@
 import puppeteer from 'puppeteer-core';
 import path from 'node:path';
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
+import http from 'node:http';
 
 const CHROME_PATH = "C:/Program Files/Google/Chrome/Application/chrome.exe";
 
+function startStaticServer(port = 5199) {
+  const MIME_TYPES = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.svg': 'image/svg+xml',
+    '.json': 'application/json',
+    '.wasm': 'application/wasm'
+  };
+
+  const distDir = path.resolve('dist');
+  const server = http.createServer((req, res) => {
+    let reqPath = req.url.split('?')[0];
+    if (reqPath === '/') reqPath = '/index.html';
+    const filePath = path.join(distDir, reqPath);
+
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404, { 'Content-Type': 'text/plain' });
+        res.end('Not Found');
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
+      res.end(data);
+    });
+  });
+
+  return new Promise((resolve) => {
+    server.listen(port, '127.0.0.1', () => {
+      console.log(`✓ Embedded test web server running at http://127.0.0.1:${port}/`);
+      resolve(server);
+    });
+  });
+}
+
 async function run() {
   console.log("=== Launching Headless Game Test ===");
+  const PORT = 5199;
+  const server = await startStaticServer(PORT);
+
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: "new",
@@ -33,8 +75,8 @@ async function run() {
   });
 
   try {
-    console.log("Navigating to http://localhost:5173/ ...");
-    await page.goto("http://localhost:5173/", { waitUntil: "networkidle2", timeout: 10000 });
+    console.log(`Navigating to http://127.0.0.1:${PORT}/ ...`);
+    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "networkidle2", timeout: 10000 });
 
     // 1. Verify Main Menu elements exist and are visible
     console.log("Verifying Main Menu UI elements...");
@@ -54,7 +96,6 @@ async function run() {
     // 2. Test Customization (Click a cosmetic robe color and hat style)
     console.log("Testing customize robe color...");
     await page.evaluate(() => {
-      // Find the first color dot in robe picker and click it
       const dots = document.querySelectorAll('#robe-color-picker .color-dot');
       if (dots.length > 0) dots[0].click();
     });
@@ -63,7 +104,6 @@ async function run() {
     console.log("Testing customize hat style...");
     await page.evaluate(() => {
       const hatBtns = document.querySelectorAll('#hat-picker button');
-      // Click the second hat button (usually WIZARD, TOP, CROWN, or NONE)
       if (hatBtns.length > 1) hatBtns[1].click();
     });
     console.log("✓ Clicked a hat selection button.");
@@ -109,7 +149,6 @@ async function run() {
       console.log(`Match Time elapsed: ${i} seconds`);
 
       // Randomly press Space to jump/dodge or simulate movement on WASD keys
-      // so we can test the input system and movement physics
       const keys = ['w', 'a', 's', 'd', ' '];
       const k = keys[Math.floor(Math.random() * keys.length)];
       if (k === ' ') {
@@ -146,7 +185,8 @@ async function run() {
     process.exit(1);
   } finally {
     await browser.close();
-    console.log("=== Browser closed. Test Complete. ===");
+    server.close();
+    console.log("=== Browser and server closed. Test Complete. ===");
   }
 }
 

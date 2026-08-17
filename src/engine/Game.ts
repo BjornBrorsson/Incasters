@@ -6,9 +6,10 @@ import type { ProjectileStats } from '../entities/Projectile';
 import { PowerUp, PowerUpType, POWERUP_COLORS } from '../entities/PowerUp';
 import { Arena, MapType } from '../world/Arena';
 import { GameModeManager, GameModeType } from '../world/GameModes';
-import { testCircleVsAABB, testCircleVsCircle, reflectVector } from './Physics';
+import { testCircleVsAABB, testCircleVsCircle, reflectVector, screenToWorldIso, screenAngleToWorldIso } from './Physics';
 import { sfx } from './Audio';
 import { InputManager } from './InputManager';
+import { AimVisualizer } from './AimVisualizer';
 import { PALETTE, createSkyDome } from './Theme';
 import { Fx } from './Fx';
 import { DEFAULT_CONFIG, randomCharacterConfig } from '../game/CharacterConfig';
@@ -80,6 +81,10 @@ export class Game {
   private touchFireHeld = false;
   /** Touch dash button state. */
   private touchDashQueued = false;
+
+  // Aiming visualizer & aim assist
+  private aimVisualizer!: AimVisualizer;
+  aimAssistEnabled: boolean = true;
 
   // State
   isPlaying: boolean = false;
@@ -300,6 +305,12 @@ export class Game {
     // 5. Reset power-up spawners timers
     this.powerupSpawnCooldowns = this.physicsArena.powerupSpawners.map(() => 0);
 
+    // 6. Setup 3D Aim Trajectory Visualizer
+    if (this.aimVisualizer) {
+      this.aimVisualizer.destroy(this.scene);
+    }
+    this.aimVisualizer = new AimVisualizer(this.scene);
+
     // Reset game-feel state
     this.shakeTrauma = 0;
     this.hitStopTimer = 0;
@@ -470,8 +481,13 @@ export class Game {
         const maxDist = 50;
         const limit = Math.min(dist, maxDist);
         
-        this.touchJoysticks.left.dirX = (dx / dist) * (limit / maxDist);
-        this.touchJoysticks.left.dirY = (dy / dist) * (limit / maxDist);
+        if (dist > 6) {
+          this.touchJoysticks.left.dirX = (dx / dist) * (limit / maxDist);
+          this.touchJoysticks.left.dirY = (dy / dist) * (limit / maxDist);
+        } else {
+          this.touchJoysticks.left.dirX = 0;
+          this.touchJoysticks.left.dirY = 0;
+        }
         
         this.updateJoystickUI('left', (dx / dist) * limit, (dy / dist) * limit);
       }
@@ -487,18 +503,24 @@ export class Game {
         const maxDist = 50;
         const limit = Math.min(dist, maxDist);
 
-        this.touchJoysticks.right.dirX = dx / dist;
-        this.touchJoysticks.right.dirY = dy / dist;
+        if (dist > 6) {
+          this.touchJoysticks.right.dirX = dx / dist;
+          this.touchJoysticks.right.dirY = dy / dist;
+        } else {
+          this.touchJoysticks.right.dirX = 0;
+          this.touchJoysticks.right.dirY = 0;
+        }
 
         this.updateJoystickUI('right', (dx / dist) * limit, (dy / dist) * limit);
 
-        // Continuous guide bullet direction on right stick slide
-        if (this.playerGuidedProjectile) {
-          const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+        // Continuous guide bullet direction on right stick slide (isometric converted)
+        if (this.playerGuidedProjectile && dist > 6) {
+          const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+          const worldAngle = screenAngleToWorldIso(screenAngle);
           this.playerGuidedProjectile.steerDirection = 0;
           this.playerGuidedProjectile.targetPoint = {
-            x: this.playerGuidedProjectile.x + Math.cos(angle) * 8,
-            y: this.playerGuidedProjectile.y + Math.sin(angle) * 8
+            x: this.playerGuidedProjectile.x + Math.cos(worldAngle) * 10,
+            y: this.playerGuidedProjectile.y + Math.sin(worldAngle) * 10
           };
         }
       }
@@ -891,6 +913,22 @@ export class Game {
       }
     }
 
+    // 9. Update Aim Trajectory Guide & Target Reticle
+    if (this.aimVisualizer && !this.player.isDead) {
+      const isAiming = (
+        (this.touchControlsActive && this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0)) ||
+        (this.input.usingGamepad && this.input.gamepadAim().active) ||
+        (!this.touchControlsActive && !this.input.usingGamepad)
+      );
+      this.aimVisualizer.update(
+        this.player,
+        isAiming,
+        this.playerGuidedProjectile,
+        this.physicsArena.walls,
+        dt
+      );
+    }
+
     // Render scene
     this.renderer.render(this.scene, this.camera);
 
@@ -907,49 +945,96 @@ export class Game {
     }
   }
 
+  /**
+   * Smart aim assist: gently nudges raw aiming angle towards nearby enemy casters.
+   */
+  private applyAimAssist(rawAngle: number): number {
+    if (!this.aimAssistEnabled || !this.player || this.player.isDead) return rawAngle;
+    
+    let bestCaster: Caster | null = null;
+    let minDiff = 0.38; // ~22° cone
+    const maxRange = 14;
+
+    for (const c of this.casters) {
+      if (c.id === this.player.id || c.isDead) continue;
+      if (this.gameModeManager.type === GameModeType.TEAM_BATTLE && c.team === this.player.team) continue;
+
+      const dx = c.x - this.player.x;
+      const dy = c.y - this.player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > maxRange || dist < 0.5) continue;
+
+      const angleToTarget = Math.atan2(dy, dx);
+      let diff = angleToTarget - rawAngle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+
+      if (Math.abs(diff) < minDiff) {
+        minDiff = Math.abs(diff);
+        bestCaster = c;
+      }
+    }
+
+    if (bestCaster) {
+      const dx = bestCaster.x - this.player.x;
+      const dy = bestCaster.y - this.player.y;
+      const targetAngle = Math.atan2(dy, dx);
+      let diff = targetAngle - rawAngle;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      return rawAngle + diff * 0.65;
+    }
+
+    return rawAngle;
+  }
+
   private updatePlayerMovement() {
     if (this.player.isDead) return;
 
-    let moveX = 0;
-    let moveY = 0;
+    let rawMoveX = 0;
+    let rawMoveY = 0;
 
     if (this.touchControlsActive && this.touchJoysticks.left.active) {
-      // Mobile touch stick input
-      moveX = this.touchJoysticks.left.dirX;
-      moveY = this.touchJoysticks.left.dirY;
+      rawMoveX = this.touchJoysticks.left.dirX;
+      rawMoveY = this.touchJoysticks.left.dirY;
     } else if (this.input.usingGamepad) {
-      // Analog gamepad movement
       const gm = this.input.gamepadMove();
-      moveX = gm.x;
-      moveY = gm.y;
+      rawMoveX = gm.x;
+      rawMoveY = gm.y;
     } else {
-      // Keyboard input
       const km = this.input.keyboardMove();
-      moveX = km.x;
-      moveY = km.y;
+      rawMoveX = km.x;
+      rawMoveY = km.y;
     }
 
-    // Normalize direction but preserve analog magnitude for sticks
+    // Convert 2D screen/stick vector to isometric simulation coordinates
+    const worldMove = screenToWorldIso(rawMoveX, rawMoveY);
+    const moveX = worldMove.x;
+    const moveY = worldMove.y;
+
     const length = Math.sqrt(moveX * moveX + moveY * moveY);
     if (length > 0.05) {
       const speed = this.player.getSpeed();
-      const mag = Math.min(length, 1);
-      this.player.vx = (moveX / length) * speed * mag;
-      this.player.vy = (moveY / length) * speed * mag;
+      const rawMag = Math.min(Math.sqrt(rawMoveX * rawMoveX + rawMoveY * rawMoveY), 1);
+      this.player.vx = (moveX / length) * speed * rawMag;
+      this.player.vy = (moveY / length) * speed * rawMag;
     } else {
       this.player.vx = 0;
       this.player.vy = 0;
     }
 
-    // Aiming source priority: touch > active gamepad stick > mouse
-    if (this.touchControlsActive && this.touchJoysticks.right.active) {
-      this.player.aimAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+    // Aiming source priority: touch right stick > gamepad right stick > mouse
+    if (this.touchControlsActive && this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0)) {
+      const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      const worldAngle = screenAngleToWorldIso(screenAngle);
+      this.player.aimAngle = this.applyAimAssist(worldAngle);
     } else if (this.input.usingGamepad) {
       const ga = this.input.gamepadAim();
       if (ga.active) {
-        this.player.aimAngle = Math.atan2(ga.y, ga.x);
+        const screenAngle = Math.atan2(ga.y, ga.x);
+        const worldAngle = screenAngleToWorldIso(screenAngle);
+        this.player.aimAngle = this.applyAimAssist(worldAngle);
       }
-      // else keep last aim while the stick is centered
     } else {
       this.updateGroundTarget();
       this.player.aimAngle = Math.atan2(this.groundTarget.z - this.player.y, this.groundTarget.x - this.player.x);
@@ -962,28 +1047,24 @@ export class Game {
       return;
     }
 
-    // Touch: fire button is decoupled from the right stick.
-    // Gamepad: trigger/A button fires.
-    // Mouse: left-click fires.
-    const touchFiring = this.touchControlsActive && this.touchFireHeld;
+    const rightStickAiming = this.touchControlsActive && this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0);
+    const touchFiring = this.touchControlsActive && (this.touchFireHeld || rightStickAiming);
     const fireHeld = touchFiring || this.input.isFireHeld();
 
     if (!fireHeld) {
-      // Releasing fire stops guiding the previous shot
       this.playerGuidedProjectile = null;
       return;
     }
 
     if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
-      // Mouse Target-Tracking fires toward an absolute ground point; directional
-      // sources (gamepad / touch) are steered each frame in updateGuidedProjectile.
       const useMouseTarget = !touchFiring && !this.input.usingGamepad && !this.touchControlsActive && this.controlMode === 'TARGET';
       if (useMouseTarget) this.updateGroundTarget();
 
-      // For touch: aim in the direction of the right stick if active, else aim straight ahead
       let aimAngle = this.player.aimAngle;
-      if (this.touchControlsActive && this.touchJoysticks.right.active) {
-        aimAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      if (rightStickAiming) {
+        const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+        const worldAngle = screenAngleToWorldIso(screenAngle);
+        aimAngle = this.applyAimAssist(worldAngle);
         this.player.aimAngle = aimAngle;
       }
 
@@ -1000,24 +1081,25 @@ export class Game {
   private triggerPlayerDash() {
     if (this.player.isDead) return;
 
-    let moveX = 0;
-    let moveY = 0;
+    let rawMoveX = 0;
+    let rawMoveY = 0;
 
     if (this.touchControlsActive && this.touchJoysticks.left.active) {
-      moveX = this.touchJoysticks.left.dirX;
-      moveY = this.touchJoysticks.left.dirY;
+      rawMoveX = this.touchJoysticks.left.dirX;
+      rawMoveY = this.touchJoysticks.left.dirY;
     } else if (this.input.usingGamepad) {
       const gm = this.input.gamepadMove();
-      moveX = gm.x;
-      moveY = gm.y;
+      rawMoveX = gm.x;
+      rawMoveY = gm.y;
     } else {
       const km = this.input.keyboardMove();
-      moveX = km.x;
-      moveY = km.y;
+      rawMoveX = km.x;
+      rawMoveY = km.y;
     }
 
+    const worldMove = screenToWorldIso(rawMoveX, rawMoveY);
     const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
-    this.player.dash(moveX, moveY);
+    this.player.dash(worldMove.x, worldMove.y);
     if (canDash) this.input.rumble(90, 0.25, 0.5);
   }
 
@@ -1032,42 +1114,38 @@ export class Game {
     // A committed wall-runner ignores further guidance and hugs the wall
     if (proj.isWallRunning) return;
 
-    if (this.touchControlsActive && this.touchJoysticks.right.active) {
-      // Mobile touch right stick: steer the fireball in the direction the stick is pointing.
-      // This is decoupled from firing — the fire button fires, the right stick steers.
-      const angle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+    if (this.touchControlsActive && this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0)) {
+      const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      const worldAngle = screenAngleToWorldIso(screenAngle);
       proj.targetPoint = {
-        x: proj.x + Math.cos(angle) * 8,
-        y: proj.y + Math.sin(angle) * 8
+        x: proj.x + Math.cos(worldAngle) * 10,
+        y: proj.y + Math.sin(worldAngle) * 10
       };
       proj.steerDirection = 0;
     } else if (this.input.usingGamepad) {
-      // Gamepad right stick: directional curve (TARGET) or steer (MANUAL)
       const ga = this.input.gamepadAim();
       if (this.controlMode === 'MANUAL') {
         proj.steerDirection = Math.abs(ga.x) > 0.2 ? Math.sign(ga.x) : 0;
         proj.targetPoint = null;
       } else {
         if (ga.active) {
-          const angle = Math.atan2(ga.y, ga.x);
+          const screenAngle = Math.atan2(ga.y, ga.x);
+          const worldAngle = screenAngleToWorldIso(screenAngle);
           proj.targetPoint = {
-            x: proj.x + Math.cos(angle) * 8,
-            y: proj.y + Math.sin(angle) * 8
+            x: proj.x + Math.cos(worldAngle) * 10,
+            y: proj.y + Math.sin(worldAngle) * 10
           };
+          proj.steerDirection = 0;
         }
-        proj.steerDirection = 0;
       }
     } else if (this.controlMode === 'TARGET') {
-      // Mouse + Keyboard: ball follows the mouse cursor direction
       this.updateGroundTarget();
       proj.targetPoint = { x: this.groundTarget.x, y: this.groundTarget.z };
       proj.steerDirection = 0;
     } else {
-      // Manual steering via Q (left, counter-clockwise) and E (right, clockwise)
       let steer = 0;
       if (this.input.keys['q']) steer -= 1;
       if (this.input.keys['e']) steer += 1;
-
       proj.steerDirection = steer;
       proj.targetPoint = null;
     }
@@ -1458,6 +1536,12 @@ export class Game {
       }
     }
 
+    // Touch fire button ammo indicator
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      fireBtn.classList.toggle('empty', this.player.ammo <= 0);
+    }
+
     // 2. Power-ups HUD
     for (let i = 0; i < 3; i++) {
       const slot = document.getElementById(`pu-slot-${i}`);
@@ -1656,6 +1740,7 @@ export class Game {
     this.projectiles.forEach((p) => p.destroy(this.scene));
     this.powerups.forEach((pu) => pu.destroy(this.scene));
     this.particles.forEach((p) => this.scene.remove(p.mesh));
+    if (this.aimVisualizer) this.aimVisualizer.destroy(this.scene);
     this.gameModeManager.cleanup(this.scene);
     
     if (this.renderer) {

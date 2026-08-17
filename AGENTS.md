@@ -59,7 +59,8 @@ node test-game.js
 ## Codebase Map
 - `src/main.ts`: Glue code linking the HTML overlays, progression state, character preview renderer, and `Game` instantiation.
 - `src/engine/Game.ts`: The main orchestrator of the game loop, render ticks, camera tracking with screen-shake, sound triggers, and collision dispatch.
-- `src/engine/Physics.ts`: Pure geometric collision resolution.
+- `src/engine/AimVisualizer.ts`: 3D real-time trajectory aim guide, ground targeting reticle, and curved projectile guidance beam visualizer.
+- `src/engine/Physics.ts`: Pure geometric collision resolution and isometric screen-to-world coordinate transforms (`screenToWorldIso`, `screenAngleToWorldIso`).
 - `src/engine/InputManager.ts`: Keyboard, mouse, and Gamepad polling layer.
 - `src/entities/Caster.ts`: Wizard avatar representation (draws robes, hats, eye-glow, active spells, and power-up stack multipliers).
 - `src/entities/Bot.ts`: Automated bot AI utilizing prediction, dodging vectors, power-up hunting, and curved shooting offsets.
@@ -69,8 +70,11 @@ node test-game.js
 - `src/game/Difficulty.ts`: Four difficulty presets (Easy/Normal/Hard/Insane) that tune bot AI parameters. Persisted to `localStorage`.
 - `src/net/LanClient.ts`: WebSocket client and lightweight state renderer for LAN multiplayer. Includes `ClientGameRenderer` for client-side rendering without local simulation.
 - `server/lan-server.js`: Standalone WebSocket server for LAN multiplayer matchmaking and message routing.
+- `.github/workflows/build-apk.yml`: Automated CI/CD GitHub Actions workflow building and publishing Android APKs on push to main or release tags.
 
 ## Security & Game-Feel Notes
+- **Isometric Aiming & Movement Parity:** Screen-space touch joysticks, keyboard WASD, and gamepad sticks are transformed into isometric simulation coordinates via `screenToWorldIso()`, eliminating the 45° rotation offset and making controls directly track what players see on their screens.
+- **3D Trajectory Aim Guide & Aim Assist:** Real-time dashed laser guide and landing reticle projected onto the 3D ground, with subtle magnetic aim assist for touch screens and controllers.
 - **Kill-feed XSS hardening:** `src/engine/Fx.ts` constructs kill-feed entries with the DOM API (`textContent` + `appendChild`) and a `sanitizeColor` allow-list instead of `innerHTML` string interpolation, so future custom player names/colours cannot inject markup or rogue CSS.
 - **Aim-direction camera lead:** The isometric camera subtly shifts its look-target a few units in the player's aim/facing direction, mirroring the Outcasters camera that "provides more visibility in whichever direction you're facing."
 - **Input parity:** Keyboard+mouse, dual-stick gamepad (triggers/face buttons fire, bumpers/B dash, D-pad fallback, rumble haptics), and twin virtual touch joysticks all feed into the same movement/aim/fire pipelines.
