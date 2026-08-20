@@ -10,14 +10,6 @@
 
 ---
 
-## 📸 Screenshots
-
-| Main Menu & Customization | 3D Arena Combat |
-| :---: | :---: |
-| ![Main Menu Preview](menu_screenshot.png) | ![Battle Screenshot](battle_screenshot.png) |
-
----
-
 ## ✨ Features
 
 ### 🔮 Dynamic Curved-Shot Mechanics
