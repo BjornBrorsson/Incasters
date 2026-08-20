@@ -1,4 +1,4 @@
-name: Build & Release Android APK
+name: Build & Release Signed Android APK
 
 on:
   push:
@@ -15,13 +15,15 @@ permissions:
   contents: write
 
 jobs:
-  build-apk:
-    name: Build Android Debug APK
+  build-and-release:
+    name: Build Signed Android Release APK
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js 22
         uses: actions/setup-node@v4
@@ -47,49 +49,58 @@ jobs:
       - name: Sync Capacitor Android Project
         run: npx cap sync android
 
+      - name: Prepare Release Signing Keystore
+        run: |
+          mkdir -p android/app
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "Using repository secret for keystore."
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/release.keystore
+            echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          else
+            echo "Generating production release signing keystore..."
+            keytool -genkey -v -keystore android/app/release.keystore -alias incasters-key -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass incastersrelease -keypass incastersrelease \
+              -dname "CN=Incasters, OU=Game Studio, O=Incasters, L=Stockholm, ST=Stockholm, C=SE"
+            echo "KEYSTORE_PASSWORD=incastersrelease" >> $GITHUB_ENV
+            echo "KEY_ALIAS=incasters-key" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=incastersrelease" >> $GITHUB_ENV
+          fi
+          echo "KEYSTORE_PATH=release.keystore" >> $GITHUB_ENV
+
       - name: Make Gradle Wrapper Executable
         run: chmod +x android/gradlew
 
-      - name: Build Android Debug APK
+      - name: Build Signed Android Release APK
         run: |
           cd android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease --no-daemon --stacktrace
 
-      - name: Verify APK was generated
+      - name: Verify Signed Release APK
         run: |
-          ls -la android/app/build/outputs/apk/debug/
-          test -f android/app/build/outputs/apk/debug/app-debug.apk
+          ls -la android/app/build/outputs/apk/release/
+          test -f android/app/build/outputs/apk/release/app-release.apk
+          cp android/app/build/outputs/apk/release/app-release.apk ./Incasters-release.apk
 
-      - name: Upload APK as Workflow Artifact
+      - name: Upload Release APK as Workflow Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Incasters-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: Incasters-release-apk
+          path: Incasters-release.apk
           retention-days: 30
 
       - name: Create or Update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+        if: (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main') && github.event_name != 'pull_request'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'latest-build' }}
-          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Latest APK Build (Main Branch)' }}
-          body: |
-            ## 🎮 Incasters - Automated Android Build
-            
-            - **Commit:** `${{ github.sha }}`
-            - **Branch:** `${{ github.ref_name }}`
-            - **Built on:** `${{ github.event.head_commit.timestamp || 'Automated CI/CD' }}`
-            
-            ### What's in this build:
-            - **Aiming & Controls Overhaul:** True isometric projection transformation, eliminated 45° touch aiming angle offset.
-            - **3D Visual Aim Trajectory & Reticle:** Real-time dotted laser trajectory and landing reticle.
-            - **Smart Aim Assist:** Gentle magnetic lock on mobile touch and controller.
-            - **Touch Dual-Stick Polish:** Deadzone filtering and responsive steering.
-            - **Multi-Player Customization & Level Hazards:** Neon arena chambers, bounce pads, and customizable player counts.
-            
-            Download `app-debug.apk` below and install directly onto your Android device!
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('Incasters v1.0.{0} (Release)', github.run_number) }}
+          generate_release_notes: true
+          make_latest: true
           draft: false
-          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          prerelease: false
+          files: |
+            Incasters-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
