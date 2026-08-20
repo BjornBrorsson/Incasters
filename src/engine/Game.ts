@@ -3,11 +3,11 @@ import { Caster } from '../entities/Caster';
 import { Bot } from '../entities/Bot';
 import { Projectile } from '../entities/Projectile';
 import type { ProjectileStats } from '../entities/Projectile';
-import { PowerUp, PowerUpType, POWERUP_COLORS } from '../entities/PowerUp';
+import { PowerUp, PowerUpType, POWERUP_COLORS, POWERUP_SYMBOLS } from '../entities/PowerUp';
 import { Arena, MapType } from '../world/Arena';
 import { GameModeManager, GameModeType } from '../world/GameModes';
 import { testCircleVsAABB, testCircleVsCircle, reflectVector, screenToWorldIso, screenAngleToWorldIso } from './Physics';
-import { sfx } from './Audio';
+import { music, sfx } from './Audio';
 import { InputManager } from './InputManager';
 import { AimVisualizer } from './AimVisualizer';
 import { PALETTE, createSkyDome } from './Theme';
@@ -17,7 +17,7 @@ import type { CharacterConfig } from '../game/CharacterConfig';
 import type { MatchResult } from '../game/Progression';
 import { DIFFICULTY_PRESETS } from '../game/Difficulty';
 import type { DifficultyLevel, DifficultyConfig } from '../game/Difficulty';
-import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState } from '../net/LanClient';
+import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState, GameEvent } from '../net/LanClient';
 
 export interface GameParticle {
   position: THREE.Vector3;
@@ -51,6 +51,11 @@ export class Game {
   renderer!: THREE.WebGLRenderer;
   private container: HTMLDivElement;
   private camOffset = new THREE.Vector3(18, 25, 29);
+  private cameraLookTarget = new THREE.Vector3();
+  private baseCameraZoom = 1;
+  private animationFrameId = 0;
+  private destroyed = false;
+  private eventAbortController = new AbortController();
 
   // Game-feel state
   private fx = new Fx();
@@ -129,6 +134,7 @@ export class Game {
   private remoteCasters = new Map<string, Caster>();
   /** Callback fired after each tick with serialized state (host mode). */
   onNetBroadcast: ((state: GameStateSnapshot) => void) | null = null;
+  onNetEvent: ((event: GameEvent) => void) | null = null;
   private netBroadcastTimer = 0;
   private netBroadcastInterval = 0.05; // 20 Hz
   /** Callback fired when the host declares the match over (host mode). */
@@ -189,6 +195,9 @@ export class Game {
     // Offset, slightly-odd isometric angle for a more dynamic, Outcasters-like view
     this.camera.position.copy(this.camOffset);
     this.camera.lookAt(0, 0, 0);
+    this.baseCameraZoom = this.getBaseCameraZoom();
+    this.camera.zoom = this.baseCameraZoom;
+    this.camera.updateProjectionMatrix();
 
     // WebGL Renderer with capped pixel ratio for smooth mobile 60fps performance
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -230,10 +239,13 @@ export class Game {
     this.scene.add(envLight);
 
     // Listen to resize
-    window.addEventListener('resize', this.onResize.bind(this));
+    window.addEventListener('resize', this.onResize.bind(this), { signal: this.eventAbortController.signal });
   }
 
   resetGame() {
+    this.isPlaying = false;
+    this.resetTouchControls();
+
     // 1. Clean up old game state
     this.casters.forEach((c) => c.destroy(this.scene));
     this.projectiles.forEach((p) => p.destroy(this.scene));
@@ -338,18 +350,32 @@ export class Game {
     this.firstBlood = false;
     this.matchEndFired = false;
     this.fx.clear();
+    this.cameraLookTarget.set(this.player.x, 0, this.player.y);
+    this.camera.position.set(
+      this.player.x + this.camOffset.x,
+      this.camOffset.y,
+      this.player.y + this.camOffset.z
+    );
+    this.camera.lookAt(this.cameraLookTarget);
+    this.baseCameraZoom = this.getBaseCameraZoom();
+    this.camera.zoom = this.baseCameraZoom;
+    this.camera.updateProjectionMatrix();
 
     // Reset clocks
     this.clock.getDelta();
   }
 
   startGame() {
+    if (this.destroyed) return;
+    this.resetTouchControls();
     this.isPlaying = true;
     this.clock.getDelta();
-    sfx.playStart();
 
     // Show touch fire/dash buttons on touch devices
-    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    if (
+      window.matchMedia('(pointer: coarse)').matches ||
+      (navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches)
+    ) {
       const fireBtn = document.getElementById('fire-btn');
       if (fireBtn) fireBtn.style.display = 'block';
       const dashBtn = document.getElementById('dash-btn');
@@ -362,10 +388,11 @@ export class Game {
     this.input = new InputManager();
 
     // Touch screen / Mobile joy sticks setup
-    window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
-    window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
-    window.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
-    window.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false });
+    const signal = this.eventAbortController.signal;
+    window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false, signal });
+    window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false, signal });
+    window.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false, signal });
+    window.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false, signal });
 
     // Dash Circle mobile click listener
     const dashCircle = document.getElementById('dash-cooldown-circle');
@@ -375,8 +402,8 @@ export class Game {
         e.stopPropagation();
         this.triggerPlayerDash();
       };
-      dashCircle.addEventListener('touchstart', handleMobileDash, { passive: false });
-      dashCircle.addEventListener('click', handleMobileDash);
+      dashCircle.addEventListener('touchstart', handleMobileDash, { passive: false, signal });
+      dashCircle.addEventListener('click', handleMobileDash, { signal });
     }
 
     // Dedicated Fire button (touch)
@@ -394,12 +421,12 @@ export class Game {
         this.touchFireHeld = false;
         fireBtn.classList.remove('pressed');
       };
-      fireBtn.addEventListener('touchstart', onFireStart, { passive: false });
-      fireBtn.addEventListener('touchend', onFireEnd, { passive: false });
-      fireBtn.addEventListener('touchcancel', onFireEnd, { passive: false });
-      fireBtn.addEventListener('mousedown', onFireStart);
-      fireBtn.addEventListener('mouseup', onFireEnd);
-      fireBtn.addEventListener('mouseleave', onFireEnd);
+      fireBtn.addEventListener('touchstart', onFireStart, { passive: false, signal });
+      fireBtn.addEventListener('touchend', onFireEnd, { passive: false, signal });
+      fireBtn.addEventListener('touchcancel', onFireEnd, { passive: false, signal });
+      fireBtn.addEventListener('mousedown', onFireStart, { signal });
+      fireBtn.addEventListener('mouseup', onFireEnd, { signal });
+      fireBtn.addEventListener('mouseleave', onFireEnd, { signal });
     }
 
     // Dedicated Dash button (touch)
@@ -412,8 +439,8 @@ export class Game {
         dashBtn.classList.add('pressed');
         setTimeout(() => dashBtn.classList.remove('pressed'), 120);
       };
-      dashBtn.addEventListener('touchstart', onDash, { passive: false });
-      dashBtn.addEventListener('mousedown', onDash);
+      dashBtn.addEventListener('touchstart', onDash, { passive: false, signal });
+      dashBtn.addEventListener('mousedown', onDash, { signal });
     }
   }
 
@@ -424,6 +451,13 @@ export class Game {
     this.groundTarget.copy(intersectPoint);
   }
 
+  private getBaseCameraZoom() {
+    const aspect = window.innerWidth / Math.max(1, window.innerHeight);
+    if (aspect >= 1) return 1;
+    const portraitAmount = THREE.MathUtils.clamp((0.85 - aspect) / 0.4, 0, 1);
+    return 1 + portraitAmount * 0.24;
+  }
+
   private onResize() {
     const aspect = window.innerWidth / window.innerHeight;
     const d = 11;
@@ -431,6 +465,8 @@ export class Game {
     this.camera.right = d * aspect;
     this.camera.top = d;
     this.camera.bottom = -d;
+    this.baseCameraZoom = this.getBaseCameraZoom();
+    if (!this.playerGuidedProjectile) this.camera.zoom = this.baseCameraZoom;
     this.camera.updateProjectionMatrix();
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
@@ -560,7 +596,6 @@ export class Game {
   }
 
   private onTouchEnd(e: TouchEvent) {
-    if (!this.isPlaying) return;
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
       
@@ -599,10 +634,37 @@ export class Game {
     }
   }
   private hideJoystickUI(side: 'left' | 'right') {
-    const el = document.getElementById(`joy-${side}`);
-    if (el) el.style.display = 'none';
     const knob = document.getElementById(`joy-${side}-knob`);
     if (knob) knob.style.transform = `translate(0px, 0px)`;
+    const el = document.getElementById(`joy-${side}`);
+    if (el) el.style.display = 'none';
+  }
+
+  private resetTouchControls() {
+    this.touchControlsActive = false;
+    this.touchFireHeld = false;
+    this.touchDashQueued = false;
+    this.touchJoysticks.left.active = false;
+    this.touchJoysticks.left.id = -1;
+    this.touchJoysticks.left.dirX = 0;
+    this.touchJoysticks.left.dirY = 0;
+    this.touchJoysticks.right.active = false;
+    this.touchJoysticks.right.id = -1;
+    this.touchJoysticks.right.dirX = 0;
+    this.touchJoysticks.right.dirY = 0;
+    this.touchJoysticks.right.hasFiredThisPress = false;
+    this.hideJoystickUI('left');
+    this.hideJoystickUI('right');
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      fireBtn.style.display = 'none';
+      fireBtn.classList.remove('pressed', 'empty');
+    }
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) {
+      dashBtn.style.display = 'none';
+      dashBtn.classList.remove('pressed');
+    }
   }
 
   // Spawners projectiles helper
@@ -632,7 +694,8 @@ export class Game {
     this.projectiles.push(proj);
 
     // Audio SFX
-    sfx.playShoot();
+    sfx.playShoot(owner.id === 'player' ? 1 : 0.28);
+    if (this.netMode === 'host') this.onNetEvent?.({ kind: 'fire', data: { ownerId: owner.id } });
     
     // Spawn flash particles
     this.spawnBlastParticles(ox, oy, stats.color, 8);
@@ -655,7 +718,8 @@ export class Game {
     const proj = new Projectile(x, y, angle, 'hazard', stats);
     this.scene.add(proj.mesh);
     this.projectiles.push(proj);
-    sfx.playShoot();
+    sfx.playShoot(0.22);
+    if (this.netMode === 'host') this.onNetEvent?.({ kind: 'fire', data: { ownerId: 'hazard' } });
     this.spawnBlastParticles(x, y, stats.color, 5, 0.7);
   }
 
@@ -794,6 +858,7 @@ export class Game {
         const mag = Math.sqrt(input.moveX * input.moveX + input.moveY * input.moveY);
         if (mag > 0.1) {
           caster.dash((input.moveX / mag) * speed, (input.moveY / mag) * speed);
+          this.onNetEvent?.({ kind: 'dash', data: { casterId: caster.id } });
         }
       }
     });
@@ -844,7 +909,8 @@ export class Game {
 
   // Update loop
   tick() {
-    requestAnimationFrame(this.tick.bind(this));
+    if (this.destroyed) return;
+    this.animationFrameId = requestAnimationFrame(this.tick.bind(this));
 
     if (!this.isPlaying) {
       this.renderer.render(this.scene, this.camera);
@@ -920,24 +986,35 @@ export class Game {
     // 8. Update decorative particle trails & bursts
     this.updateParticles(dt);
 
-    // Camera follow player using the fixed offset angle (smooth lerp).
-    // The camera subtly leads toward the player's aim/facing direction to give
-    // more visibility in the direction they're engaging — a hallmark of the
-    // Outcasters isometric camera.
-    if (!this.player.isDead) {
-      // Aim-direction lead: nudge the look target a few units in the aim dir.
-      const leadDist = 3.2;
-      const leadX = this.player.x + Math.cos(this.player.aimAngle) * leadDist;
-      const leadZ = this.player.y + Math.sin(this.player.aimAngle) * leadDist;
+    let musicDanger = 0;
+    this.projectiles.forEach((projectile) => {
+      if (projectile.isDead || projectile.ownerId === this.player.id) return;
+      const distance = Math.hypot(projectile.x - this.player.x, projectile.y - this.player.y);
+      if (distance < 8) musicDanger += (1 - distance / 8) * 0.3;
+    });
+    music.updateGameplay(
+      this.player.health / Math.max(1, this.player.maxHealth),
+      this.player.isDead,
+      musicDanger
+    );
 
+    // Camera follow player using the fixed offset angle (smooth lerp).
+    // The view remains anchored to the player instead of snapping toward each
+    // aim change, while a guided shot near the frame edge smoothly widens the
+    // visible area until the projectile is safely back inside the viewport.
+    if (!this.player.isDead) {
+      // Smooth player tracking keeps movement responsive without changing camera orientation abruptly.
+      const followAmount = 1 - Math.exp(-4 * dt);
       const targetCamX = this.player.x + this.camOffset.x;
       const targetCamZ = this.player.y + this.camOffset.z;
 
-      this.camera.position.x += (targetCamX - this.camera.position.x) * 4 * dt;
-      this.camera.position.z += (targetCamZ - this.camera.position.z) * 4 * dt;
-      this.camera.position.y += (this.camOffset.y - this.camera.position.y) * 4 * dt;
+      this.camera.position.x += (targetCamX - this.camera.position.x) * followAmount;
+      this.camera.position.z += (targetCamZ - this.camera.position.z) * followAmount;
+      this.camera.position.y += (this.camOffset.y - this.camera.position.y) * followAmount;
+      this.cameraLookTarget.x += (this.player.x - this.cameraLookTarget.x) * followAmount;
+      this.cameraLookTarget.z += (this.player.y - this.cameraLookTarget.z) * followAmount;
 
-      const lookTarget = new THREE.Vector3(leadX, 0, leadZ);
+      const lookTarget = this.cameraLookTarget.clone();
 
       // Screen shake (trauma-based): pan the view and add a slight roll
       if (this.shakeTrauma > 0) {
@@ -954,6 +1031,27 @@ export class Game {
       } else {
         this.camera.lookAt(lookTarget);
       }
+
+      this.camera.updateMatrixWorld();
+      let targetZoom = this.baseCameraZoom;
+      if (this.playerGuidedProjectile && !this.playerGuidedProjectile.isDead) {
+        const projected = new THREE.Vector3(
+          this.playerGuidedProjectile.x,
+          0.5,
+          this.playerGuidedProjectile.y
+        ).project(this.camera);
+        const zoomRatio = this.baseCameraZoom / Math.max(0.01, this.camera.zoom);
+        const edgeAtBase = Math.max(
+          Math.abs(projected.x) * zoomRatio / 0.68,
+          Math.abs(projected.y) * zoomRatio / 0.72
+        );
+        if (edgeAtBase > 1) {
+          targetZoom = Math.max(this.baseCameraZoom * 0.66, this.baseCameraZoom / edgeAtBase);
+        }
+      }
+      const zoomRate = targetZoom < this.camera.zoom ? 4.5 : 1.6;
+      this.camera.zoom += (targetZoom - this.camera.zoom) * (1 - Math.exp(-zoomRate * dt));
+      this.camera.updateProjectionMatrix();
     }
 
     // 9. Update Aim Trajectory Guide & Target Reticle
@@ -1134,7 +1232,10 @@ export class Game {
     const worldMove = screenToWorldIso(rawMoveX, rawMoveY);
     const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
     this.player.dash(worldMove.x, worldMove.y);
-    if (canDash) this.input.rumble(90, 0.25, 0.5);
+    if (canDash) {
+      this.input.rumble(90, 0.25, 0.5);
+      if (this.netMode === 'host') this.onNetEvent?.({ kind: 'dash', data: { casterId: this.player.id } });
+    }
   }
 
   private updateGuidedProjectile() {
@@ -1213,6 +1314,9 @@ export class Game {
 
   private onCasterKilled(killer: Caster | null, victim: Caster) {
     this.addShake(0.5);
+    if (this.netMode === 'host') {
+      this.onNetEvent?.({ kind: 'kill', data: { killerId: killer?.id ?? null, victimId: victim.id } });
+    }
 
     const killerName = killer ? killer.name : 'The Arena';
     this.fx.killFeedItem(
@@ -1320,10 +1424,15 @@ export class Game {
             proj.vx = reflected.x;
             proj.vy = reflected.y;
             proj.targetPoint = null; // Clear tracking target on bounce to fly straight
-            sfx.playBounce();
+            sfx.playWallHit(proj.ownerId === 'player' ? 0.85 : 0.3);
+            if (this.netMode === 'host') this.onNetEvent?.({ kind: 'hit', data: { surface: 'wall', ownerId: proj.ownerId } });
             this.spawnBlastParticles(proj.x, proj.y, 0xff00ff, 5, 0.6);
           } else {
+            const wasWallRunning = proj.isWallRunning;
             proj.handleWallCollision(result.normalX, result.normalY, result.overlapX, result.overlapY);
+            if (!wasWallRunning && this.netMode === 'host') {
+              this.onNetEvent?.({ kind: 'hit', data: { surface: 'wall', ownerId: proj.ownerId } });
+            }
           }
         }
       });
@@ -1345,9 +1454,12 @@ export class Game {
         if (result.collided) {
           p1.isDead = true;
           p2.isDead = true;
+          p1.playFizzleOnDestroy = true;
+          p2.playFizzleOnDestroy = true;
 
           // Play cancel sound and spark burst
           sfx.playHit();
+          if (this.netMode === 'host') this.onNetEvent?.({ kind: 'hit', data: { surface: 'clash' } });
           const mixColor = Math.random() < 0.5 ? p1.trailColor : p2.trailColor;
           this.spawnBlastParticles((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, mixColor, 12, 1.2);
         }
@@ -1377,6 +1489,12 @@ export class Game {
             const damageApplied = caster.takeDamage(proj.stats.damage);
             
             if (damageApplied) {
+              const playerInvolved = caster.id === 'player' || proj.ownerId === 'player';
+              sfx.playWizardHit(caster.id === 'player' ? 1 : playerInvolved ? 0.68 : 0.24);
+              if (this.netMode === 'host') {
+                this.onNetEvent?.({ kind: 'hit', data: { targetId: caster.id, ownerId: proj.ownerId } });
+              }
+
               // Apply freeze slow if projectile has freezeLevel
               if (proj.stats.freezeLevel && proj.stats.freezeLevel > 0) {
                 caster.freezeTimer = 2.5;
@@ -1429,6 +1547,9 @@ export class Game {
         const result = testCircleVsCircle(caster, pu);
         if (result.collided) {
           caster.collectPowerUp(pu.type);
+          if (this.netMode === 'host') {
+            this.onNetEvent?.({ kind: 'pickup', data: { casterId: caster.id, powerup: pu.type } });
+          }
           
           // Spawn burst particles around player
           this.spawnBlastParticles(pu.x, pu.y, POWERUP_COLORS[pu.type], 15, 1.0);
@@ -1446,6 +1567,12 @@ export class Game {
         // Trigger split stacking if the bullet exploded
         if (proj.splitLevel > 0) {
           this.triggerProjectileSplit(proj);
+        }
+        if (proj.playFizzleOnDestroy) {
+          sfx.playFizzle(proj.ownerId === 'player' ? 0.72 : 0.22);
+          if (this.netMode === 'host') {
+            this.onNetEvent?.({ kind: 'hit', data: { surface: 'fizzle', ownerId: proj.ownerId } });
+          }
         }
         proj.destroy(this.scene);
         this.projectiles.splice(i, 1);
@@ -1597,7 +1724,7 @@ export class Game {
           const type = this.player.powerupSlotsOrder[i];
           const stack = this.player.powerups.get(type) || 1;
           
-          text.innerText = `${type} [Lv ${stack}]`;
+          text.innerText = `${POWERUP_SYMBOLS[type]} ${type} [Lv ${stack}]`;
           slot.className = 'pu-slot active';
           
           const colors: Record<PowerUpType, string> = {
@@ -1670,13 +1797,30 @@ export class Game {
         overlay.style.display = 'flex';
       }
       // Hide touch fire/dash buttons
-      const fireBtn = document.getElementById('fire-btn');
-      if (fireBtn) fireBtn.style.display = 'none';
-      const dashBtn = document.getElementById('dash-btn');
-      if (dashBtn) dashBtn.style.display = 'none';
+      this.resetTouchControls();
+      const hud = document.getElementById('hud-container');
+      if (hud) hud.style.display = 'none';
       if (!this.matchEndFired) {
         this.matchEndFired = true;
-        if (this.onMatchEnd) this.onMatchEnd(this.computeMatchResult());
+        const result = this.computeMatchResult();
+        void music.playResult(result.won);
+        if (this.onMatchEnd) this.onMatchEnd(result);
+        if (this.netMode === 'host' && this.onNetMatchEnd) {
+          const survivor = this.gameModeManager.type === GameModeType.BATTLE_ROYALE
+            ? this.casters.find((caster) => !caster.isDead)
+            : null;
+          const winningTeam = this.gameModeManager.type === GameModeType.BATTLE_ROYALE
+            ? null
+            : this.gameModeManager.redScore === this.gameModeManager.blueScore
+              ? null
+              : this.gameModeManager.redScore > this.gameModeManager.blueScore ? 'RED' : 'BLUE';
+          this.onNetMatchEnd({
+            ...result,
+            winnerText: this.gameModeManager.winnerText,
+            winnerId: survivor?.id ?? null,
+            winningTeam
+          });
+        }
       }
     }
   }
@@ -1779,7 +1923,12 @@ export class Game {
   }
 
   cleanup() {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.isPlaying = false;
+    cancelAnimationFrame(this.animationFrameId);
+    this.eventAbortController.abort();
+    this.resetTouchControls();
     if (this.input) this.input.dispose();
     this.physicsArena.destroy(this.scene);
     this.casters.forEach((c) => c.destroy(this.scene));
@@ -1793,7 +1942,9 @@ export class Game {
     this.gameModeManager.cleanup(this.scene);
     
     if (this.renderer) {
-      this.container.removeChild(this.renderer.domElement);
+      if (this.renderer.domElement.parentElement === this.container) {
+        this.container.removeChild(this.renderer.domElement);
+      }
       this.renderer.dispose();
     }
   }

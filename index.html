@@ -22,6 +22,29 @@
         <h1 class="game-title">INCASTERS</h1>
         <p class="game-subtitle">The Curved Shot Isometric Arena Battler</p>
         <div id="progress-badge" class="progress-badge"></div>
+
+        <button id="btn-options" class="options-toggle" type="button" aria-expanded="false" aria-controls="options-panel">OPTIONS</button>
+        <div id="options-panel" class="options-panel glass-panel-nested" hidden>
+          <div class="audio-row">
+            <label for="master-volume">Master</label>
+            <input id="master-volume" type="range" min="0" max="100" step="1" />
+            <output id="master-volume-value" for="master-volume"></output>
+          </div>
+          <div class="audio-row">
+            <label for="music-volume">Music</label>
+            <input id="music-volume" type="range" min="0" max="100" step="1" />
+            <output id="music-volume-value" for="music-volume"></output>
+          </div>
+          <div class="audio-row">
+            <label for="sfx-volume">SFX</label>
+            <input id="sfx-volume" type="range" min="0" max="100" step="1" />
+            <output id="sfx-volume-value" for="sfx-volume"></output>
+          </div>
+          <label class="music-toggle" for="music-enabled">
+            <input id="music-enabled" type="checkbox" />
+            <span>Music enabled</span>
+          </label>
+        </div>
         
         <div class="menu-section">
           <h3>SELECT GAME MODE</h3>
@@ -272,6 +295,10 @@
           <span class="gp-text">Controller</span>
         </div>
 
+      </div>
+
+      <div id="countdown-overlay" class="countdown-overlay" aria-live="assertive" aria-atomic="true">
+        <span id="countdown-text"></span>
       </div>
 
       <!-- GAME OVER SCREEN OVERLAY -->

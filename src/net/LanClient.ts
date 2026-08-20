@@ -249,6 +249,8 @@ export class ClientGameRenderer {
   private casterMeshes = new Map<string, THREE.Group>();
   private projectileMeshes = new Map<number, THREE.Mesh>();
   private rafId = 0;
+  private baseCameraZoom = 1;
+  private eventAbortController = new AbortController();
 
   // Camera offset matching the host's isometric view
   private camOffset = new THREE.Vector3(18, 25, 29);
@@ -262,13 +264,17 @@ export class ClientGameRenderer {
     this.container.appendChild(this.renderer.domElement);
 
     const aspect = container.clientWidth / container.clientHeight;
-    const viewSize = 22;
+    const viewSize = 11;
     this.camera = new THREE.OrthographicCamera(
       -viewSize * aspect, viewSize * aspect,
       viewSize, -viewSize, 0.1, 200
     );
     this.camera.position.copy(this.camOffset);
     this.camera.lookAt(0, 0, 0);
+    this.baseCameraZoom = this.getBaseCameraZoom();
+    this.camera.zoom = this.baseCameraZoom;
+    this.camera.updateProjectionMatrix();
+    window.addEventListener('resize', this.onResize, { signal: this.eventAbortController.signal });
 
     // Simple ambient lighting
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -285,6 +291,28 @@ export class ClientGameRenderer {
 
     this.animate();
   }
+
+  private getBaseCameraZoom() {
+    const aspect = this.container.clientWidth / Math.max(1, this.container.clientHeight);
+    if (aspect >= 1) return 1;
+    const portraitAmount = THREE.MathUtils.clamp((0.85 - aspect) / 0.4, 0, 1);
+    return 1 + portraitAmount * 0.24;
+  }
+
+  private onResize = () => {
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    const aspect = width / Math.max(1, height);
+    const viewSize = 11;
+    this.camera.left = -viewSize * aspect;
+    this.camera.right = viewSize * aspect;
+    this.camera.top = viewSize;
+    this.camera.bottom = -viewSize;
+    this.baseCameraZoom = this.getBaseCameraZoom();
+    this.camera.zoom = this.baseCameraZoom;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(width, height);
+  };
 
   private animate = () => {
     this.rafId = requestAnimationFrame(this.animate);
@@ -326,6 +354,7 @@ export class ClientGameRenderer {
     this.casterMeshes.forEach((group, id) => {
       if (!seenIds.has(id)) {
         this.scene.remove(group);
+        this.disposeCasterMesh(group);
         this.casterMeshes.delete(id);
       }
     });
@@ -365,6 +394,22 @@ export class ClientGameRenderer {
       this.camera.position.x += (targetX - this.camera.position.x) * 0.1;
       this.camera.position.z += (targetZ - this.camera.position.z) * 0.1;
       this.camera.lookAt(localPlayer.x, 0, localPlayer.y);
+      this.camera.updateMatrixWorld();
+      let edgeAtBase = 1;
+      state.projectiles.forEach((projectile) => {
+        if (projectile.ownerId !== this.localPlayerId || projectile.isDead) return;
+        const projected = new THREE.Vector3(projectile.x, 0.5, projectile.y).project(this.camera);
+        const zoomRatio = this.baseCameraZoom / Math.max(0.01, this.camera.zoom);
+        edgeAtBase = Math.max(
+          edgeAtBase,
+          Math.abs(projected.x) * zoomRatio / 0.68,
+          Math.abs(projected.y) * zoomRatio / 0.72
+        );
+      });
+      const targetZoom = Math.max(this.baseCameraZoom * 0.66, this.baseCameraZoom / edgeAtBase);
+      const zoomAmount = targetZoom < this.camera.zoom ? 0.22 : 0.08;
+      this.camera.zoom += (targetZoom - this.camera.zoom) * zoomAmount;
+      this.camera.updateProjectionMatrix();
     }
   }
 
@@ -372,6 +417,18 @@ export class ClientGameRenderer {
 
   setLocalPlayerId(id: string) {
     this.localPlayerId = id;
+  }
+
+  private disposeCasterMesh(group: THREE.Group) {
+    group.traverse((child) => {
+      if (!(child instanceof THREE.Mesh)) return;
+      child.geometry.dispose();
+      if (Array.isArray(child.material)) {
+        child.material.forEach((material) => material.dispose());
+      } else {
+        child.material.dispose();
+      }
+    });
   }
 
   private createCasterMesh(robeColor: number, spellColor: number): THREE.Group {
@@ -422,7 +479,11 @@ export class ClientGameRenderer {
 
   destroy() {
     cancelAnimationFrame(this.rafId);
-    this.casterMeshes.forEach((g) => this.scene.remove(g));
+    this.eventAbortController.abort();
+    this.casterMeshes.forEach((group) => {
+      this.scene.remove(group);
+      this.disposeCasterMesh(group);
+    });
     this.projectileMeshes.forEach((m) => {
       this.scene.remove(m);
       m.geometry.dispose();

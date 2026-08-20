@@ -32,5 +32,8 @@ jdk21/
 # APK build output (use the copied named version instead)
 android/app/build/
 
+# Windows release output
+release/
+
 # Screenshots & Local Test Output
 *.png

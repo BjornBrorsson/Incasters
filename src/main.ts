@@ -22,6 +22,15 @@ import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
 import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Difficulty';
 import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo } from './net/LanClient';
+import {
+  getAudioSettings,
+  music,
+  setMasterVolume,
+  setMusicEnabled,
+  setMusicVolume,
+  setSfxVolume,
+  sfx
+} from './engine/Audio';
 
 /**
  * Lightweight keyboard + gamepad navigator for the menu / game-over screens.
@@ -181,7 +190,56 @@ let lanClient: LanClient | null = null;
 let lanRenderer: ClientGameRenderer | null = null;
 let lanMode: 'offline' | 'host' | 'client' = 'offline';
 let lanPlayers: NetPlayerInfo[] = [];
+let lanLocalTeam: string | null = null;
 void lanMode; // referenced in event handlers below
+let countdownRunId = 0;
+let countdownTimeout = 0;
+
+function cancelPregameCountdown() {
+  countdownRunId++;
+  window.clearTimeout(countdownTimeout);
+  const overlay = document.getElementById('countdown-overlay');
+  if (overlay) overlay.classList.remove('visible', 'cast');
+}
+
+function startPregameCountdown(onComplete: () => void) {
+  cancelPregameCountdown();
+  const runId = countdownRunId;
+  const overlay = document.getElementById('countdown-overlay');
+  const text = document.getElementById('countdown-text');
+  if (!overlay || !text) {
+    onComplete();
+    return;
+  }
+
+  const steps = [
+    { label: '3', cast: false },
+    { label: '2', cast: false },
+    { label: '1', cast: false },
+    { label: 'CAST!', cast: true }
+  ];
+  let stepIndex = 0;
+  overlay.classList.add('visible');
+
+  const advance = () => {
+    if (runId !== countdownRunId) return;
+    if (stepIndex >= steps.length) {
+      overlay.classList.remove('visible', 'cast');
+      onComplete();
+      return;
+    }
+    const step = steps[stepIndex++];
+    text.textContent = step.label;
+    overlay.classList.toggle('cast', step.cast);
+    text.classList.remove('countdown-pop');
+    void text.offsetWidth;
+    text.classList.add('countdown-pop');
+    sfx.playCountdown(step.cast);
+    countdownTimeout = window.setTimeout(advance, step.cast ? 700 : 850);
+  };
+
+  advance();
+}
 
 // Initialize Menu Controls
 document.addEventListener('DOMContentLoaded', () => {
@@ -210,6 +268,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressBadge = document.getElementById('progress-badge');
   const challengesList = document.getElementById('challenges-list');
   const matchSummary = document.getElementById('match-summary');
+  const optionsBtn = document.getElementById('btn-options') as HTMLButtonElement | null;
+  const optionsPanel = document.getElementById('options-panel');
+  const masterVolume = document.getElementById('master-volume') as HTMLInputElement | null;
+  const musicVolume = document.getElementById('music-volume') as HTMLInputElement | null;
+  const sfxVolume = document.getElementById('sfx-volume') as HTMLInputElement | null;
+  const musicEnabled = document.getElementById('music-enabled') as HTMLInputElement | null;
 
   const playBtn = document.getElementById('btn-play');
   const restartBtn = document.getElementById('btn-restart');
@@ -218,6 +282,50 @@ document.addEventListener('DOMContentLoaded', () => {
   const hudContainer = document.getElementById('hud-container');
   const gameOverOverlay = document.getElementById('gameover-overlay');
   const gameContainer = document.getElementById('game-container') as HTMLDivElement;
+
+  optionsBtn?.addEventListener('click', () => {
+    if (!optionsPanel) return;
+    const expanded = optionsBtn.getAttribute('aria-expanded') === 'true';
+    optionsBtn.setAttribute('aria-expanded', String(!expanded));
+    optionsPanel.hidden = expanded;
+  });
+
+  const bindVolume = (
+    input: HTMLInputElement | null,
+    outputId: string,
+    initialValue: number,
+    setter: (value: number) => void
+  ) => {
+    const output = document.getElementById(outputId) as HTMLOutputElement | null;
+    if (!input) return;
+    const render = () => {
+      const value = Number(input.value);
+      if (output) output.value = `${value}%`;
+      setter(value / 100);
+    };
+    input.value = String(Math.round(initialValue * 100));
+    if (output) output.value = `${input.value}%`;
+    input.addEventListener('input', render);
+  };
+
+  const savedAudio = getAudioSettings();
+  bindVolume(masterVolume, 'master-volume-value', savedAudio.masterVolume, setMasterVolume);
+  bindVolume(musicVolume, 'music-volume-value', savedAudio.musicVolume, setMusicVolume);
+  bindVolume(sfxVolume, 'sfx-volume-value', savedAudio.sfxVolume, setSfxVolume);
+  if (musicEnabled) {
+    musicEnabled.checked = savedAudio.musicEnabled;
+    musicEnabled.addEventListener('change', () => setMusicEnabled(musicEnabled.checked));
+  }
+
+  let audioStarted = false;
+  const startAudio = () => {
+    if (audioStarted) return;
+    audioStarted = true;
+    sfx.preload();
+    void music.playMenu();
+  };
+  window.addEventListener('pointerdown', startAudio, { once: true });
+  window.addEventListener('keydown', startAudio, { once: true });
 
   // Progression UI helpers
   const refreshBadge = () => {
@@ -509,12 +617,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Leave lobby
   btnLanLeave?.addEventListener('click', () => {
+    cancelPregameCountdown();
     if (lanClient) {
       lanClient.disconnect();
       lanClient = null;
     }
     lanMode = 'offline';
     lanPlayers = [];
+    lanLocalTeam = null;
     hideLobby();
     if (btnLanHost) btnLanHost.classList.remove('active');
     if (btnLanJoin) btnLanJoin.classList.remove('active');
@@ -525,6 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btnLanStartServer.textContent = 'Start LAN Server';
     }
     if (btnLanConnect) btnLanConnect.disabled = false;
+    void music.playMenu();
   });
 
   function setupLanHandlers() {
@@ -545,6 +656,27 @@ document.addEventListener('DOMContentLoaded', () => {
       const p = lanPlayers.find((p) => p.id === msg.playerId);
       if (p) p.ready = msg.ready;
       renderLobbyPlayers();
+    });
+
+    lanClient.on('event', (event: any) => {
+      if (lanClient?.isHost) return;
+      const localId = lanClient?.playerId;
+      if (event.kind === 'fire') {
+        sfx.playShoot(event.data?.ownerId === localId ? 1 : 0.28);
+      } else if (event.kind === 'hit' && event.data?.surface === 'wall') {
+        sfx.playWallHit(event.data?.ownerId === localId ? 0.85 : 0.3);
+      } else if (event.kind === 'hit' && event.data?.surface === 'clash') {
+        sfx.playHit();
+      } else if (event.kind === 'hit' && event.data?.surface === 'fizzle') {
+        sfx.playFizzle(event.data?.ownerId === localId ? 0.72 : 0.22);
+      } else if (event.kind === 'hit') {
+        const involved = event.data?.targetId === localId || event.data?.ownerId === localId;
+        sfx.playWizardHit(event.data?.targetId === localId ? 1 : involved ? 0.68 : 0.24);
+      } else if (event.kind === 'pickup') {
+        sfx.playPowerup();
+      } else if (event.kind === 'dash') {
+        sfx.playDash();
+      }
     });
 
     lanClient.on('matchStart', (msg: any) => {
@@ -568,6 +700,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (lanRenderer) {
         lanRenderer.applyState(state);
       }
+      const localPlayer = state.casters.find((caster) => caster.id === lanClient?.playerId);
+      if (localPlayer) {
+        lanLocalTeam = localPlayer.team;
+        const danger = state.projectiles.reduce((level, projectile) => {
+          if (projectile.ownerId === localPlayer.id || projectile.isDead) return level;
+          const distance = Math.hypot(projectile.x - localPlayer.x, projectile.y - localPlayer.y);
+          return distance < 8 ? level + (1 - distance / 8) * 0.3 : level;
+        }, 0);
+        music.updateGameplay(localPlayer.health / Math.max(1, localPlayer.maxHealth), localPlayer.isDead, danger);
+      }
     });
 
     lanClient.on('matchEnd', (result: any) => {
@@ -580,12 +722,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     lanClient.on('disconnect', () => {
+      cancelPregameCountdown();
       if (lanRenderer) {
         lanRenderer.destroy();
         lanRenderer = null;
       }
       hideLobby();
       lanMode = 'offline';
+      lanLocalTeam = null;
     });
   }
 
@@ -617,25 +761,46 @@ document.addEventListener('DOMContentLoaded', () => {
       game.onNetBroadcast = (state: GameStateSnapshot) => {
         lanClient!.broadcastState(state);
       };
+      game.onNetEvent = (event) => {
+        lanClient!.broadcastEvent(event);
+      };
+      game.onNetMatchEnd = (result) => {
+        lanClient!.broadcastEnd(result);
+      };
     }
 
-    game.startGame();
+    const activeGame = game;
+    activeGame.tick();
+    void music.startMatch(mode);
+    startPregameCountdown(() => {
+      if (game === activeGame) activeGame.startGame();
+    });
   }
 
-  function startLanClientGame(_mode: GameModeType, _map: MapType) {
+  function startLanClientGame(mode: GameModeType, _map: MapType) {
     if (menuScreen) menuScreen.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
     // Client uses the lightweight renderer
     lanRenderer = new ClientGameRenderer(gameContainer);
     if (lanClient) lanRenderer.setLocalPlayerId(lanClient.playerId);
+    void music.startMatch(mode);
+    startPregameCountdown(() => {});
   }
 
   function showLanGameOver(result: any) {
+    cancelPregameCountdown();
     if (hudContainer) hudContainer.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'flex';
-    const winnerEl = document.getElementById('winner-text');
+    const winnerEl = document.getElementById('gameover-winner');
     if (winnerEl) winnerEl.textContent = result?.winnerText || 'Match Over';
+    let won = Boolean(result?.won);
+    if (!lanClient?.isHost) {
+      if (result?.winningTeam) won = result.winningTeam === lanLocalTeam;
+      else if (result?.winnerId) won = result.winnerId === lanClient?.playerId;
+      else won = false;
+    }
+    void music.playResult(won);
   }
 
   // Live 3D preview of the customised wizard (guarded so a WebGL failure can't break the menu)
@@ -795,10 +960,14 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshBadge();
       renderChallenges();
     };
-    game.startGame();
+    const activeGame = game;
     
     // Start game tick loop
-    game.tick();
+    activeGame.tick();
+    void music.startMatch(selectedMode);
+    startPregameCountdown(() => {
+      if (game === activeGame) activeGame.startGame();
+    });
   });
 
   // Play Again callback
@@ -814,16 +983,22 @@ document.addEventListener('DOMContentLoaded', () => {
       game.playerCount = selectedPlayerCount;
       game.difficulty = selectedDifficulty;
       game.resetGame();
-      game.startGame();
+      const activeGame = game;
+      void music.startMatch(selectedMode);
+      startPregameCountdown(() => {
+        if (game === activeGame) activeGame.startGame();
+      });
     }
   });
 
   // Back to Menu callback
   const backMenuBtn = document.getElementById('btn-back-menu');
   backMenuBtn?.addEventListener('click', () => {
+    cancelPregameCountdown();
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'none';
     if (menuScreen) menuScreen.style.display = 'flex';
+    void music.playMenu();
 
     // Destroy the current game instance to free WebGL resources
     if (game) {

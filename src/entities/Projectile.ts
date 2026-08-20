@@ -23,6 +23,7 @@ export class Projectile extends Entity {
   wallRunLevel: number;
   isWallRunning: boolean = false;
   age: number = 0;
+  playFizzleOnDestroy: boolean = false;
   hitCasterIds: Set<string> = new Set();
   
   // Ribbon trail particles metadata
@@ -82,8 +83,9 @@ export class Projectile extends Entity {
   update(dt: number) {
     // Safety lifetime so wall-running / bouncing shots can never live forever
     this.age += dt;
-    if (this.age > 8) {
+    if (this.age > 8 && !this.isDead) {
       this.isDead = true;
+      this.playFizzleOnDestroy = true;
     }
 
     // 1. Curving shot logic (steering or target tracking)
@@ -126,6 +128,8 @@ export class Projectile extends Entity {
   handleWallCollision(normalX: number, normalY: number, overlapX: number = 0, overlapY: number = 0) {
     // Wallrunner: glide along the wall surface instead of bouncing or exploding
     if (this.wallRunLevel > 0) {
+      const firstWallContact = !this.isWallRunning;
+
       // Push out to the wall surface
       this.x += overlapX;
       this.y += overlapY;
@@ -145,7 +149,7 @@ export class Projectile extends Entity {
       this.targetPoint = null;
       this.steerDirection = 0;
       this.isWallRunning = true;
-      sfx.playBounce();
+      if (firstWallContact) sfx.playWallHit(this.ownerId === 'player' ? 0.85 : 0.3);
       return;
     }
 
@@ -155,10 +159,12 @@ export class Projectile extends Entity {
       this.vx = reflected.x;
       this.vy = reflected.y;
       this.bouncesRemaining--;
-      sfx.playBounce();
+      sfx.playWallHit(this.ownerId === 'player' ? 0.85 : 0.3);
     } else {
       // Explode
       this.isDead = true;
+      this.playFizzleOnDestroy = true;
+      sfx.playWallHit(this.ownerId === 'player' ? 0.85 : 0.3);
     }
   }
 
@@ -173,6 +179,7 @@ export class Projectile extends Entity {
       this.piercesRemaining--;
     } else {
       this.isDead = true;
+      this.playFizzleOnDestroy = true;
     }
     return true;
   }

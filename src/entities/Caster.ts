@@ -354,7 +354,6 @@ export class Caster extends Entity {
     }
     
     this.health = Math.max(0, this.health - amount);
-    sfx.playHit();
 
     // Trigger visual hit flash
     this.triggerHitFlash();

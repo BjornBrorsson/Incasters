@@ -1,6 +1,6 @@
 # 🧙‍♂️ Incasters
 
-[![Build & Release Android APK](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
+[![Build & Release Android + Windows](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-r160+-black.svg)](https://threejs.org/)
@@ -76,9 +76,10 @@ Four difficulty presets that tune aim error, prediction, dodging reflexes, and p
 - **Rendering Engine:** [Three.js](https://threejs.org/) (Custom shaderless low-poly meshes, Orthographic Isometric camera, particle systems, dynamic shadows).
 - **Language & Tooling:** TypeScript 5, Vite 8, CSS3 glassmorphism.
 - **Physics Engine:** Custom 2D simulation layer with isometric 3D projection (`Physics.ts`), Circle-vs-Circle and Circle-vs-AABB intersections.
-- **Mobile Shell:** [Capacitor 7](https://capacitorjs.com/) for native Android packaging.
+- **Mobile Shell:** [Capacitor](https://capacitorjs.com/) for native Android packaging.
+- **Desktop Shell:** [Electron](https://www.electronjs.org/) for the portable Windows build.
 - **Automated Testing:** Headless E2E gametest suite using [Puppeteer Core](https://pptr.dev/).
-- **CI/CD:** Automated GitHub Actions pipeline building and publishing Android APKs on push.
+- **CI/CD:** Parallel GitHub Actions builds publish the Windows EXE and Android APK to the same release post.
 
 ---
 
@@ -121,11 +122,33 @@ node test-game.js
 
 ---
 
-## 📱 Android APK Build
+## � Android & Windows Release Builds
 
-The repository includes an automated GitHub Actions CI/CD workflow that compiles and publishes an Android APK on every push to `main` or tag creation.
+The repository includes an automated GitHub Actions CI/CD workflow that compiles and publishes both the **Android APK** and the **Windows portable EXE** to the same GitHub Release on every push to `main` or tag creation.
 
-To build the Android project locally:
+### Download Prebuilt Binaries
+
+1. Visit the [Releases](https://github.com/BjornBrorsson/Incasters/releases) page.
+2. Pick the latest release.
+3. Download the assets you need:
+   - `Incasters-Android.apk` — install on any Android device.
+   - `Incasters-Windows-x64.exe` — portable Windows x64 executable; no installation required.
+
+> **Windows SmartScreen note:** The Windows build is currently unsigned, so Windows Defender / SmartScreen may show a warning the first time you run it. Choose **More info → Run anyway** to start the game.
+
+### Build Windows Locally
+
+To produce the portable Windows executable on your own machine:
+
+```bash
+npm install
+npm run desktop:build
+```
+
+The output file is created at `release/windows/Incasters-0.0.0-Windows-x64.exe` and can be run directly or renamed to `Incasters-Windows-x64.exe`.
+
+### Build Android Locally
+
 ```bash
 # 1. Build web distribution
 npm run build
@@ -137,6 +160,7 @@ npx cap sync android
 cd android
 ./gradlew assembleDebug
 ```
+
 The output APK will be generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
 
 ---

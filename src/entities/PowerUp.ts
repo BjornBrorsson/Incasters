@@ -23,9 +23,46 @@ export const POWERUP_COLORS: Record<PowerUpType, number> = {
   WALLRUN: 0x00e0b0 // Teal (hugs walls)
 };
 
+export const POWERUP_SYMBOLS: Record<PowerUpType, string> = {
+  BOUNCE: '↻',
+  PIERCE: '➤',
+  SPLIT: 'Y',
+  HASTE: '»',
+  SHIELD: '⬡',
+  FREEZE: '✦',
+  WALLRUN: '∿'
+};
+
+function createSymbolTexture(type: PowerUpType, color: number) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const context = canvas.getContext('2d');
+  if (context) {
+    const cssColor = `#${color.toString(16).padStart(6, '0')}`;
+    context.fillStyle = 'rgba(5, 8, 18, 0.88)';
+    context.beginPath();
+    context.arc(64, 64, 52, 0, Math.PI * 2);
+    context.fill();
+    context.strokeStyle = cssColor;
+    context.lineWidth = 8;
+    context.stroke();
+    context.fillStyle = '#ffffff';
+    context.font = '900 72px Outfit, Arial, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(POWERUP_SYMBOLS[type], 64, 66);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
+}
+
 export class PowerUp extends Entity {
   type: PowerUpType;
   private hoverTime: number = Math.random() * 100;
+  private symbolTexture: THREE.CanvasTexture;
+  private symbolMaterial: THREE.SpriteMaterial;
 
   constructor(x: number, y: number, type: PowerUpType) {
     // Visual representation: floating glowing diamond
@@ -58,8 +95,17 @@ export class PowerUp extends Entity {
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
+    const symbolTexture = createSymbolTexture(type, color);
+    const symbolMaterial = new THREE.SpriteMaterial({ map: symbolTexture, transparent: true, depthWrite: false });
+    const symbol = new THREE.Sprite(symbolMaterial);
+    symbol.position.y = 0.65;
+    symbol.scale.set(0.72, 0.72, 0.72);
+    group.add(symbol);
+
     super(x, y, 0.4, group);
     this.type = type;
+    this.symbolTexture = symbolTexture;
+    this.symbolMaterial = symbolMaterial;
     this.mesh.position.y = 0.5; // Hover height
   }
 
@@ -80,5 +126,11 @@ export class PowerUp extends Entity {
     if (ring) {
       ring.rotation.z -= dt * 1.5;
     }
+  }
+
+  destroy(scene: THREE.Scene) {
+    this.symbolTexture.dispose();
+    this.symbolMaterial.dispose();
+    super.destroy(scene);
   }
 }

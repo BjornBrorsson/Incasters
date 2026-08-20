@@ -3,14 +3,19 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "main": "electron-main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lan-server": "node server/lan-server.js"
+    "lan-server": "node server/lan-server.js",
+    "desktop": "npm run build && electron .",
+    "desktop:build": "npm run build && electron-builder --win portable --x64"
   },
   "devDependencies": {
     "@types/three": "^0.184.1",
+    "electron": "43.3.0",
+    "electron-builder": "26.15.3",
     "puppeteer-core": "^25.2.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.0"
@@ -22,5 +27,37 @@
     "@types/ws": "^8.18.1",
     "three": "^0.184.0",
     "ws": "^8.21.0"
+  },
+  "build": {
+    "appId": "com.incasters.game",
+    "productName": "Incasters",
+    "asar": true,
+    "compression": "maximum",
+    "electronLanguages": [
+      "en"
+    ],
+    "npmRebuild": false,
+    "directories": {
+      "output": "release/windows"
+    },
+    "extraResources": [
+      "dist"
+    ],
+    "files": [
+      "electron-main.cjs",
+      "package.json",
+      "!node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Incasters-${version}-Windows-${arch}.${ext}"
+    }
   }
 }
