@@ -208,6 +208,10 @@ export class GameModeManager {
             // Respawn
             const sp = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
             c.reset();
+            if (this.type === GameModeType.TEAM_BATTLE || this.type === GameModeType.GOLD_RUSH) {
+              if (c.team === 'RED') c.updateColors(0xff1122, 0xff1122);
+              else if (c.team === 'BLUE') c.updateColors(0x0044ff, 0x00d2ff);
+            }
             c.x = sp.x;
             c.y = sp.y;
             c.syncMeshPosition();

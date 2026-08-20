@@ -26,7 +26,6 @@ export const POWERUP_COLORS: Record<PowerUpType, number> = {
 export class PowerUp extends Entity {
   type: PowerUpType;
   private hoverTime: number = Math.random() * 100;
-  private glowLight: THREE.PointLight;
 
   constructor(x: number, y: number, type: PowerUpType) {
     // Visual representation: floating glowing diamond
@@ -59,14 +58,8 @@ export class PowerUp extends Entity {
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
-    // Add local point light for dynamic glow on surroundings
-    const light = new THREE.PointLight(color, 1.5, 3);
-    light.position.y = 0.5;
-    group.add(light);
-
     super(x, y, 0.4, group);
     this.type = type;
-    this.glowLight = light;
     this.mesh.position.y = 0.5; // Hover height
   }
 
@@ -87,8 +80,5 @@ export class PowerUp extends Entity {
     if (ring) {
       ring.rotation.z -= dt * 1.5;
     }
-
-    // Pulse light intensity
-    this.glowLight.intensity = 1.0 + Math.sin(this.hoverTime * 2) * 0.5;
   }
 }

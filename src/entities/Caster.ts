@@ -370,16 +370,19 @@ export class Caster extends Entity {
     this.bodyGroup.traverse((child) => {
       if (child instanceof THREE.Mesh && child.material) {
         const mat = child.material;
-        const origColor = mat.color ? mat.color.getHex() : 0x000000;
-        
-        // Temporarily set to red/white
-        if (mat.color) mat.color.setHex(0xffffff);
-        
-        setTimeout(() => {
-          if (!this.isDead && mat.color) {
-            mat.color.setHex(origColor);
-          }
-        }, 100);
+        if (mat instanceof THREE.MeshStandardMaterial) {
+          const origEmissive = mat.emissive.getHex();
+          const origIntensity = mat.emissiveIntensity;
+          mat.emissive.setHex(0xffffff);
+          mat.emissiveIntensity = 0.85;
+
+          setTimeout(() => {
+            if (mat instanceof THREE.MeshStandardMaterial) {
+              mat.emissive.setHex(origEmissive);
+              mat.emissiveIntensity = origIntensity;
+            }
+          }, 90);
+        }
       }
     });
   }
@@ -540,7 +543,6 @@ export class Caster extends Entity {
     this.isDead = false;
     this.powerups.clear();
     this.powerupSlotsOrder = [];
-    this.updateStaffVisuals();
     this.vx = 0;
     this.vy = 0;
     this.isDashing = false;
@@ -552,9 +554,8 @@ export class Caster extends Entity {
     this.ammo = this.maxAmmo;
     this.timeSinceLastShot = 0;
     if (this.shieldMesh) this.shieldMesh.visible = false;
-    if (this.robeMesh && this.robeMesh.material instanceof THREE.MeshStandardMaterial) {
-      this.robeMesh.material.emissive.setHex(0x000000);
-      this.robeMesh.material.emissiveIntensity = 0;
-    }
+    
+    // Fully restore pristine clothing, hat, accessory and staff colors on respawn
+    this.updateColors(this.clothingColor, this.spellColor);
   }
 }

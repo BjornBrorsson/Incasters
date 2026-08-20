@@ -62,11 +62,6 @@ export class Projectile extends Entity {
     const glow = new THREE.Mesh(glowGeo, glowMat);
     group.add(glow);
 
-    // Small point light for visual glow
-    const light = new THREE.PointLight(color, 2, 2.5);
-    light.position.y = 0.2;
-    group.add(light);
-
     super(x, y, 0.25, group);
     
     this.ownerId = ownerId;

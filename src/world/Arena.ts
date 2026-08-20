@@ -414,11 +414,6 @@ export class Arena {
         ring.position.y = 0.61;
         wallMesh.add(ring);
 
-        // Add local spot light
-        const padLight = new THREE.PointLight(PALETTE.bouncePad, 1.5, 4);
-        padLight.position.y = 1.0;
-        wallMesh.add(padLight);
-
         this.bouncePadsMeshes.push(wallMesh);
       } else {
         // Standard walls are boxes

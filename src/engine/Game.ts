@@ -30,6 +30,20 @@ export interface GameParticle {
   mesh: THREE.Mesh;
 }
 
+// Static shared particle geometries and material cache to avoid GC/WebGL buffer disposal thrashing
+const SHARED_SPHERE_GEO = new THREE.SphereGeometry(0.08, 4, 4);
+const SHARED_BOX_GEO = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+const PARTICLE_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+
+function getCachedParticleMaterial(color: number): THREE.MeshBasicMaterial {
+  let mat = PARTICLE_MAT_CACHE.get(color);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
+    PARTICLE_MAT_CACHE.set(color, mat);
+  }
+  return mat;
+}
+
 export class Game {
   // Rendering
   scene!: THREE.Scene;
@@ -54,6 +68,7 @@ export class Game {
   projectiles: Projectile[] = [];
   powerups: PowerUp[] = [];
   particles: GameParticle[] = [];
+  private particlePool: GameParticle[] = [];
 
   // Managers
   gameModeManager: GameModeManager;
@@ -75,7 +90,7 @@ export class Game {
   private touchControlsActive: boolean = false;
   private touchJoysticks = {
     left: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 },
-    right: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 }
+    right: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0, hasFiredThisPress: false }
   };
   /** Touch fire button state (decoupled from right stick). */
   private touchFireHeld = false;
@@ -175,11 +190,12 @@ export class Game {
     this.camera.position.copy(this.camOffset);
     this.camera.lookAt(0, 0, 0);
 
-    // WebGL Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    // WebGL Renderer with capped pixel ratio for smooth mobile 60fps performance
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
     // Lighting — warm fantasy daytime shading
@@ -222,7 +238,10 @@ export class Game {
     this.casters.forEach((c) => c.destroy(this.scene));
     this.projectiles.forEach((p) => p.destroy(this.scene));
     this.powerups.forEach((pu) => pu.destroy(this.scene));
-    this.particles.forEach((p) => this.scene.remove(p.mesh));
+    this.particles.forEach((p) => {
+      p.mesh.visible = false;
+      this.particlePool.push(p);
+    });
     
     this.casters = [];
     this.projectiles = [];
@@ -413,6 +432,7 @@ export class Game {
     this.camera.top = d;
     this.camera.bottom = -d;
     this.camera.updateProjectionMatrix();
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
@@ -458,9 +478,8 @@ export class Game {
         this.touchJoysticks.right.curY = touch.clientY;
         this.touchJoysticks.right.dirX = 0;
         this.touchJoysticks.right.dirY = 0;
+        this.touchJoysticks.right.hasFiredThisPress = false;
         this.showJoystickUI('right', touch.clientX, touch.clientY);
-
-        // Firing is handled by handlePlayerFiring() each tick once aim direction is set
       }
     }
   }
@@ -506,23 +525,36 @@ export class Game {
         if (dist > 6) {
           this.touchJoysticks.right.dirX = dx / dist;
           this.touchJoysticks.right.dirY = dy / dist;
+
+          const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+          const worldAngle = screenAngleToWorldIso(screenAngle);
+          const finalAimAngle = this.applyAimAssist(worldAngle);
+          this.player.aimAngle = finalAimAngle;
+
+          // Fire ONE shot upon initial stick drag engagement of this press
+          if (!this.touchJoysticks.right.hasFiredThisPress && !this.player.isDead) {
+            this.touchJoysticks.right.hasFiredThisPress = true;
+            if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
+              const proj = this.spawnProjectile(this.player, finalAimAngle, null);
+              this.playerGuidedProjectile = proj;
+              this.player.shootTimer = this.player.getFireRateCooldown();
+            }
+          }
+
+          // Continuous curve guidance for the active projectile
+          if (this.playerGuidedProjectile && !this.playerGuidedProjectile.isDead) {
+            this.playerGuidedProjectile.steerDirection = 0;
+            this.playerGuidedProjectile.targetPoint = {
+              x: this.playerGuidedProjectile.x + Math.cos(finalAimAngle) * 10,
+              y: this.playerGuidedProjectile.y + Math.sin(finalAimAngle) * 10
+            };
+          }
         } else {
           this.touchJoysticks.right.dirX = 0;
           this.touchJoysticks.right.dirY = 0;
         }
 
         this.updateJoystickUI('right', (dx / dist) * limit, (dy / dist) * limit);
-
-        // Continuous guide bullet direction on right stick slide (isometric converted)
-        if (this.playerGuidedProjectile && dist > 6) {
-          const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
-          const worldAngle = screenAngleToWorldIso(screenAngle);
-          this.playerGuidedProjectile.steerDirection = 0;
-          this.playerGuidedProjectile.targetPoint = {
-            x: this.playerGuidedProjectile.x + Math.cos(worldAngle) * 10,
-            y: this.playerGuidedProjectile.y + Math.sin(worldAngle) * 10
-          };
-        }
       }
     }
   }
@@ -545,8 +577,7 @@ export class Game {
         this.touchJoysticks.right.id = -1;
         this.touchJoysticks.right.dirX = 0;
         this.touchJoysticks.right.dirY = 0;
-        // Do NOT clear playerGuidedProjectile here — the fire button controls guiding.
-        // The right stick only steers; releasing it just stops steering.
+        this.touchJoysticks.right.hasFiredThisPress = false;
         this.hideJoystickUI('right');
       }
     }
@@ -628,30 +659,42 @@ export class Game {
     this.spawnBlastParticles(x, y, stats.color, 5, 0.7);
   }
 
-  // Spark/trail particle system
-  spawnBlastParticles(x: number, y: number, color: number, count: number = 10, scaleMultiplier = 1) {
-    const particleGeometry = new THREE.SphereGeometry(0.08 * scaleMultiplier, 4, 4);
-    const particleMaterial = new THREE.MeshBasicMaterial({ color: color });
+  // Spark/trail particle system using high-performance object pooling
+  spawnBlastParticles(x: number, y: number, color: number, count: number = 8, scaleMultiplier = 1) {
+    const mat = getCachedParticleMaterial(color);
 
     for (let i = 0; i < count; i++) {
-      const mesh = new THREE.Mesh(particleGeometry, particleMaterial);
-      mesh.position.set(x, 0.4, y);
-      this.scene.add(mesh);
+      let p: GameParticle;
+      if (this.particlePool.length > 0) {
+        p = this.particlePool.pop()!;
+        p.mesh.material = mat;
+        p.mesh.scale.set(scaleMultiplier, scaleMultiplier, scaleMultiplier);
+        p.mesh.visible = true;
+      } else {
+        const mesh = new THREE.Mesh(SHARED_SPHERE_GEO, mat);
+        p = {
+          position: new THREE.Vector3(),
+          velocity: new THREE.Vector3(),
+          color,
+          size: 1.0,
+          opacity: 0.85,
+          lifetime: 0,
+          maxLifetime: 0.35,
+          mesh
+        };
+        this.scene.add(mesh);
+      }
 
+      p.position.set(x, 0.4, y);
+      p.mesh.position.copy(p.position);
       const angle = Math.random() * Math.PI * 2;
       const speed = 2.0 + Math.random() * 4.0;
-      const vel = new THREE.Vector3(Math.cos(angle) * speed, 0.2 + Math.random() * 2.0, Math.sin(angle) * speed);
+      p.velocity.set(Math.cos(angle) * speed, 0.2 + Math.random() * 2.0, Math.sin(angle) * speed);
+      p.color = color;
+      p.opacity = 0.85;
+      p.lifetime = 0;
+      p.maxLifetime = 0.25 + Math.random() * 0.2;
 
-      const p: GameParticle = {
-        position: new THREE.Vector3(x, 0.4, y),
-        velocity: vel,
-        color,
-        size: 1.0,
-        opacity: 1.0,
-        lifetime: 0,
-        maxLifetime: 0.3 + Math.random() * 0.3,
-        mesh
-      };
       this.particles.push(p);
     }
   }
@@ -1047,30 +1090,21 @@ export class Game {
       return;
     }
 
-    const rightStickAiming = this.touchControlsActive && this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0);
-    const touchFiring = this.touchControlsActive && (this.touchFireHeld || rightStickAiming);
-    const fireHeld = touchFiring || this.input.isFireHeld();
+    // On mobile touch: dedicated fire button fires. (Right stick fires once upon initial drag).
+    // On Controller & PC: dedicated fire input (mouse left click / gamepad trigger RT/LT/A) determines shooting!
+    const fireHeld = this.touchControlsActive ? this.touchFireHeld : this.input.isFireHeld();
 
     if (!fireHeld) {
-      this.playerGuidedProjectile = null;
       return;
     }
 
     if (this.player.shootTimer <= 0 && this.player.ammo > 0) {
-      const useMouseTarget = !touchFiring && !this.input.usingGamepad && !this.touchControlsActive && this.controlMode === 'TARGET';
+      const useMouseTarget = !this.touchControlsActive && !this.input.usingGamepad && this.controlMode === 'TARGET';
       if (useMouseTarget) this.updateGroundTarget();
-
-      let aimAngle = this.player.aimAngle;
-      if (rightStickAiming) {
-        const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
-        const worldAngle = screenAngleToWorldIso(screenAngle);
-        aimAngle = this.applyAimAssist(worldAngle);
-        this.player.aimAngle = aimAngle;
-      }
 
       const proj = this.spawnProjectile(
         this.player,
-        aimAngle,
+        this.player.aimAngle,
         useMouseTarget ? this.groundTarget : null
       );
       this.playerGuidedProjectile = proj;
@@ -1456,32 +1490,48 @@ export class Game {
     }
   }
 
-  private updateParticles(dt: number) {
-    // 1. Spawning bullet trails
-    this.projectiles.forEach((proj) => {
-      // Spawn trail particle
-      const geom = new THREE.BoxGeometry(0.12, 0.12, 0.12);
-      const mat = new THREE.MeshBasicMaterial({
-        color: proj.trailColor,
-        transparent: true,
-        opacity: 0.7
-      });
-      const mesh = new THREE.Mesh(geom, mat);
-      mesh.position.set(proj.x, 0.4 + (Math.random() - 0.5) * 0.15, proj.y);
-      this.scene.add(mesh);
+  private bulletTrailTimer: number = 0;
 
-      const p: GameParticle = {
-        position: mesh.position.clone(),
-        velocity: new THREE.Vector3((Math.random() - 0.5) * 0.5, 0, (Math.random() - 0.5) * 0.5),
-        color: proj.trailColor,
-        size: 1.0,
-        opacity: 0.7,
-        lifetime: 0,
-        maxLifetime: 0.28,
-        mesh
-      };
-      this.particles.push(p);
-    });
+  private updateParticles(dt: number) {
+    this.bulletTrailTimer += dt;
+
+    // 1. Spawning bullet trails (throttled to every 0.04s to avoid excessive particle clutter)
+    if (this.bulletTrailTimer >= 0.04) {
+      this.bulletTrailTimer = 0;
+      this.projectiles.forEach((proj) => {
+        const mat = getCachedParticleMaterial(proj.trailColor);
+        let p: GameParticle;
+        if (this.particlePool.length > 0) {
+          p = this.particlePool.pop()!;
+          p.mesh.material = mat;
+          p.mesh.scale.set(1, 1, 1);
+          p.mesh.visible = true;
+        } else {
+          const mesh = new THREE.Mesh(SHARED_BOX_GEO, mat);
+          p = {
+            position: new THREE.Vector3(),
+            velocity: new THREE.Vector3(),
+            color: proj.trailColor,
+            size: 1.0,
+            opacity: 0.7,
+            lifetime: 0,
+            maxLifetime: 0.22,
+            mesh
+          };
+          this.scene.add(mesh);
+        }
+
+        p.position.set(proj.x, 0.4 + (Math.random() - 0.5) * 0.1, proj.y);
+        p.mesh.position.copy(p.position);
+        p.velocity.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
+        p.color = proj.trailColor;
+        p.opacity = 0.7;
+        p.lifetime = 0;
+        p.maxLifetime = 0.22;
+
+        this.particles.push(p);
+      });
+    }
 
     // 2. Animate and update existing particles
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -1489,22 +1539,18 @@ export class Game {
       p.lifetime += dt;
 
       if (p.lifetime >= p.maxLifetime) {
-        // Dispose
-        this.scene.remove(p.mesh);
-        p.mesh.geometry.dispose();
-        (p.mesh.material as THREE.Material).dispose();
+        // Return to object pool instead of disposing/reallocating
+        p.mesh.visible = false;
+        this.particlePool.push(p);
         this.particles.splice(i, 1);
       } else {
-        // Move particle
         p.position.addScaledVector(p.velocity, dt);
         p.mesh.position.copy(p.position);
-        
-        // Gravity for blast sparks
+
         if (p.velocity.y > 0.01) {
           p.velocity.y -= 9.81 * dt;
         }
 
-        // Scale down and fade opacity
         const ratio = 1 - (p.lifetime / p.maxLifetime);
         p.mesh.scale.set(ratio, ratio, ratio);
         if (p.mesh.material instanceof THREE.MeshBasicMaterial) {
@@ -1740,6 +1786,9 @@ export class Game {
     this.projectiles.forEach((p) => p.destroy(this.scene));
     this.powerups.forEach((pu) => pu.destroy(this.scene));
     this.particles.forEach((p) => this.scene.remove(p.mesh));
+    this.particlePool.forEach((p) => this.scene.remove(p.mesh));
+    this.particles = [];
+    this.particlePool = [];
     if (this.aimVisualizer) this.aimVisualizer.destroy(this.scene);
     this.gameModeManager.cleanup(this.scene);
     
