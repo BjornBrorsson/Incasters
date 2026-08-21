@@ -1,0 +1,1 @@
+A folder to store screenshots of the game to add to the readme
