@@ -10,6 +10,20 @@
 
 ---
 
+## 📸 Screenshots
+
+### Desktop & UI
+| Main Menu | Character Customizer | Match Setup |
+| :---: | :---: | :---: |
+| <img src="screenshots/desktop_menu.png" width="280" alt="Main Menu" /> | <img src="screenshots/customization.png" width="280" alt="Character Customization" /> | <img src="screenshots/match_config.png" width="280" alt="Match Setup" /> |
+
+### Gameplay & Combat
+| Desktop 3D Battle | Mobile Landscape Combat | Mobile Portrait Gameplay |
+| :---: | :---: | :---: |
+| <img src="screenshots/desktop_battle.png" width="280" alt="Desktop 3D Battle" /> | <img src="screenshots/mobile_landscape_battle.png" width="280" alt="Mobile Landscape" /> | <img src="screenshots/mobile_battle_1.png" width="150" alt="Mobile Portrait" /> |
+
+---
+
 ## ✨ Features
 
 ### 🔮 Dynamic Curved-Shot Mechanics
