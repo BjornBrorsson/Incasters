@@ -55,9 +55,13 @@ export class Caster extends Entity {
   shieldMesh: THREE.Mesh | null = null;
   weaponCrystal: THREE.Object3D | null = null;
   weaponLight: THREE.Object3D | null = null;
+  leftEyeGroup: THREE.Group | null = null;
+  rightEyeGroup: THREE.Group | null = null;
   clothingColor!: number;
   spellColor!: number;
+  characterConfig: Partial<CharacterConfig> | null = null;
   private wobbleTime: number = 0;
+  private blinkTimer: number = 2.5;
 
   // Leap Mechanics
   isLeaping: boolean = false;
@@ -85,8 +89,8 @@ export class Caster extends Entity {
     const bodyGroup = new THREE.Group();
 
     // Determine initial colors
-    const defaultClothing = team === 'RED' ? 0xff1122 : team === 'BLUE' ? 0x0044ff : 0xffcc00;
-    const defaultSpell = team === 'RED' ? 0xff3355 : team === 'BLUE' ? 0x3388ff : 0xffcc00;
+    const defaultClothing = team === 'RED' ? 0xa61c28 : team === 'BLUE' ? 0x1e498f : 0xd4a020;
+    const defaultSpell = team === 'RED' ? 0xff3355 : team === 'BLUE' ? 0x33aaff : 0xffcc00;
 
     const finalClothing = config?.robeColor ?? (clothingColor !== undefined ? clothingColor : defaultClothing);
     const finalSpell = config?.spellColor ?? (spellColor !== undefined ? spellColor : defaultSpell);
@@ -99,25 +103,44 @@ export class Caster extends Entity {
     const weaponStyle = config?.weapon ?? 'STAFF';
     const hatRotation = config?.hatRotation ?? 0;
 
-    // 1. Robe (Body) - conical shape
-    const robeGeo = new THREE.ConeGeometry(0.4, 0.9, 8);
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.8, roughness: 0.25 });
+
+    // 1. Robe (Body) - conical shape with velvet texture & gold embroidered hem
+    const robeGeo = new THREE.ConeGeometry(0.42, 0.92, 12);
     const robeMat = new THREE.MeshStandardMaterial({
       color: finalClothing,
       roughness: 0.45,
-      metalness: 0.05,
+      metalness: 0.1,
       emissive: finalClothing,
       emissiveIntensity: 0.12
     });
     const robe = new THREE.Mesh(robeGeo, robeMat);
-    robe.position.y = 0.45;
+    robe.position.y = 0.46;
     robe.castShadow = true;
     robe.receiveShadow = true;
     bodyGroup.add(robe);
 
+    // Gold embroidered hem trim
+    const hemGeo = new THREE.TorusGeometry(0.42, 0.025, 6, 16);
+    const hem = new THREE.Mesh(hemGeo, goldMat);
+    hem.rotation.x = Math.PI / 2;
+    hem.position.y = 0.04;
+    bodyGroup.add(hem);
+
+    // Leather belt with gold buckle
+    const beltMat = new THREE.MeshStandardMaterial({ color: 0x2a180e, roughness: 0.8 });
+    const belt = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.08, 12), beltMat);
+    belt.position.y = 0.38;
+    bodyGroup.add(belt);
+
+    const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.06), goldMat);
+    buckle.position.set(0, 0.38, 0.32);
+    bodyGroup.add(buckle);
+
     // 2. Head - Sphere
-    const headGeo = new THREE.SphereGeometry(0.28, 8, 8);
+    const headGeo = new THREE.SphereGeometry(0.28, 12, 10);
     const headMat = new THREE.MeshStandardMaterial({
-      color: 0x1a1a1a, // Dark shadow void under hat
+      color: 0x16141a, // Mystical shadow void under hat
       roughness: 0.8
     });
     const head = new THREE.Mesh(headGeo, headMat);
@@ -138,20 +161,49 @@ export class Caster extends Entity {
     const faceGearGroup = buildFaceGear(faceGearStyle, finalClothing);
     bodyGroup.add(faceGearGroup);
 
-    // 3d. Back accessory (wings / cape / jetpack / banner), tinted with the spell colour
+    // 3d. Back accessory (wings / cape / tome / banner), tinted with the spell colour
     const accessoryGroup = buildAccessory(accessoryStyle, finalSpell);
     bodyGroup.add(accessoryGroup);
 
-    // 4. Glowing eyes - 2 small spheres
-    const eyeGeo = new THREE.SphereGeometry(0.05, 4, 4);
-    const eyeMat = new THREE.MeshBasicMaterial({ color: eyeColorVal });
+    // 4. Expressive Pokémon-style Layered Eyes (White sclera + Iris + Pupil + Catchlight Sparkle)
+    const eyeWhiteMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const eyeIrisMat = new THREE.MeshBasicMaterial({ color: eyeColorVal });
+    const eyePupilMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const eyeSparkleMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
-    const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
-    leftEye.position.set(-0.09, 0.9, 0.22);
+    function createExpressiveEye(isLeft: boolean): THREE.Group {
+      const eyeG = new THREE.Group();
+
+      // White Sclera
+      const sclera = new THREE.Mesh(new THREE.SphereGeometry(0.065, 8, 8), eyeWhiteMat);
+      sclera.scale.set(1.0, 1.3, 0.4);
+      eyeG.add(sclera);
+
+      // Colored Iris
+      const iris = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), eyeIrisMat);
+      iris.position.set(0, 0, 0.02);
+      iris.scale.set(1.0, 1.2, 0.4);
+      eyeG.add(iris);
+
+      // Dark Pupil
+      const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 6), eyePupilMat);
+      pupil.position.set(isLeft ? 0.008 : -0.008, 0, 0.035);
+      eyeG.add(pupil);
+
+      // White Anime Catchlight
+      const sparkle = new THREE.Mesh(new THREE.SphereGeometry(0.012, 4, 4), eyeSparkleMat);
+      sparkle.position.set(0.015, 0.02, 0.045);
+      eyeG.add(sparkle);
+
+      return eyeG;
+    }
+
+    const leftEye = createExpressiveEye(true);
+    leftEye.position.set(-0.09, 0.9, 0.23);
     bodyGroup.add(leftEye);
 
-    const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
-    rightEye.position.set(0.09, 0.9, 0.22);
+    const rightEye = createExpressiveEye(false);
+    rightEye.position.set(0.09, 0.9, 0.23);
     bodyGroup.add(rightEye);
 
     // 5. Weapon (aiming indicator) — staff / wand / sword / scythe
@@ -159,10 +211,16 @@ export class Caster extends Entity {
     const staffGroup = weapon.group;
     bodyGroup.add(staffGroup);
 
-    // 6. Shield bubble mesh (wireframe glow sphere, hidden initially)
-    const shieldGeo = new THREE.SphereGeometry(0.6, 12, 12);
+    // 6. Cute Wizard Sleeves and Hands holding weapon
+    const handMat = new THREE.MeshStandardMaterial({ color: 0xffdbac, roughness: 0.6 });
+    const hand = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), handMat);
+    hand.position.set(0.32, 0.45, 0.18);
+    bodyGroup.add(hand);
+
+    // 7. Shield bubble mesh (wireframe glow sphere, hidden initially)
+    const shieldGeo = new THREE.SphereGeometry(0.62, 14, 14);
     const shieldMat = new THREE.MeshBasicMaterial({
-      color: 0xffffff,
+      color: 0x7be4ff,
       transparent: true,
       opacity: 0.35,
       wireframe: true
@@ -177,8 +235,11 @@ export class Caster extends Entity {
     this.name = name;
     this.team = team;
     this.isBot = isBot;
+    this.characterConfig = config || null;
     this.bodyGroup = bodyGroup;
     this.staffMesh = staffGroup;
+    this.leftEyeGroup = leftEye;
+    this.rightEyeGroup = rightEye;
     this.clothingColor = finalClothing;
     this.spellColor = finalSpell;
     this.robeMesh = robe;
@@ -494,6 +555,20 @@ export class Caster extends Entity {
 
     // Update entity physics position
     super.update(dt);
+
+    // 2b. Animate Expressive Eyes (Blinking + Shooting Squint)
+    this.blinkTimer -= dt;
+    if (this.blinkTimer <= 0) {
+      this.blinkTimer = 2.5 + Math.random() * 2.0;
+    }
+    const isBlinkingNow = this.blinkTimer < 0.12;
+    const isShootingSquint = this.shootTimer > this.getFireRateCooldown() - 0.2;
+    const eyeScaleY = isBlinkingNow ? 0.1 : isShootingSquint ? 0.45 : 1.0;
+
+    if (this.leftEyeGroup && this.rightEyeGroup) {
+      this.leftEyeGroup.scale.y = eyeScaleY;
+      this.rightEyeGroup.scale.y = eyeScaleY;
+    }
 
     // 3. Align staff and face character towards the aiming angle (if not leaping!)
     if (!this.isLeaping) {

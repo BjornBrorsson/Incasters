@@ -12,7 +12,7 @@ import { InputManager } from './InputManager';
 import { AimVisualizer } from './AimVisualizer';
 import { PALETTE, createSkyDome } from './Theme';
 import { Fx } from './Fx';
-import { DEFAULT_CONFIG, randomCharacterConfig } from '../game/CharacterConfig';
+import { DEFAULT_CONFIG, randomCharacterConfig, generateDistinctBotConfigs, BOT_ARCHETYPES } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
 import type { MatchResult } from '../game/Progression';
 import { DIFFICULTY_PRESETS } from '../game/Difficulty';
@@ -101,6 +101,12 @@ export class Game {
   private touchFireHeld = false;
   /** Touch dash button state. */
   private touchDashQueued = false;
+  /** Double-tap and flick gesture tracking for mobile dash. */
+  private lastLeftTapTime: number = 0;
+  private lastLeftTapX: number = 0;
+  private lastLeftTapY: number = 0;
+  private leftStickTouchStartTime: number = 0;
+  private leftStickHasFlickDashed: boolean = false;
 
   // Aiming visualizer & aim assist
   private aimVisualizer!: AimVisualizer;
@@ -118,6 +124,13 @@ export class Game {
   // Match-end hook (wired to local progression by main.ts)
   onMatchEnd: ((result: MatchResult) => void) | null = null;
   private matchEndFired = false;
+
+  // Solo elimination & Spectator callbacks
+  onPlayerEliminated: ((data: { rank: number; totalPlayers: number; kills: number }) => void) | null = null;
+  onSpectateChange: ((data: { name: string; aliveCount: number }) => void) | null = null;
+  isSpectating: boolean = false;
+  private spectateTargetIndex: number = 0;
+  private playerEliminationHandled: boolean = false;
 
   // Match Customizer
   playerCount: number = 8;
@@ -199,43 +212,45 @@ export class Game {
     this.camera.zoom = this.baseCameraZoom;
     this.camera.updateProjectionMatrix();
 
-    // WebGL Renderer with capped pixel ratio for smooth mobile 60fps performance
+    // WebGL Renderer with ACESFilmicToneMapping for rich, vibrant, warm cartoon lighting
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
-    // Lighting — warm fantasy daytime shading
-    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.45);
+    // Lighting — Hogwarts / Discworld warm torchlight & twilight atmosphere
+    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.55);
     this.scene.add(ambientLight);
 
-    // Hemisphere light delivers warm sky / earthy ground tones
-    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.6);
+    // Hemisphere light delivers twilight violet sky / warm sandstone ground tones
+    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.65);
     hemiLight.position.set(0, 40, 0);
     this.scene.add(hemiLight);
 
-    // Directional Shadow Casting Light — warm golden sun
-    const dirLight = new THREE.DirectionalLight(0xffe8b0, 0.9);
-    dirLight.position.set(-15, 30, 15);
+    // Directional Shadow Casting Light — warm golden castle sun
+    const dirLight = new THREE.DirectionalLight(PALETTE.sunLight, 1.05);
+    dirLight.position.set(-18, 32, 18);
     dirLight.castShadow = true;
     dirLight.shadow.mapSize.width = 1024;
     dirLight.shadow.mapSize.height = 1024;
     dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 80;
+    dirLight.shadow.camera.far = 85;
     // Stretch shadow bounds to fit orthographic arena
-    const sd = 25;
+    const sd = 26;
     dirLight.shadow.camera.left = -sd;
     dirLight.shadow.camera.right = sd;
     dirLight.shadow.camera.top = sd;
     dirLight.shadow.camera.bottom = -sd;
-    dirLight.shadow.bias = -0.0005;
+    dirLight.shadow.bias = -0.0004;
     this.scene.add(dirLight);
 
-    // Subtle warm fill light for environment depth
-    const envLight = new THREE.DirectionalLight(0xffa040, 0.15);
-    envLight.position.set(15, 20, -15);
+    // Warm torchlight fill light for environment depth
+    const envLight = new THREE.DirectionalLight(0xffa840, 0.25);
+    envLight.position.set(16, 20, -16);
     this.scene.add(envLight);
 
     // Listen to resize
@@ -284,37 +299,24 @@ export class Game {
     this.scene.add(this.player.mesh);
     this.casters.push(this.player);
 
-    // Pre-defined color pairs (robe, spell) for bots in FFA
-    const botColorPairs = [
-      { robe: 0x2e7d32, spell: 0xd4a020 }, // Forest Green + Gold
-      { robe: 0x8b2500, spell: 0x6b2fa0 }, // Crimson + Violet
-      { robe: 0x4a3080, spell: 0x58c040 }, // Deep Purple + Sage
-      { robe: 0xb07820, spell: 0xc84030 }, // Ochre + Scarlet
-      { robe: 0x1a5c8a, spell: 0xe0a020 }, // Slate Blue + Amber
-      { robe: 0x6b2fa0, spell: 0x2e7d32 }, // Violet + Forest
-      { robe: 0xc84030, spell: 0x1a5c8a }, // Scarlet + Slate
-      { robe: 0x4a7020, spell: 0x8b2500 }  // Olive + Crimson
-    ];
-
-    // Filter out pairs that match player's colors to avoid duplication
-    const filteredPairs = botColorPairs.filter(
-      p => p.robe !== this.playerRobeColor && p.spell !== this.playerSpellColor
-    );
-    const availablePairs = filteredPairs.length >= 7 ? filteredPairs : botColorPairs;
+    // Generate curated distinct archetypes for all bots (unique silhouettes & cosmetics)
+    const botConfigs = generateDistinctBotConfigs(this.playerCount - 1, this.playerConfig);
 
     // Bots
     for (let i = 1; i < this.playerCount; i++) {
       const botSp = sp[i % sp.length];
-      const colorPair = availablePairs[(i - 1) % availablePairs.length];
+      const botCfg = botConfigs[i - 1] || randomCharacterConfig(0x2e7d32, 0xd4a020);
+      const name = BOT_ARCHETYPES[(i - 1) % BOT_ARCHETYPES.length]?.name || botNames[(i - 1) % botNames.length];
+      
       const bot = new Bot(
         `bot_${i}`,
-        botNames[i - 1],
+        name,
         botSp.x + (Math.random() - 0.5) * 0.5,
         botSp.y + (Math.random() - 0.5) * 0.5,
         'GOLD',
-        colorPair.robe,
-        colorPair.spell,
-        randomCharacterConfig(colorPair.robe, colorPair.spell)
+        botCfg.robeColor,
+        botCfg.spellColor,
+        botCfg
       );
       
       // Hook bot shoot capability into game loop spawner
@@ -331,7 +333,8 @@ export class Game {
 
     // 4. Initialize active Game Mode
     this.gameModeManager.onAnnounce = (text, color) => this.fx.announce(text, color);
-    this.gameModeManager.initMode(this.scene, this.casters, this.physicsArena.powerupSpawners);
+    this.gameModeManager.onCasterDied = (killer, victim) => this.onCasterKilled(killer, victim);
+    this.gameModeManager.initMode(this.scene, this.casters, this.physicsArena.powerupSpawners, (this.physicsArena.width / 2) - 1.5);
 
     // 5. Reset power-up spawners timers
     this.powerupSpawnCooldowns = this.physicsArena.powerupSpawners.map(() => 0);
@@ -349,6 +352,9 @@ export class Game {
     this.playerComboTimer = 0;
     this.firstBlood = false;
     this.matchEndFired = false;
+    this.isSpectating = false;
+    this.spectateTargetIndex = 0;
+    this.playerEliminationHandled = false;
     this.fx.clear();
     this.cameraLookTarget.set(this.player.x, 0, this.player.y);
     this.camera.position.set(
@@ -374,18 +380,32 @@ export class Game {
     // Show touch fire/dash buttons on touch devices
     if (
       window.matchMedia('(pointer: coarse)').matches ||
-      (navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches)
+      (navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches) ||
+      window.innerWidth <= 1024
     ) {
-      const fireBtn = document.getElementById('fire-btn');
-      if (fireBtn) fireBtn.style.display = 'block';
-      const dashBtn = document.getElementById('dash-btn');
-      if (dashBtn) dashBtn.style.display = 'flex';
+      this.ensureTouchButtonsVisible();
     }
+  }
+
+  private ensureTouchButtonsVisible() {
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) fireBtn.style.display = 'block';
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) dashBtn.style.display = 'flex';
   }
 
   private setupInput() {
     // Unified keyboard + mouse + gamepad input
     this.input = new InputManager();
+
+    // Show touch controls immediately if on touch device or small screen
+    if (
+      window.matchMedia('(pointer: coarse)').matches ||
+      (navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches) ||
+      window.innerWidth <= 1024
+    ) {
+      this.ensureTouchButtonsVisible();
+    }
 
     // Touch screen / Mobile joy sticks setup
     const signal = this.eventAbortController.signal;
@@ -394,16 +414,22 @@ export class Game {
     window.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false, signal });
     window.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false, signal });
 
-    // Dash Circle mobile click listener
+    // Dash Circle & Dash Panel mobile click listeners
     const dashCircle = document.getElementById('dash-cooldown-circle');
+    const dashPanel = document.querySelector('.dash-panel');
+    const handleMobileDash = (e: Event) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.triggerPlayerDash();
+    };
+
     if (dashCircle) {
-      const handleMobileDash = (e: Event) => {
-        e.preventDefault();
-        e.stopPropagation();
-        this.triggerPlayerDash();
-      };
       dashCircle.addEventListener('touchstart', handleMobileDash, { passive: false, signal });
       dashCircle.addEventListener('click', handleMobileDash, { signal });
+    }
+    if (dashPanel) {
+      dashPanel.addEventListener('touchstart', handleMobileDash, { passive: false, signal });
+      dashPanel.addEventListener('click', handleMobileDash, { signal });
     }
 
     // Dedicated Fire button (touch)
@@ -441,6 +467,7 @@ export class Game {
       };
       dashBtn.addEventListener('touchstart', onDash, { passive: false, signal });
       dashBtn.addEventListener('mousedown', onDash, { signal });
+      dashBtn.addEventListener('click', onDash, { signal });
     }
   }
 
@@ -476,6 +503,7 @@ export class Game {
   private onTouchStart(e: TouchEvent) {
     if (!this.isPlaying) return;
     this.touchControlsActive = true;
+    this.ensureTouchButtonsVisible();
 
     for (let i = 0; i < e.changedTouches.length; i++) {
       const touch = e.changedTouches[i];
@@ -483,15 +511,32 @@ export class Game {
       // Ignore touches that land on the fire/dash buttons (they have their own handlers)
       const target = touch.target as HTMLElement | null;
       if (target && (target.id === 'fire-btn' || target.id === 'dash-btn' ||
-                     target.closest('#fire-btn') || target.closest('#dash-btn'))) {
+                     target.closest('#fire-btn') || target.closest('#dash-btn') ||
+                     target.id === 'dash-cooldown-circle' || target.closest('.dash-panel'))) {
         continue;
       }
 
       const screenWidthHalf = window.innerWidth / 2;
 
-      // Left half = movement stick
+      // Left half = movement stick + double-tap detection
       if (touch.clientX < screenWidthHalf && !this.touchJoysticks.left.active) {
         e.preventDefault();
+        const now = performance.now();
+        const timeSinceLastTap = now - this.lastLeftTapTime;
+        const distFromLastTap = Math.hypot(touch.clientX - this.lastLeftTapX, touch.clientY - this.lastLeftTapY);
+
+        if (timeSinceLastTap < 340 && distFromLastTap < 85) {
+          // Double tap to dash!
+          this.touchDashQueued = true;
+          this.lastLeftTapTime = 0;
+        } else {
+          this.lastLeftTapTime = now;
+          this.lastLeftTapX = touch.clientX;
+          this.lastLeftTapY = touch.clientY;
+        }
+
+        this.leftStickTouchStartTime = now;
+        this.leftStickHasFlickDashed = false;
         this.touchJoysticks.left.active = true;
         this.touchJoysticks.left.id = touch.identifier;
         this.touchJoysticks.left.startX = touch.clientX;
@@ -545,6 +590,13 @@ export class Game {
         }
         
         this.updateJoystickUI('left', (dx / dist) * limit, (dy / dist) * limit);
+
+        // Rapid flick gesture to dash on movement stick
+        const elapsed = performance.now() - this.leftStickTouchStartTime;
+        if (!this.leftStickHasFlickDashed && elapsed > 40 && elapsed < 220 && dist >= maxDist * 0.8) {
+          this.leftStickHasFlickDashed = true;
+          this.touchDashQueued = true;
+        }
       }
 
       if (this.touchJoysticks.right.active && touch.identifier === this.touchJoysticks.right.id) {
@@ -839,6 +891,43 @@ export class Game {
     this.remoteCasters.delete(playerId);
   }
 
+  /** Enter spectator mode following surviving bots (solo battle royale). */
+  startSpectating() {
+    this.isSpectating = true;
+    this.cycleSpectator(0);
+  }
+
+  /** Cycle spectator camera to next or previous living bot. */
+  cycleSpectator(direction: number = 1) {
+    const livingBots = this.casters.filter((c) => !c.isDead && c.id !== 'player');
+    if (livingBots.length === 0) {
+      this.isSpectating = false;
+      this.gameModeManager.endGame(this.casters);
+      return;
+    }
+    this.spectateTargetIndex = (this.spectateTargetIndex + direction + livingBots.length) % livingBots.length;
+    const target = livingBots[this.spectateTargetIndex];
+    if (target) {
+      this.onSpectateChange?.({ name: target.name, aliveCount: livingBots.length });
+    }
+  }
+
+  /** Get currently spectated caster entity. */
+  getSpectateTarget(): Caster | null {
+    const livingBots = this.casters.filter((c) => !c.isDead && c.id !== 'player');
+    if (livingBots.length === 0) return null;
+    if (this.spectateTargetIndex >= livingBots.length) {
+      this.spectateTargetIndex = 0;
+    }
+    return livingBots[this.spectateTargetIndex] || null;
+  }
+
+  /** End the solo battle immediately while spectating. */
+  endBattleImmediately() {
+    this.isSpectating = false;
+    this.gameModeManager.endGame(this.casters);
+  }
+
   /** Apply all remote player inputs to their caster entities (host mode). */
   private applyRemoteInputs() {
     this.remoteInputs.forEach((input, playerId) => {
@@ -998,21 +1087,19 @@ export class Game {
       musicDanger
     );
 
-    // Camera follow player using the fixed offset angle (smooth lerp).
-    // The view remains anchored to the player instead of snapping toward each
-    // aim change, while a guided shot near the frame edge smoothly widens the
-    // visible area until the projectile is safely back inside the viewport.
-    if (!this.player.isDead) {
-      // Smooth player tracking keeps movement responsive without changing camera orientation abruptly.
+    // Camera follow player or spectated bot using the fixed offset angle (smooth lerp).
+    const followTarget = !this.player.isDead ? this.player : this.isSpectating ? this.getSpectateTarget() : null;
+    if (followTarget) {
+      // Smooth tracking keeps movement responsive without changing camera orientation abruptly.
       const followAmount = 1 - Math.exp(-4 * dt);
-      const targetCamX = this.player.x + this.camOffset.x;
-      const targetCamZ = this.player.y + this.camOffset.z;
+      const targetCamX = followTarget.x + this.camOffset.x;
+      const targetCamZ = followTarget.y + this.camOffset.z;
 
       this.camera.position.x += (targetCamX - this.camera.position.x) * followAmount;
       this.camera.position.z += (targetCamZ - this.camera.position.z) * followAmount;
       this.camera.position.y += (this.camOffset.y - this.camera.position.y) * followAmount;
-      this.cameraLookTarget.x += (this.player.x - this.cameraLookTarget.x) * followAmount;
-      this.cameraLookTarget.z += (this.player.y - this.cameraLookTarget.z) * followAmount;
+      this.cameraLookTarget.x += (followTarget.x - this.cameraLookTarget.x) * followAmount;
+      this.cameraLookTarget.z += (followTarget.y - this.cameraLookTarget.z) * followAmount;
 
       const lookTarget = this.cameraLookTarget.clone();
 
@@ -1034,7 +1121,7 @@ export class Game {
 
       this.camera.updateMatrixWorld();
       let targetZoom = this.baseCameraZoom;
-      if (this.playerGuidedProjectile && !this.playerGuidedProjectile.isDead) {
+      if (!this.player.isDead && this.playerGuidedProjectile && !this.playerGuidedProjectile.isDead) {
         const projected = new THREE.Vector3(
           this.playerGuidedProjectile.x,
           0.5,
@@ -1052,6 +1139,12 @@ export class Game {
       const zoomRate = targetZoom < this.camera.zoom ? 4.5 : 1.6;
       this.camera.zoom += (targetZoom - this.camera.zoom) * (1 - Math.exp(-zoomRate * dt));
       this.camera.updateProjectionMatrix();
+
+      // Keep spectator HUD info refreshed
+      if (this.isSpectating) {
+        const livingBots = this.casters.filter((c) => !c.isDead && c.id !== 'player');
+        this.onSpectateChange?.({ name: followTarget.name, aliveCount: livingBots.length });
+      }
     }
 
     // 9. Update Aim Trajectory Guide & Target Reticle
@@ -1229,9 +1322,22 @@ export class Game {
       rawMoveY = km.y;
     }
 
-    const worldMove = screenToWorldIso(rawMoveX, rawMoveY);
+    let worldMoveX: number;
+    let worldMoveY: number;
+
+    const moveMag = Math.hypot(rawMoveX, rawMoveY);
+    if (moveMag > 0.12) {
+      const wm = screenToWorldIso(rawMoveX, rawMoveY);
+      worldMoveX = wm.x;
+      worldMoveY = wm.y;
+    } else {
+      // If stationary, dash toward player facing aim angle
+      worldMoveX = Math.cos(this.player.aimAngle);
+      worldMoveY = Math.sin(this.player.aimAngle);
+    }
+
     const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
-    this.player.dash(worldMove.x, worldMove.y);
+    this.player.dash(worldMoveX, worldMoveY);
     if (canDash) {
       this.input.rumble(90, 0.25, 0.5);
       if (this.netMode === 'host') this.onNetEvent?.({ kind: 'dash', data: { casterId: this.player.id } });
@@ -1338,6 +1444,16 @@ export class Game {
       this.registerPlayerKill();
     } else if (victim.id === 'player') {
       this.fx.announce('YOU WERE ELIMINATED', '#ff5555');
+      if (!this.playerEliminationHandled && this.netMode === 'offline' && this.gameModeManager.type === GameModeType.BATTLE_ROYALE) {
+        this.playerEliminationHandled = true;
+        const aliveBots = this.casters.filter((c) => !c.isDead && c.id !== 'player');
+        const rank = aliveBots.length + 1;
+        this.onPlayerEliminated?.({
+          rank,
+          totalPlayers: this.playerCount,
+          kills: this.player.score
+        });
+      }
     }
   }
 
@@ -1759,15 +1875,19 @@ export class Game {
       }
     }
 
-    // Dash Cooldown HUD
+    // Dash Cooldown HUD & Mobile Dash Button state
     const dashOverlay = document.getElementById('dash-cooldown-overlay');
+    const dashBtn = document.getElementById('dash-btn');
+    const isCooling = this.player.dashCooldownTimer > 0;
+    const percent = isCooling ? (this.player.dashCooldownTimer / this.player.dashCooldown) * 100 : 0;
+
     if (dashOverlay) {
-      if (this.player.dashCooldownTimer > 0) {
-        const percent = (this.player.dashCooldownTimer / this.player.dashCooldown) * 100;
-        dashOverlay.style.height = `${percent}%`;
-      } else {
-        dashOverlay.style.height = '0%';
-      }
+      dashOverlay.style.height = `${percent}%`;
+    }
+    if (dashBtn) {
+      dashBtn.classList.toggle('cooling', isCooling);
+      dashBtn.classList.toggle('ready', !isCooling);
+      dashBtn.style.setProperty('--dash-cd', `${percent}%`);
     }
 
     // Gamepad connection indicator

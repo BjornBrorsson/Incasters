@@ -44,24 +44,40 @@ export class Projectile extends Entity {
   ) {
     const color = stats.color;
     
-    // Create glowing projectile visual group
+    // Create glowing wand-spark projectile visual group
     const group = new THREE.Group();
     
-    // Core sphere
-    const geometry = new THREE.SphereGeometry(0.2, 8, 8);
+    // Core white-hot spark sphere
+    const geometry = new THREE.SphereGeometry(0.18, 8, 8);
     const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const core = new THREE.Mesh(geometry, material);
     group.add(core);
 
-    // Glowing envelope
-    const glowGeo = new THREE.SphereGeometry(0.35, 8, 8);
+    // Glowing elemental aura
+    const glowGeo = new THREE.SphereGeometry(0.32, 10, 8);
     const glowMat = new THREE.MeshBasicMaterial({
       color: color,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.55
     });
     const glow = new THREE.Mesh(glowGeo, glowMat);
     group.add(glow);
+
+    // Orbiting celestial stardust ring (Discworld / Pokemon star spark)
+    const ringGeo = new THREE.RingGeometry(0.24, 0.36, 12);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xffe259,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.75
+    });
+    const starRing = new THREE.Mesh(ringGeo, ringMat);
+    starRing.rotation.x = Math.PI / 3;
+    group.add(starRing);
+
+    // Dynamic projectile point light casting light on arena walls
+    const pLight = new THREE.PointLight(color, 1.3, 4.0);
+    group.add(pLight);
 
     super(x, y, 0.25, group);
     
@@ -77,7 +93,7 @@ export class Projectile extends Entity {
     this.vx = Math.cos(angle) * stats.speed;
     this.vy = Math.sin(angle) * stats.speed;
 
-    this.mesh.position.y = 0.5; // Fly height
+    this.mesh.position.y = 0.55; // Fly height
   }
 
   update(dt: number) {

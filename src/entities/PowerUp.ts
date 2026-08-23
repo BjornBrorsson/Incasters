@@ -23,35 +23,201 @@ export const POWERUP_COLORS: Record<PowerUpType, number> = {
   WALLRUN: 0x00e0b0 // Teal (hugs walls)
 };
 
+export const POWERUP_NAMES: Record<PowerUpType, string> = {
+  BOUNCE: 'BOUNCE',
+  PIERCE: 'PIERCE',
+  SPLIT: 'SPLIT',
+  HASTE: 'HASTE',
+  SHIELD: 'SHIELD',
+  FREEZE: 'FREEZE',
+  WALLRUN: 'WALL-RUN'
+};
+
 export const POWERUP_SYMBOLS: Record<PowerUpType, string> = {
-  BOUNCE: '↻',
-  PIERCE: '➤',
-  SPLIT: 'Y',
-  HASTE: '»',
-  SHIELD: '⬡',
-  FREEZE: '✦',
-  WALLRUN: '∿'
+  BOUNCE: '⚡↪',
+  PIERCE: '🏹',
+  SPLIT: 'ᛦ',
+  HASTE: '⚡',
+  SHIELD: '🛡️',
+  FREEZE: '❄️',
+  WALLRUN: '〰️'
 };
 
 function createSymbolTexture(type: PowerUpType, color: number) {
   const canvas = document.createElement('canvas');
-  canvas.width = 128;
-  canvas.height = 128;
-  const context = canvas.getContext('2d');
-  if (context) {
+  canvas.width = 256;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
     const cssColor = `#${color.toString(16).padStart(6, '0')}`;
-    context.fillStyle = 'rgba(5, 8, 18, 0.88)';
-    context.beginPath();
-    context.arc(64, 64, 52, 0, Math.PI * 2);
-    context.fill();
-    context.strokeStyle = cssColor;
-    context.lineWidth = 8;
-    context.stroke();
-    context.fillStyle = '#ffffff';
-    context.font = '900 72px Outfit, Arial, sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(POWERUP_SYMBOLS[type], 64, 66);
+    
+    // 1. Outer circular badge background
+    ctx.fillStyle = 'rgba(12, 16, 28, 0.92)';
+    ctx.beginPath();
+    ctx.arc(128, 128, 116, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glowing border ring
+    ctx.strokeStyle = cssColor;
+    ctx.lineWidth = 10;
+    ctx.shadowColor = cssColor;
+    ctx.shadowBlur = 18;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // 2. Custom Icon Graphics (unmistakable at any distance)
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 8;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    if (type === 'BOUNCE') {
+      // Wall on right
+      ctx.fillStyle = cssColor;
+      ctx.fillRect(180, 50, 16, 80);
+      // Arrow bouncing off wall
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(60, 115);
+      ctx.lineTo(170, 90);
+      ctx.lineTo(60, 65);
+      ctx.stroke();
+      // Arrowhead
+      ctx.beginPath();
+      ctx.moveTo(85, 50);
+      ctx.lineTo(60, 65);
+      ctx.lineTo(85, 80);
+      ctx.stroke();
+    } else if (type === 'SPLIT') {
+      // 3-way spread arrows
+      ctx.strokeStyle = cssColor;
+      ctx.beginPath();
+      ctx.moveTo(128, 135);
+      ctx.lineTo(128, 55); // center
+      ctx.moveTo(128, 135);
+      ctx.lineTo(68, 70); // left
+      ctx.moveTo(128, 135);
+      ctx.lineTo(188, 70); // right
+      ctx.stroke();
+      // 3 arrow tips
+      ctx.fillStyle = '#ffffff';
+      [ {x: 128, y: 50}, {x: 65, y: 65}, {x: 191, y: 65} ].forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    } else if (type === 'PIERCE') {
+      // Target ring pierced by central spear
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(128, 90, 30, 0, Math.PI * 2);
+      ctx.stroke();
+      // Piercing spear
+      ctx.strokeStyle = cssColor;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(50, 130);
+      ctx.lineTo(206, 50);
+      ctx.stroke();
+      // Arrowhead
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(215, 45);
+      ctx.lineTo(180, 48);
+      ctx.lineTo(200, 75);
+      ctx.closePath();
+      ctx.fill();
+    } else if (type === 'HASTE') {
+      // Dual lightning bolts / speed wings
+      ctx.fillStyle = cssColor;
+      ctx.beginPath();
+      ctx.moveTo(135, 45);
+      ctx.lineTo(95, 95);
+      ctx.lineTo(130, 95);
+      ctx.lineTo(120, 140);
+      ctx.lineTo(165, 85);
+      ctx.lineTo(130, 85);
+      ctx.closePath();
+      ctx.fill();
+      // Speed streaks
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(60, 75); ctx.lineTo(90, 75);
+      ctx.moveTo(50, 95); ctx.lineTo(85, 95);
+      ctx.moveTo(65, 115); ctx.lineTo(100, 115);
+      ctx.stroke();
+    } else if (type === 'SHIELD') {
+      // Hexagonal barrier shield
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.strokeStyle = cssColor;
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(128, 48);
+      ctx.lineTo(185, 75);
+      ctx.lineTo(185, 115);
+      ctx.lineTo(128, 142);
+      ctx.lineTo(71, 115);
+      ctx.lineTo(71, 75);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Inner cross/star
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(128, 65); ctx.lineTo(128, 125);
+      ctx.moveTo(98, 95); ctx.lineTo(158, 95);
+      ctx.stroke();
+    } else if (type === 'FREEZE') {
+      // 6-point snowflake crystal
+      ctx.strokeStyle = cssColor;
+      ctx.lineWidth = 8;
+      for (let i = 0; i < 3; i++) {
+        const rad = (i * Math.PI) / 3;
+        ctx.beginPath();
+        ctx.moveTo(128 - Math.cos(rad) * 45, 92 - Math.sin(rad) * 45);
+        ctx.lineTo(128 + Math.cos(rad) * 45, 92 + Math.sin(rad) * 45);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(128, 92, 9, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (type === 'WALLRUN') {
+      // Wall block + hugging wave arrow
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+      ctx.fillRect(80, 55, 96, 75);
+      ctx.strokeStyle = cssColor;
+      ctx.lineWidth = 10;
+      ctx.beginPath();
+      ctx.moveTo(55, 130);
+      ctx.lineTo(55, 55);
+      ctx.lineTo(195, 55);
+      ctx.stroke();
+      // Arrowhead
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(205, 55);
+      ctx.lineTo(180, 42);
+      ctx.lineTo(180, 68);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    // 3. Bold Text Pill Label at bottom
+    ctx.fillStyle = cssColor;
+    ctx.beginPath();
+    ctx.roundRect(38, 168, 180, 48, 24);
+    ctx.fill();
+
+    ctx.fillStyle = '#0a0d18';
+    ctx.font = '900 24px Outfit, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(POWERUP_NAMES[type], 128, 192);
   }
   const texture = new THREE.CanvasTexture(canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -98,15 +264,23 @@ export class PowerUp extends Entity {
     const symbolTexture = createSymbolTexture(type, color);
     const symbolMaterial = new THREE.SpriteMaterial({ map: symbolTexture, transparent: true, depthWrite: false });
     const symbol = new THREE.Sprite(symbolMaterial);
-    symbol.position.y = 0.65;
-    symbol.scale.set(0.72, 0.72, 0.72);
+    symbol.position.y = 0.82;
+    symbol.scale.set(0.92, 0.92, 0.92);
     group.add(symbol);
 
-    super(x, y, 0.4, group);
+    // Ground aura ring
+    const groundRingGeo = new THREE.RingGeometry(0.45, 0.7, 16);
+    const groundRingMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
+    const groundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+    groundRing.rotation.x = Math.PI / 2;
+    groundRing.position.y = -0.45;
+    group.add(groundRing);
+
+    super(x, y, 0.45, group);
     this.type = type;
     this.symbolTexture = symbolTexture;
     this.symbolMaterial = symbolMaterial;
-    this.mesh.position.y = 0.5; // Hover height
+    this.mesh.position.y = 0.55; // Hover height
   }
 
   update(dt: number) {

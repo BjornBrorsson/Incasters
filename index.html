@@ -82,16 +82,24 @@
           <h3>SELECT ARENA MAP</h3>
           <div class="map-selector">
             <button id="btn-map-arena" class="map-btn active" data-map="ARENA">
-              <span class="map-title">Neon Arena</span>
-              <span class="map-desc">Medium size (36x36). Standard obstacles and diagonal jump pads.</span>
+              <span class="map-title">Unseen Courtyard</span>
+              <span class="map-desc">Medium size (36x36). Castle cobblestones, potion cauldrons & jump pads.</span>
             </button>
             <button id="btn-map-colosseum" class="map-btn" data-map="COLOSSEUM">
-              <span class="map-title">Neon Colosseum</span>
-              <span class="map-desc">Large size (48x48). Open center, sliding security doors & corner jump pads.</span>
+              <span class="map-title">Dueling Amphitheater</span>
+              <span class="map-desc">Large size (48x48). Open ring, sliding portcullis gates & corner jump pads.</span>
             </button>
             <button id="btn-map-chamber" class="map-btn" data-map="CHAMBER">
-              <span class="map-title">Neon Chamber</span>
-              <span class="map-desc">Small size (24x24). Tight labyrinth corridors and moving cross gates.</span>
+              <span class="map-title">Forbidden Arcanum</span>
+              <span class="map-desc">Small size (24x24). Tight library partitions, moving bookcase walls & power vaults.</span>
+            </button>
+            <button id="btn-map-observatory" class="map-btn" data-map="OBSERVATORY">
+              <span class="map-title">Astral Observatory</span>
+              <span class="map-desc">Spire (42x42). Starfield floor, rotating astrolabe prisms & instant warp gates.</span>
+            </button>
+            <button id="btn-map-catacombs" class="map-btn" data-map="CATACOMBS">
+              <span class="map-title">Alchemist's Undercroft</span>
+              <span class="map-desc">Dungeon (38x38). Mossy flagstones, volatile potion vats & ricochet corridors.</span>
             </button>
           </div>
         </div>
@@ -129,41 +137,88 @@
         </div>
 
         <div class="menu-section">
-          <h3>LAN MULTIPLAYER</h3>
-          <div class="lan-controls">
-            <button id="btn-lan-host" class="lan-btn">Host Game</button>
-            <button id="btn-lan-join" class="lan-btn">Join Game</button>
+          <h3>MULTIPLAYER</h3>
+          <div class="multiplayer-tabs">
+            <button id="tab-online" class="multi-tab-btn active" type="button">🌐 Serverless Online (P2P)</button>
+            <button id="tab-lan" class="multi-tab-btn" type="button">🏠 Local Network (LAN)</button>
           </div>
-          <div id="lan-host-panel" class="lan-panel" style="display:none;">
-            <div class="lan-field">
-              <label>Server Port</label>
-              <input id="lan-host-port" type="text" value="7070" />
+
+          <!-- ONLINE MULTIPLAYER (P2P WebRTC) -->
+          <div id="online-mp-container" class="mp-subcontainer">
+            <div class="lan-controls">
+              <button id="btn-p2p-host" class="lan-btn">Create Room</button>
+              <button id="btn-p2p-join" class="lan-btn">Join Room</button>
             </div>
-            <div id="lan-room-info" class="lan-room-info">
-              <p class="lan-status">Start the server, then share your IP with friends on the same network.</p>
-              <div id="lan-player-list" class="lan-player-list"></div>
+            <div id="p2p-host-panel" class="lan-panel" style="display:none;">
+              <div class="room-code-display">
+                <span class="room-code-label">ROOM CODE:</span>
+                <span id="p2p-room-code" class="room-code-value">------</span>
+                <button id="btn-copy-code" class="copy-btn" title="Copy Code">📋 Code</button>
+                <button id="btn-copy-link" class="copy-btn" title="Copy Invite Link">🔗 Invite Link</button>
+              </div>
+              <p class="lan-status">Share this room code or link. Up to 8 players can join directly from any browser or device!</p>
+              <div id="p2p-host-player-list" class="lan-player-list"></div>
+              <button id="btn-p2p-start-hosting" class="lan-action-btn">Open Online Room</button>
             </div>
-            <button id="btn-lan-start-server" class="lan-action-btn">Start LAN Server</button>
+            <div id="p2p-join-panel" class="lan-panel" style="display:none;">
+              <div class="lan-field">
+                <label for="p2p-join-code">Enter 4-6 Letter Room Code</label>
+                <input id="p2p-join-code" type="text" placeholder="e.g. 7K9M" maxlength="8" autocomplete="off" autocorrect="off" autocapitalize="characters" />
+              </div>
+              <div id="p2p-join-status" class="lan-status"></div>
+              <button id="btn-p2p-connect" class="lan-action-btn">Join Room</button>
+            </div>
+            <div id="p2p-lobby" class="lan-lobby" style="display:none;">
+              <div class="lobby-header">
+                <h4>ONLINE LOBBY</h4>
+                <div class="lobby-code-badge">ROOM: <strong id="lobby-room-code">------</strong></div>
+              </div>
+              <div id="p2p-lobby-players" class="lan-player-list"></div>
+              <div class="lan-lobby-actions">
+                <button id="btn-p2p-ready" class="lan-action-btn">Ready</button>
+                <button id="btn-p2p-start-match" class="lan-action-btn success" style="display:none;">Start Match</button>
+                <button id="btn-p2p-leave" class="lan-action-btn danger">Leave</button>
+              </div>
+            </div>
           </div>
-          <div id="lan-join-panel" class="lan-panel" style="display:none;">
-            <div class="lan-field">
-              <label>Host IP Address</label>
-              <input id="lan-join-ip" type="text" placeholder="e.g. 192.168.1.100" />
+
+          <!-- LAN MULTIPLAYER (Local Server) -->
+          <div id="lan-mp-container" class="mp-subcontainer" style="display:none;">
+            <div class="lan-controls">
+              <button id="btn-lan-host" class="lan-btn">Host LAN</button>
+              <button id="btn-lan-join" class="lan-btn">Join LAN</button>
             </div>
-            <div class="lan-field">
-              <label>Port</label>
-              <input id="lan-join-port" type="text" value="7070" />
+            <div id="lan-host-panel" class="lan-panel" style="display:none;">
+              <div class="lan-field">
+                <label>Server Port</label>
+                <input id="lan-host-port" type="text" value="7070" />
+              </div>
+              <div id="lan-room-info" class="lan-room-info">
+                <p class="lan-status">Start the local server, then share your LAN IP with friends.</p>
+                <div id="lan-player-list" class="lan-player-list"></div>
+              </div>
+              <button id="btn-lan-start-server" class="lan-action-btn">Start LAN Server</button>
             </div>
-            <div id="lan-join-status" class="lan-status"></div>
-            <button id="btn-lan-connect" class="lan-action-btn">Connect</button>
-          </div>
-          <div id="lan-lobby" class="lan-lobby" style="display:none;">
-            <h4>LOBBY</h4>
-            <div id="lan-lobby-players" class="lan-player-list"></div>
-            <div class="lan-lobby-actions">
-              <button id="btn-lan-ready" class="lan-action-btn">Ready</button>
-              <button id="btn-lan-start-match" class="lan-action-btn" style="display:none;">Start Match</button>
-              <button id="btn-lan-leave" class="lan-action-btn danger">Leave</button>
+            <div id="lan-join-panel" class="lan-panel" style="display:none;">
+              <div class="lan-field">
+                <label>Host IP Address</label>
+                <input id="lan-join-ip" type="text" placeholder="e.g. 192.168.1.100" />
+              </div>
+              <div class="lan-field">
+                <label>Port</label>
+                <input id="lan-join-port" type="text" value="7070" />
+              </div>
+              <div id="lan-join-status" class="lan-status"></div>
+              <button id="btn-lan-connect" class="lan-action-btn">Connect</button>
+            </div>
+            <div id="lan-lobby" class="lan-lobby" style="display:none;">
+              <h4>LAN LOBBY</h4>
+              <div id="lan-lobby-players" class="lan-player-list"></div>
+              <div class="lan-lobby-actions">
+                <button id="btn-lan-ready" class="lan-action-btn">Ready</button>
+                <button id="btn-lan-start-match" class="lan-action-btn" style="display:none;">Start Match</button>
+                <button id="btn-lan-leave" class="lan-action-btn danger">Leave</button>
+              </div>
             </div>
           </div>
         </div>
@@ -295,10 +350,36 @@
           <span class="gp-text">Controller</span>
         </div>
 
+        <!-- Spectator HUD Bar (Bottom-Center when spectating) -->
+        <div id="spectator-hud" class="spectator-hud glass-panel-light" style="display: none;">
+          <button id="btn-spec-prev" class="spec-nav-btn" aria-label="Previous Bot">◀</button>
+          <div class="spec-info">
+            <span class="spec-tag">SPECTATING</span>
+            <span id="spec-target-name" class="spec-name">Glitch</span>
+            <span id="spec-alive-count" class="spec-count">(4 Casters Left)</span>
+          </div>
+          <button id="btn-spec-next" class="spec-nav-btn" aria-label="Next Bot">▶</button>
+          <button id="btn-spec-end" class="spec-action-btn">SKIP TO END</button>
+          <button id="btn-spec-menu" class="spec-action-btn secondary">MENU</button>
+        </div>
+
       </div>
 
       <div id="countdown-overlay" class="countdown-overlay" aria-live="assertive" aria-atomic="true">
         <span id="countdown-text"></span>
+      </div>
+
+      <!-- SOLO ELIMINATION OVERLAY -->
+      <div id="elimination-overlay" class="gameover-overlay glass-panel" style="display: none;">
+        <h2 class="gameover-title" style="color: #ff5a6e;">ELIMINATED</h2>
+        <p id="elimination-rank" class="gameover-winner-text">Finished #5 of 8 Casters</p>
+        <div id="elimination-summary" class="match-summary"></div>
+
+        <div class="gameover-buttons">
+          <button id="btn-elim-restart" class="play-btn">PLAY AGAIN</button>
+          <button id="btn-elim-spectate" class="play-btn tertiary">SPECTATE BATTLE</button>
+          <button id="btn-elim-menu" class="play-btn secondary">BACK TO MENU</button>
+        </div>
       </div>
 
       <!-- GAME OVER SCREEN OVERLAY -->
@@ -330,7 +411,7 @@
       <button id="fire-btn" class="fire-btn" aria-label="Fire"></button>
 
       <!-- DASH BUTTON (touch) -->
-      <button id="dash-btn" class="dash-btn" aria-label="Dash">DASH</button>
+      <button id="dash-btn" class="dash-btn ready" aria-label="Dash">⚡ DASH</button>
 
     </div>
 

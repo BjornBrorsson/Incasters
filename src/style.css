@@ -678,26 +678,35 @@ body {
 /* DEDICATED FIRE BUTTON (touch) */
 .fire-btn {
   position: absolute;
-  bottom: 30px;
-  right: 130px;
-  width: 72px;
-  height: 72px;
+  bottom: 24px;
+  right: 116px;
+  width: 76px;
+  height: 76px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(255, 80, 40, 0.85), rgba(180, 30, 10, 0.7));
-  border: 3px solid rgba(255, 120, 60, 0.5);
-  box-shadow: 0 0 20px rgba(255, 60, 20, 0.4), inset 0 2px 8px rgba(255, 200, 100, 0.3);
+  background: radial-gradient(circle at 35% 35%, rgba(255, 90, 45, 0.9), rgba(175, 25, 10, 0.78));
+  border: 3px solid rgba(255, 140, 70, 0.6);
+  box-shadow: 0 0 22px rgba(255, 70, 25, 0.45), inset 0 2px 10px rgba(255, 210, 120, 0.35);
   color: #fff;
   font-family: 'Outfit', sans-serif;
   font-weight: 800;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   letter-spacing: 0.05em;
   cursor: pointer;
   display: none;
+  align-items: center;
+  justify-content: center;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
   z-index: 100;
-  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+
+/* Expanded invisible touch hitbox */
+.fire-btn::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
 }
 
 .fire-btn::before {
@@ -707,8 +716,8 @@ body {
 .fire-btn:active,
 .fire-btn.pressed {
   transform: scale(0.92);
-  box-shadow: 0 0 30px rgba(255, 100, 40, 0.6), inset 0 2px 12px rgba(255, 230, 150, 0.5);
-  background: radial-gradient(circle at 35% 35%, rgba(255, 120, 60, 0.95), rgba(200, 50, 20, 0.85));
+  box-shadow: 0 0 32px rgba(255, 110, 45, 0.7), inset 0 2px 14px rgba(255, 240, 160, 0.6);
+  background: radial-gradient(circle at 35% 35%, rgba(255, 130, 70, 0.98), rgba(210, 55, 20, 0.9));
 }
 
 .fire-btn.empty {
@@ -720,32 +729,74 @@ body {
 /* DASH BUTTON (touch) */
 .dash-btn {
   position: absolute;
-  bottom: 120px;
-  right: 40px;
-  width: 56px;
-  height: 56px;
+  bottom: 28px;
+  right: 26px;
+  width: 70px;
+  height: 70px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 35%, rgba(80, 180, 255, 0.8), rgba(20, 80, 160, 0.65));
-  border: 2px solid rgba(100, 200, 255, 0.4);
-  box-shadow: 0 0 15px rgba(60, 160, 255, 0.3);
+  background: radial-gradient(circle at 35% 35%, rgba(40, 190, 255, 0.92), rgba(15, 90, 180, 0.8));
+  border: 3px solid rgba(100, 220, 255, 0.65);
+  box-shadow: 0 0 20px rgba(0, 190, 255, 0.5), inset 0 2px 10px rgba(200, 245, 255, 0.4);
   color: #fff;
   font-family: 'Outfit', sans-serif;
-  font-weight: 700;
-  font-size: 0.65rem;
+  font-weight: 800;
+  font-size: 0.75rem;
   letter-spacing: 0.05em;
   cursor: pointer;
   display: none;
+  align-items: center;
+  justify-content: center;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
   z-index: 100;
-  transition: transform 0.08s ease;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, filter 0.15s ease, opacity 0.15s ease;
+}
+
+/* Expanded invisible touch hitbox */
+.dash-btn::after {
+  content: '';
+  position: absolute;
+  inset: -14px;
+}
+
+.dash-btn.ready {
+  animation: dash-ready-pulse 2.2s ease-in-out infinite;
+}
+
+@keyframes dash-ready-pulse {
+  0%, 100% {
+    box-shadow: 0 0 18px rgba(0, 200, 255, 0.5), inset 0 2px 10px rgba(200, 245, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 28px rgba(0, 230, 255, 0.85), inset 0 2px 14px rgba(220, 250, 255, 0.7);
+    transform: scale(1.03);
+  }
+}
+
+.dash-btn.cooling {
+  opacity: 0.42;
+  filter: grayscale(0.65);
+  transform: scale(0.94);
+  box-shadow: 0 0 6px rgba(0, 150, 255, 0.2);
 }
 
 .dash-btn:active,
 .dash-btn.pressed {
-  transform: scale(0.9);
-  box-shadow: 0 0 25px rgba(80, 200, 255, 0.5);
+  transform: scale(0.91);
+  box-shadow: 0 0 35px rgba(0, 240, 255, 0.8), inset 0 2px 14px rgba(255, 255, 255, 0.8);
+}
+
+/* DASH PANEL (HUD Cooldown widget) clickable */
+.dash-panel {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.dash-panel:active .dash-circle {
+  transform: scale(0.92);
 }
 
 /* Responsive adjustments */
@@ -801,15 +852,17 @@ body {
   }
 }
 
-@media (pointer: coarse) {
-  .fire-btn {
-    right: max(22px, env(safe-area-inset-right));
-    bottom: max(22px, env(safe-area-inset-bottom));
+@media (pointer: coarse), (max-width: 1024px) {
+  .dash-btn {
+    display: flex;
+    right: max(20px, env(safe-area-inset-right));
+    bottom: max(24px, env(safe-area-inset-bottom));
   }
 
-  .dash-btn {
-    right: max(30px, env(safe-area-inset-right));
-    bottom: calc(max(22px, env(safe-area-inset-bottom)) + 88px);
+  .fire-btn {
+    display: flex;
+    right: calc(max(20px, env(safe-area-inset-right)) + 84px);
+    bottom: max(20px, env(safe-area-inset-bottom));
   }
 
   .dash-panel {
@@ -1759,3 +1812,224 @@ body {
     width: calc(100% - 24px);
   }
 }
+
+/* ==========================================================================
+   Serverless Online Multiplayer (P2P), Spectator HUD, and Elimination Dialog
+   ========================================================================== */
+
+.multiplayer-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.multi-tab-btn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: 'Outfit', sans-serif;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.multi-tab-btn:hover {
+  background: rgba(100, 200, 255, 0.08);
+  color: #fff;
+  border-color: rgba(100, 200, 255, 0.3);
+}
+
+.multi-tab-btn.active {
+  background: rgba(100, 200, 255, 0.16);
+  border-color: #64c8ff;
+  color: #fff;
+  box-shadow: 0 0 12px rgba(100, 200, 255, 0.25);
+}
+
+.room-code-display {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(100, 200, 255, 0.08);
+  border: 1px solid rgba(100, 200, 255, 0.25);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.room-code-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.05em;
+}
+
+.room-code-value {
+  font-family: 'Outfit', monospace;
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #ffd23d;
+  letter-spacing: 2px;
+}
+
+.copy-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.copy-btn:hover {
+  background: rgba(255, 210, 61, 0.2);
+  border-color: #ffd23d;
+  color: #ffd23d;
+}
+
+.lobby-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.lobby-code-badge {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.lobby-code-badge strong {
+  color: #ffd23d;
+  letter-spacing: 1px;
+}
+
+.lan-action-btn.success {
+  background: rgba(57, 255, 20, 0.15);
+  border-color: rgba(57, 255, 20, 0.5);
+  color: #39ff14;
+}
+
+.lan-action-btn.success:hover {
+  background: rgba(57, 255, 20, 0.28);
+  box-shadow: 0 0 15px rgba(57, 255, 20, 0.35);
+}
+
+.play-btn.tertiary {
+  background: linear-gradient(135deg, #1a4d8c, #0d274d);
+  border-color: rgba(100, 200, 255, 0.4);
+  color: #64c8ff;
+}
+
+.play-btn.tertiary:hover {
+  box-shadow: 0 0 20px rgba(100, 200, 255, 0.4);
+  border-color: #64c8ff;
+}
+
+/* Spectator HUD Bar */
+.spectator-hud {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-radius: 30px;
+  z-index: 50;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(100, 200, 255, 0.25);
+  background: rgba(10, 16, 32, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.spec-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 140px;
+}
+
+.spec-tag {
+  font-size: 0.55rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #64c8ff;
+}
+
+.spec-name {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 800;
+  color: #ffffff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+
+.spec-count {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.spec-nav-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.spec-nav-btn:hover {
+  background: rgba(100, 200, 255, 0.25);
+  border-color: #64c8ff;
+  transform: scale(1.1);
+}
+
+.spec-action-btn {
+  background: rgba(255, 210, 61, 0.15);
+  border: 1px solid rgba(255, 210, 61, 0.4);
+  color: #ffd23d;
+  padding: 6px 12px;
+  border-radius: 18px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.spec-action-btn:hover {
+  background: rgba(255, 210, 61, 0.3);
+  box-shadow: 0 0 12px rgba(255, 210, 61, 0.4);
+}
+
+.spec-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.spec-action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+

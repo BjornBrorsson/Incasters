@@ -6,7 +6,7 @@
 [![Three.js](https://img.shields.io/badge/Three.js-r160+-black.svg)](https://threejs.org/)
 [![Capacitor](https://img.shields.io/badge/Capacitor-7.x-119EFF.svg)](https://capacitorjs.com/)
 
-> **Incasters** is a fast-paced 3D isometric arena battler and curved-shot shooter inspired by the Stadia-exclusive *Outcasters*. Battle against intelligent bots or local friends in vibrant neon arenas, curving your magical spells in mid-air around walls and hazards!
+> **Incasters** is a fast-paced 3D isometric arena battler and curved-shot shooter blending the trick-shot combat of *Outcasters* with a whimsical art style inspired by **Discworld**, **Hogwarts**, and **Pokémon**. Battle against intelligent bots, local friends over LAN, or online players worldwide using serverless WebRTC room codes!
 
 ---
 
@@ -32,16 +32,34 @@
 - **Smart Aim Assist:** Gentle magnetic lock for smooth, responsive twin-stick combat on mobile and gamepads.
 
 ### 🎮 Game Modes
-- 👑 **Battle Royale (Last Caster Standing):** Outlast all other wizards as the shrinking Ring of Doom closes in.
-- ⚔️ **Team Battle (4v4 TDM):** Team deathmatch with high-contrast red vs. blue robes; first to 10 kills wins.
-- 🪙 **Gold Rush:** Collect glowing gold coins across the arena and bank them in the central portal (first to 50 coins wins).
+- 👑 **Battle Royale (Last Caster Standing):** Outlast all other wizards as the shrinking *Octarine* Arcane Seal closes in.
+- ⚔️ **Team Battle (4v4 TDM):** Collegiate deathmatch (Scarlet vs. Sapphire houses); first to 10 kills wins.
+- 🪙 **Gold Rush:** Collect glowing gold Galleons across the courtyard and deposit them into the ancient Bank Vault.
+- 👁️ **Instant Elimination & Spectator Mode:** Dying early immediately presents your final rank and rewards, with options to instantly play again or smoothly spectate surviving bots.
 
-### 🏟️ Interactive Arenas & Hazards
-- **3 Distinct Maps:**
-  - *Neon Arena* (Medium balanced arena)
-  - *The Colosseum* (Sprawling large arena)
-  - *Neon Chamber* (Fast-paced compact layout)
-- **Dynamic Mechanics:** Sliding neon gates, jump pads for aerial launches, shooting statue hazards, and reflective bounce barriers.
+### 🏰 Whimsical Gothic Academy Arenas (5 Unique Maps)
+- **5 Thematic Interactive Maps:**
+  - 🏰 *Unseen Courtyard* (Weathered cobblestones, floating enchanted candles & house banners)
+  - ⚔️ *Dueling Amphitheater* (Open sand arena ring, sliding portcullis gates & corner jump pads)
+  - 📚 *Forbidden Arcanum* (Aged mahogany parquet tiles, moving bookcase partitions & power vaults)
+  - 🌌 *Astral Observatory* (Obsidian starfield floor, rotating astrolabe prism mirrors & instant warp star gates)
+  - 🧪 *Alchemist's Undercroft* (Mossy dungeon flagstones, volatile potion vats & ricochet bounce corridors)
+- **Interactive Hazards & Gimmicks:** Bubbling potion cauldrons for high-bounce launches, runic jump dials, sliding portcullis gates, rotating shooting statues, and astrolabe reflective prisms.
+
+### 🎭 Deep Character Customization & Distinct Bot Archetypes
+- **11 Head Gear Styles:** Archchancellor Wizard Hat, Headmaster Top Hat, Champion Crown, Cowl Hood, Dragon Helm, Toadstool Fairy Cap, Lunar Crescent Tiara, Jester Bells, Arcane Turban, Shinobi Bandana, or None.
+- **8 Weapon Styles:** Gnarled Elder Oak Staff, 11-inch Dueling Wand, Silver Rapier, Astral Scythe, Open Grimoire Focus, Orb Sceptre, Mystic Energy Bow, and Witch's Broom.
+- **9 Back Accessories:** Dragon Wings, Velvet Cape, Spell Grimoire, House Banner, Flowing Scarf, Potion Flask Bandolier, Aegis Roundshield, and Hovering Spirit Familiar.
+- **9 Face Gear Styles:** Shades, Eyepatch, Wizard Beard, Dueling Mask, Brass Monocle, Runic Forehead Mark, Mystic Blindfold, and Curled Mustache.
+- **Guaranteed Distinct Casters:** Every bot match curates unique combinations of robes, hats, weapons, and accessories so no two casters ever share the same silhouette or colors.
+
+### ⚡ Crystal-Clear Power-Up Badges & Upgrades
+- High-contrast in-game 3D badges and HUD indicators with unmistakable custom graphical icons and bold name pills (`BOUNCE`, `SPLIT`, `PIERCE`, `HASTE`, `SHIELD`, `FREEZE`, `WALL-RUN`) so players instantly know what to grab from across the arena.
+
+### 🌐 Serverless Online (P2P) & LAN Multiplayer
+- **Serverless WebRTC P2P:** Instant room creation with shareable 4-letter room codes (`CAST-XXXX`) and direct invite links (`?room=CODE`).
+- **LAN WebSocket Server:** Dedicated local network server (`server/lan-server.js`) for low-latency LAN parties.
+- **Host-Authoritative Sync:** Full 3D physics simulation broadcast at 20–30 Hz with client-side interpolation.
 
 ### ⚡ Power-Up Stacking System
 Combine and stack multiple spells to create wild projectile builds:
@@ -55,10 +73,10 @@ Combine and stack multiple spells to create wild projectile builds:
 
 ### 🎨 7-Part Wizard Customizer
 Customize your caster with real-time 3D preview in the main menu:
-- **Robe & Spell Colors:** Neon Pink, Cyan, Sage, Arcane Gold, Violet, and more.
-- **Eye Glow & Hair Styles:** Glowing neon eyes and customizable hair.
-- **Hats & Facegear:** Wizard Hat, Top Hat, Crown, Horns, Glasses, Monocle, Beard, and Masks.
-- **Weapons:** Arcane Staff, Wand, Broadsword, and Scythe.
+- **Expressive Pokémon-Style Eyes:** Animated pupils, natural blinking, and duel-focused squints.
+- **Hats & Headgear:** Floppy star-embroidered Archchancellor hat, Scholar top hat with quill, Dueling Cowl, Crown, and Helm.
+- **Wands & Weapons:** 11-inch Ollivanders wand with spark tip, gnarled elder oak staff with hovering Octarine crystal, silver rapier, and scythe.
+- **Robes & Accessories:** Conical velvet robes with gold embroidered hem, floating leather grimoires, scholastic velvet capes, and fairy/dragon wings.
 
 ### 🤖 Adaptive AI & Bot Difficulty
 Four difficulty presets that tune aim error, prediction, dodging reflexes, and power-up hunting:
@@ -66,10 +84,6 @@ Four difficulty presets that tune aim error, prediction, dodging reflexes, and p
 - **Normal** (Balanced casual play)
 - **Hard** (Competitive dodging & shot curving)
 - **Insane** (Relentless flanking & near-instant reflexes)
-
-### 🌐 LAN Multiplayer
-- Host-authoritative WebSocket architecture (`server/lan-server.js`).
-- Host simulates full 3D physics and broadcasts snapshots at 20 Hz; clients send inputs and interpolate state.
 
 ---
 

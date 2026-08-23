@@ -1,46 +1,113 @@
 import * as THREE from 'three';
 
 /**
- * Central palette for the bright, vibrant, toy-like art direction (Outcasters homage).
- * Keeping every environment colour here means the look can be tuned in one place.
+ * Central palette for the whimsical Arcane Academy art direction
+ * (Discworld + Hogwarts + Pokémon fusion).
+ * Rich cobblestones, gothic sandstone, aged mahogany, antique brass, and glowing Octarine.
  */
 export const PALETTE = {
-  // Sky / atmosphere
-  skyTop: 0x7b9fd4,
-  skyBottom: 0xd4b483,
-  fog: 0xc8a86e,
-  fogDensity: 0.006,
+  // Sky / Castle Atmosphere (Twilight magical dusk)
+  skyTop: 0x1f274a,      // Deep twilight indigo
+  skyMiddle: 0x3d3568,   // Arcane violet twilight
+  skyBottom: 0xc87d55,   // Warm sunset amber glow
+  fog: 0x2e2748,
+  fogDensity: 0.005,
 
-  // Ground
-  floor: 0x5a7a3a,
-  floorGridMajor: 0x7aaa4a,
-  floorGridMinor: 0x4a6a2a,
+  // Ground / Courtyard
+  floor: 0x3d3630,       // Weathered stone cobblestone
+  floorGridMajor: 0x5a5048,
+  floorGridMinor: 0x322c26,
 
-  // Structures
-  wall: 0xa09070,
-  wallEdge: 0x4a3820,
+  // Structures & Masonry
+  wall: 0x6e6052,        // Hogwarts weathered sandstone
+  wallTop: 0x8a7a6a,     // Stone coping slabs
+  wallEdge: 0x2c2620,    // Dark mortar crevice
+  woodTrim: 0x3e2415,    // Dark antique oak
+  brassTrim: 0xd4a020,   // Antique wizarding brass
 
-  // Interactive elements
-  bouncePad: 0xc86428,
-  bouncePadRing: 0xffe0a0,
+  // House & College Colors (Gryffindor, Slytherin, Ravenclaw, Hufflepuff inspired)
+  scarlet: 0xa61c28,
+  gold: 0xf5b722,
+  emerald: 0x1c6e42,
+  silver: 0xc4cdd5,
+  sapphire: 0x1e498f,
+  bronze: 0x9c6838,
+  amber: 0xd98218,
+  amethyst: 0x6e2594,
+
+  // Mystical Energies & Discworld Octarine
+  octarine: 0x8a2be2,    // Discworld 8th color (iridescent violet-cyan)
+  octarineGlow: 0x39ffb8,
+  candleFlame: 0xffa834,
+  candleGlow: 0xff7018,
+
+  // Interactive Elements
+  cauldronBrew: 0x2be28a,
+  bouncePad: 0x8e421a,
+  bouncePadRing: 0xffc444,
   door: 0xd4a020,
-  jumpPad: 0x58c040,
+  jumpPad: 0x28a060,
   border: 0xd4a020,
-  star: 0xffe080,
+  star: 0xffe259,
 
   // Lighting
-  ambient: 0xfff5e0,
-  hemiSky: 0xc8d4f0,
-  hemiGround: 0x5a4a20
+  ambient: 0xffeed4,     // Warm torch/candle ambient
+  hemiSky: 0xb8c8f0,     // Cool skylight
+  hemiGround: 0x483a2a,  // Warm earthy ground reflection
+  sunLight: 0xffe0a8     // Golden sunlight
+} as const;
+
+/** Map-specific themes for unique atmospheric immersion */
+export const MAP_THEMES = {
+  ARENA: {
+    name: 'Unseen Courtyard',
+    floorColor: 0x423c36,
+    wallColor: 0x6e6052,
+    accentColor: 0xa61c28,
+    bannerColor: 0xa61c28,
+    props: 'candles_banners_gargoyles'
+  },
+  COLOSSEUM: {
+    name: 'Dueling Amphitheater',
+    floorColor: 0x5a4a38,
+    wallColor: 0x7a6a58,
+    accentColor: 0xd4a020,
+    bannerColor: 0x1e498f,
+    props: 'braziers_cauldrons_runes'
+  },
+  CHAMBER: {
+    name: 'Forbidden Arcanum',
+    floorColor: 0x2a1c14,
+    wallColor: 0x48382c,
+    accentColor: 0x8a2be2,
+    bannerColor: 0x1c6e42,
+    props: 'books_candles_alembics'
+  },
+  OBSERVATORY: {
+    name: 'Astral Observatory',
+    floorColor: 0x0c1224,
+    wallColor: 0x24283b,
+    accentColor: 0x00d2ff,
+    bannerColor: 0x1f274a,
+    props: 'astrolabes_constellations_crystals'
+  },
+  CATACOMBS: {
+    name: "Alchemist's Undercroft",
+    floorColor: 0x161a15,
+    wallColor: 0x384236,
+    accentColor: 0x39ff14,
+    bannerColor: 0x1c6e42,
+    props: 'potion_vats_slime_mushrooms'
+  }
 } as const;
 
 /**
- * Builds a vertical gradient sky dome using per-vertex colours (no custom shader needed).
- * Rendered on the inside (BackSide) so the camera sits within it.
+ * Builds a 3-stop vertical gradient sky dome with castle twilight dusk.
  */
 export function createSkyDome(radius = 220): THREE.Mesh {
   const geo = new THREE.SphereGeometry(radius, 24, 16);
   const top = new THREE.Color(PALETTE.skyTop);
+  const mid = new THREE.Color(PALETTE.skyMiddle);
   const bottom = new THREE.Color(PALETTE.skyBottom);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
@@ -48,7 +115,11 @@ export function createSkyDome(radius = 220): THREE.Mesh {
 
   for (let i = 0; i < pos.count; i++) {
     const t = THREE.MathUtils.clamp((pos.getY(i) / radius + 1) / 2, 0, 1);
-    c.copy(bottom).lerp(top, t);
+    if (t < 0.5) {
+      c.copy(bottom).lerp(mid, t * 2);
+    } else {
+      c.copy(mid).lerp(top, (t - 0.5) * 2);
+    }
     colors[i * 3] = c.r;
     colors[i * 3 + 1] = c.g;
     colors[i * 3 + 2] = c.b;
@@ -66,3 +137,4 @@ export function createSkyDome(radius = 220): THREE.Mesh {
   mesh.name = 'skyDome';
   return mesh;
 }
+

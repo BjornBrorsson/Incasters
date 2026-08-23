@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Caster } from '../entities/Caster';
 import { sfx } from '../engine/Audio';
+import { PALETTE } from '../engine/Theme';
 
 export type GameModeType = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH';
 export const GameModeType = {
@@ -70,6 +71,7 @@ export class GameModeManager {
 
   // Announcements callback wired by Game to the on-screen Fx announcer
   onAnnounce: ((text: string, color?: string) => void) | null = null;
+  onCasterDied: ((killer: Caster | null, victim: Caster) => void) | null = null;
   private announcedFinalDuel: boolean = false;
 
   // General timers
@@ -81,16 +83,23 @@ export class GameModeManager {
     this.type = type;
   }
 
-  initMode(scene: THREE.Scene, casters: Caster[], bankSpots: { x: number; y: number }[] = []) {
+  initMode(scene: THREE.Scene, casters: Caster[], bankSpots: { x: number; y: number }[] = [], initialSafeRadius?: number) {
     this.isGameOver = false;
     this.winnerText = '';
     this.matchTimer = this.type === GameModeType.BATTLE_ROYALE ? 150 : 120;
+
+    // Scale safe radius with map if provided
+    if (initialSafeRadius !== undefined && initialSafeRadius > 0) {
+      this.maxSafeRadius = initialSafeRadius;
+    } else {
+      this.maxSafeRadius = 16.5;
+    }
+    this.safeRadius = this.maxSafeRadius;
 
     // Reset scores
     this.redScore = 0;
     this.blueScore = 0;
     this.respawnTimers.clear();
-    this.safeRadius = this.maxSafeRadius;
     this.announcedFinalDuel = false;
     this.prevBankControl = null;
     this.bankSpots = bankSpots;
@@ -99,10 +108,10 @@ export class GameModeManager {
     this.cleanup(scene);
 
     if (this.type === GameModeType.BATTLE_ROYALE) {
-      // Create glowing fire ring border with pulsing emissive
-      const ringGeo = new THREE.RingGeometry(this.safeRadius - 0.3, this.safeRadius + 0.4, 80);
+      // Create glowing Octarine Arcane Seal (Discworld 8th color magical boundary)
+      const ringGeo = new THREE.RingGeometry(this.safeRadius - 0.35, this.safeRadius + 0.45, 80);
       const ringMat = new THREE.MeshBasicMaterial({
-        color: 0xff3300,
+        color: PALETTE.octarine,
         side: THREE.DoubleSide,
         transparent: true,
         opacity: 0.85
@@ -112,13 +121,13 @@ export class GameModeManager {
       this.stormMesh.position.y = 0.03;
       scene.add(this.stormMesh);
 
-      // Inner glow ring (slightly smaller, additive blending for bloom-like effect)
-      const glowGeo = new THREE.RingGeometry(this.safeRadius - 0.6, this.safeRadius - 0.1, 80);
+      // Inner magical glow ring with ethereal cyan-violet blending
+      const glowGeo = new THREE.RingGeometry(this.safeRadius - 0.7, this.safeRadius - 0.1, 80);
       const glowMat = new THREE.MeshBasicMaterial({
-        color: 0xff6600,
+        color: PALETTE.octarineGlow,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.3,
+        opacity: 0.35,
         blending: THREE.AdditiveBlending
       });
       const glowMesh = new THREE.Mesh(glowGeo, glowMat);
@@ -128,21 +137,21 @@ export class GameModeManager {
       scene.add(glowMesh);
       this.stormMesh.add(glowMesh);
 
-      // Create transparent fire cylinder wall with gradient feel
-      const wallGeo = new THREE.CylinderGeometry(this.safeRadius, this.safeRadius, 12, 80, 1, true);
+      // Create ethereal translucent arcane boundary cylinder
+      const wallGeo = new THREE.CylinderGeometry(this.safeRadius, this.safeRadius, 14, 80, 1, true);
       const wallMat = new THREE.MeshBasicMaterial({
-        color: 0xff2200,
+        color: PALETTE.octarine,
         transparent: true,
-        opacity: 0.18,
+        opacity: 0.22,
         side: THREE.DoubleSide,
         blending: THREE.AdditiveBlending,
         depthWrite: false
       });
       this.stormWallMesh = new THREE.Mesh(wallGeo, wallMat);
-      this.stormWallMesh.position.y = 6;
+      this.stormWallMesh.position.y = 7;
       scene.add(this.stormWallMesh);
 
-      // Animated flame particles around the ring perimeter
+      // Animated flame & rune particles around the ring perimeter
       this.createStormFlames(scene);
 
       // Distribute teams to FFA (Gold/Neutral)
@@ -151,29 +160,29 @@ export class GameModeManager {
       });
 
     } else if (this.type === GameModeType.TEAM_BATTLE) {
-      // Divide teams 4v4: player is always Red, bots split
+      // Divide teams 4v4: Scarlet House vs Sapphire House
       casters.forEach((c, idx) => {
         c.team = idx % 2 === 0 ? 'RED' : 'BLUE';
         c.reset();
         
-        // Force high-contrast team colors
+        // Force thematic Hogwarts collegiate colors
         if (c.team === 'RED') {
-          c.updateColors(0xff1122, 0xff1122); // Vibrant red clothes and red spells
+          c.updateColors(PALETTE.scarlet, 0xff3355); // Scarlet robes & crimson wand sparks
         } else {
-          c.updateColors(0x0044ff, 0x00d2ff); // Vibrant blue clothes and cyan spells
+          c.updateColors(PALETTE.sapphire, 0x33aaff); // Sapphire robes & cyan wand sparks
         }
       });
 
     } else if (this.type === GameModeType.GOLD_RUSH) {
-      // Two teams race to BANK coins at a capture-and-hold vault
+      // Two teams race to BANK golden Galleons at the ancient Vault
       casters.forEach((c, idx) => {
         c.team = idx % 2 === 0 ? 'RED' : 'BLUE';
         c.reset();
         c.coins = 0;
         if (c.team === 'RED') {
-          c.updateColors(0xff1122, 0xff1122);
+          c.updateColors(PALETTE.scarlet, 0xff3355);
         } else {
-          c.updateColors(0x0044ff, 0x00d2ff);
+          c.updateColors(PALETTE.sapphire, 0x33aaff);
         }
       });
 
@@ -182,7 +191,7 @@ export class GameModeManager {
         this.spawnRandomCoin(scene);
       }
 
-      // Create the Bank at a random open spawner spot
+      // Create the Bank Vault at a random open spawner spot
       const spots = this.bankSpots.length > 0 ? this.bankSpots : [{ x: 0, y: 0 }];
       this.createBank(scene, spots[Math.floor(Math.random() * spots.length)]);
     }
@@ -265,6 +274,10 @@ export class GameModeManager {
           // 12 damage per second, increasing as the ring shrinks
           const shrinkFactor = 1 + (1 - this.safeRadius / this.maxSafeRadius) * 0.5;
           c.takeDamage(12 * shrinkFactor * dt);
+          if (c.isDead) {
+            this.handleCasterDeath(scene, c, null, casters);
+            this.onCasterDied?.(null, c);
+          }
         }
       });
 
@@ -558,7 +571,7 @@ export class GameModeManager {
     this.bank.mesh.rotation.y += dt * 0.5;
   }
 
-  private endGame(casters: Caster[]) {
+  public endGame(casters: Caster[]) {
     this.isGameOver = true;
 
     if (this.type === GameModeType.BATTLE_ROYALE) {

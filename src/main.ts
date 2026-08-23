@@ -22,6 +22,7 @@ import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
 import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Difficulty';
 import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo } from './net/LanClient';
+import { P2PClient, cleanRoomCode } from './net/P2PClient';
 import {
   getAudioSettings,
   music,
@@ -185,13 +186,13 @@ let selectedPlayerCount = parseInt(localStorage.getItem('incasters_player_count'
 let selectedDifficulty: DifficultyLevel = loadDifficulty();
 let game: Game | null = null;
 
-// LAN Multiplayer state
+// Multiplayer state (LAN + Serverless P2P)
 let lanClient: LanClient | null = null;
+let p2pClient: P2PClient | null = null;
 let lanRenderer: ClientGameRenderer | null = null;
-let lanMode: 'offline' | 'host' | 'client' = 'offline';
 let lanPlayers: NetPlayerInfo[] = [];
-let lanLocalTeam: string | null = null;
-void lanMode; // referenced in event handlers below
+let p2pPlayers: NetPlayerInfo[] = [];
+let netLocalTeam: string | null = null;
 let countdownRunId = 0;
 let countdownTimeout = 0;
 
@@ -253,6 +254,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const mapArenaBtn = document.getElementById('btn-map-arena');
   const mapColosseumBtn = document.getElementById('btn-map-colosseum');
   const mapChamberBtn = document.getElementById('btn-map-chamber');
+  const mapObservatoryBtn = document.getElementById('btn-map-observatory');
+  const mapCatacombsBtn = document.getElementById('btn-map-catacombs');
 
   const playerCountBtns = document.querySelectorAll('.player-count-btn');
 
@@ -375,6 +378,50 @@ document.addEventListener('DOMContentLoaded', () => {
     matchSummary.innerHTML = html;
   };
 
+  const wireGameCallbacks = (activeGame: Game) => {
+    activeGame.onMatchEnd = (result) => {
+      const specHud = document.getElementById('spectator-hud');
+      if (specHud) specHud.style.display = 'none';
+      const elimOverlay = document.getElementById('elimination-overlay');
+      if (elimOverlay) elimOverlay.style.display = 'none';
+
+      const summary = progression.recordMatch(result);
+      showMatchSummary(result, summary);
+      refreshBadge();
+      renderChallenges();
+    };
+
+    activeGame.onPlayerEliminated = (data) => {
+      const summary = progression.recordMatch({ won: false, kills: data.kills, mode: activeGame.gameModeManager.type });
+      const elimOverlay = document.getElementById('elimination-overlay');
+      const elimRank = document.getElementById('elimination-rank');
+      const elimSummary = document.getElementById('elimination-summary');
+      if (elimRank) {
+        elimRank.textContent = `Finished #${data.rank} of ${data.totalPlayers} Casters`;
+      }
+      if (elimSummary) {
+        elimSummary.innerHTML = `
+          <div class="ms-row"><span>Kills</span><strong>${data.kills}</strong></div>
+          <div class="ms-row"><span>Tokens Earned</span><strong style="color:#ffd23d;">+${summary.tokensGained} \u{1FA99}</strong></div>
+          <div class="ms-row"><span>XP Earned</span><strong style="color:#e0a020;">+${summary.xpGained} XP</strong></div>
+          ${summary.newLevel ? `<div class="ms-levelup">\u{1F389} LEVEL UP! Now Level ${summary.newLevel}!</div>` : ''}
+        `;
+      }
+      if (elimOverlay) elimOverlay.style.display = 'flex';
+      const hud = document.getElementById('hud-container');
+      if (hud) hud.style.display = 'none';
+      refreshBadge();
+      renderChallenges();
+    };
+
+    activeGame.onSpectateChange = (data) => {
+      const specName = document.getElementById('spec-target-name');
+      const specCount = document.getElementById('spec-alive-count');
+      if (specName) specName.textContent = data.name;
+      if (specCount) specCount.textContent = `(${data.aliveCount} Casters Left)`;
+    };
+  };
+
   // Toggle Mode Selection
   const setMode = (mode: GameModeType, activeBtn: HTMLElement) => {
     selectedMode = mode;
@@ -403,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Toggle Map Selection
   const setMap = (map: MapType, activeBtn: HTMLElement) => {
     selectedMap = map;
-    [mapArenaBtn, mapColosseumBtn, mapChamberBtn].forEach((btn) => {
+    [mapArenaBtn, mapColosseumBtn, mapChamberBtn, mapObservatoryBtn, mapCatacombsBtn].forEach((btn) => {
       btn?.classList.remove('active');
     });
     activeBtn.classList.add('active');
@@ -413,12 +460,16 @@ document.addEventListener('DOMContentLoaded', () => {
   mapArenaBtn?.addEventListener('click', () => setMap('ARENA', mapArenaBtn));
   mapColosseumBtn?.addEventListener('click', () => setMap('COLOSSEUM', mapColosseumBtn));
   mapChamberBtn?.addEventListener('click', () => setMap('CHAMBER', mapChamberBtn));
+  mapObservatoryBtn?.addEventListener('click', () => setMap('OBSERVATORY', mapObservatoryBtn));
+  mapCatacombsBtn?.addEventListener('click', () => setMap('CATACOMBS', mapCatacombsBtn));
 
   // Set initial active state for map buttons
   [
     { map: 'ARENA', btn: mapArenaBtn },
     { map: 'COLOSSEUM', btn: mapColosseumBtn },
-    { map: 'CHAMBER', btn: mapChamberBtn }
+    { map: 'CHAMBER', btn: mapChamberBtn },
+    { map: 'OBSERVATORY', btn: mapObservatoryBtn },
+    { map: 'CATACOMBS', btn: mapCatacombsBtn }
   ].forEach((item) => {
     if (item.map === selectedMap) {
       item.btn?.classList.add('active');
@@ -462,6 +513,223 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // ── Multiplayer Tabs (Serverless Online P2P vs LAN) ──
+  const tabOnline = document.getElementById('tab-online');
+  const tabLan = document.getElementById('tab-lan');
+  const onlineMpContainer = document.getElementById('online-mp-container');
+  const lanMpContainer = document.getElementById('lan-mp-container');
+
+  tabOnline?.addEventListener('click', () => {
+    tabOnline.classList.add('active');
+    tabLan?.classList.remove('active');
+    if (onlineMpContainer) onlineMpContainer.style.display = 'block';
+    if (lanMpContainer) lanMpContainer.style.display = 'none';
+  });
+
+  tabLan?.addEventListener('click', () => {
+    tabLan.classList.add('active');
+    tabOnline?.classList.remove('active');
+    if (lanMpContainer) lanMpContainer.style.display = 'block';
+    if (onlineMpContainer) onlineMpContainer.style.display = 'none';
+  });
+
+  // ── Serverless Online Multiplayer (P2P WebRTC) ──
+  const btnP2pHost = document.getElementById('btn-p2p-host') as HTMLButtonElement | null;
+  const btnP2pJoin = document.getElementById('btn-p2p-join') as HTMLButtonElement | null;
+  const p2pHostPanel = document.getElementById('p2p-host-panel');
+  const p2pJoinPanel = document.getElementById('p2p-join-panel');
+  const p2pLobby = document.getElementById('p2p-lobby');
+  const p2pRoomCodeEl = document.getElementById('p2p-room-code');
+  const lobbyRoomCodeEl = document.getElementById('lobby-room-code');
+  const btnCopyCode = document.getElementById('btn-copy-code');
+  const btnCopyLink = document.getElementById('btn-copy-link');
+  const btnP2pStartHosting = document.getElementById('btn-p2p-start-hosting') as HTMLButtonElement | null;
+  const btnP2pConnect = document.getElementById('btn-p2p-connect') as HTMLButtonElement | null;
+  const btnP2pReady = document.getElementById('btn-p2p-ready') as HTMLButtonElement | null;
+  const btnP2pStartMatch = document.getElementById('btn-p2p-start-match') as HTMLButtonElement | null;
+  const btnP2pLeave = document.getElementById('btn-p2p-leave') as HTMLButtonElement | null;
+  const p2pJoinCodeInput = document.getElementById('p2p-join-code') as HTMLInputElement | null;
+  const p2pJoinStatus = document.getElementById('p2p-join-status');
+  const p2pLobbyPlayers = document.getElementById('p2p-lobby-players');
+
+  function renderP2pLobbyPlayers() {
+    if (!p2pLobbyPlayers) return;
+    p2pLobbyPlayers.innerHTML = p2pPlayers
+      .map((p) => {
+        const isHost = p2pClient?.roomInfo?.hostId === p.id;
+        const readyClass = p.ready ? 'player-ready' : 'player-not-ready';
+        const readyText = p.ready ? 'Ready' : 'Not Ready';
+        const hostBadge = isHost ? '<span class="player-host">HOST</span>' : '';
+        return '<div class="lan-player-item"><span>' + p.name + ' ' + hostBadge + '</span><span class="' + readyClass + '">' + readyText + '</span></div>';
+      })
+      .join('');
+  }
+
+  function showP2pLobby() {
+    if (p2pHostPanel) p2pHostPanel.style.display = 'none';
+    if (p2pJoinPanel) p2pJoinPanel.style.display = 'none';
+    if (p2pLobby) p2pLobby.style.display = 'block';
+    if (lobbyRoomCodeEl && p2pClient) lobbyRoomCodeEl.textContent = p2pClient.roomCode;
+    renderP2pLobbyPlayers();
+    if (btnP2pStartMatch) btnP2pStartMatch.style.display = p2pClient?.isHost ? 'block' : 'none';
+  }
+
+  function hideP2pLobby() {
+    if (p2pLobby) p2pLobby.style.display = 'none';
+  }
+
+  btnP2pHost?.addEventListener('click', () => {
+    btnP2pHost.classList.add('active');
+    btnP2pJoin?.classList.remove('active');
+    if (p2pHostPanel) p2pHostPanel.style.display = 'block';
+    if (p2pJoinPanel) p2pJoinPanel.style.display = 'none';
+    if (p2pLobby) p2pLobby.style.display = 'none';
+  });
+
+  btnP2pJoin?.addEventListener('click', () => {
+    btnP2pJoin.classList.add('active');
+    btnP2pHost?.classList.remove('active');
+    if (p2pJoinPanel) p2pJoinPanel.style.display = 'block';
+    if (p2pHostPanel) p2pHostPanel.style.display = 'none';
+    if (p2pLobby) p2pLobby.style.display = 'none';
+  });
+
+  // Copy Room Code
+  btnCopyCode?.addEventListener('click', () => {
+    if (p2pClient?.roomCode) {
+      void navigator.clipboard.writeText(p2pClient.roomCode);
+      btnCopyCode.textContent = '✅ Copied!';
+      setTimeout(() => { if (btnCopyCode) btnCopyCode.textContent = '📋 Code'; }, 1500);
+    }
+  });
+
+  // Copy Direct Invite Link
+  btnCopyLink?.addEventListener('click', () => {
+    if (p2pClient?.roomCode) {
+      const url = `${window.location.origin}${window.location.pathname}?room=${p2pClient.roomCode}`;
+      void navigator.clipboard.writeText(url);
+      btnCopyLink.textContent = '✅ Copied Link!';
+      setTimeout(() => { if (btnCopyLink) btnCopyLink.textContent = '🔗 Invite Link'; }, 1500);
+    }
+  });
+
+  // Host: Open Online Room
+  btnP2pStartHosting?.addEventListener('click', async () => {
+    if (!btnP2pStartHosting) return;
+    btnP2pStartHosting.disabled = true;
+    btnP2pStartHosting.textContent = 'Creating room...';
+
+    try {
+      p2pClient = new P2PClient();
+
+      const code = await p2pClient.createRoom('Host', characterConfig);
+      if (p2pRoomCodeEl) p2pRoomCodeEl.textContent = code;
+      p2pPlayers = p2pClient.roomInfo?.players || [];
+
+      showP2pLobby();
+      setupNetHandlers(p2pClient);
+    } catch (e: any) {
+      if (p2pHostPanel) {
+        const status = p2pHostPanel.querySelector('.lan-status');
+        if (status) status.textContent = 'Failed to create room: ' + (e.message || e);
+      }
+      btnP2pStartHosting.disabled = false;
+      btnP2pStartHosting.textContent = 'Open Online Room';
+    }
+  });
+
+  // Join: Connect to Online Room
+  btnP2pConnect?.addEventListener('click', async () => {
+    if (!btnP2pConnect || !p2pJoinCodeInput) return;
+    const code = cleanRoomCode(p2pJoinCodeInput.value);
+    if (!code) {
+      if (p2pJoinStatus) {
+        p2pJoinStatus.textContent = 'Please enter a room code.';
+        p2pJoinStatus.className = 'lan-status error';
+      }
+      return;
+    }
+
+    if (p2pJoinStatus) {
+      p2pJoinStatus.textContent = `Connecting to room ${code}...`;
+      p2pJoinStatus.className = 'lan-status';
+    }
+    btnP2pConnect.disabled = true;
+
+    try {
+      p2pClient = new P2PClient();
+
+      await p2pClient.joinRoom(code, 'Player', characterConfig);
+      p2pPlayers = p2pClient.roomInfo?.players || [];
+
+      if (p2pJoinStatus) {
+        p2pJoinStatus.textContent = 'Connected!';
+        p2pJoinStatus.className = 'lan-status success';
+      }
+
+      showP2pLobby();
+      setupNetHandlers(p2pClient);
+    } catch (e: any) {
+      if (p2pJoinStatus) {
+        p2pJoinStatus.textContent = 'Connection failed: ' + (e.message || e);
+        p2pJoinStatus.className = 'lan-status error';
+      }
+      btnP2pConnect.disabled = false;
+    }
+  });
+
+  // Ready button (P2P)
+  btnP2pReady?.addEventListener('click', () => {
+    if (!p2pClient) return;
+    const isReady = btnP2pReady.textContent === 'Ready';
+    p2pClient.setReady(!isReady);
+    btnP2pReady.textContent = isReady ? 'Not Ready' : 'Ready';
+  });
+
+  // Start Match (P2P Host only)
+  btnP2pStartMatch?.addEventListener('click', () => {
+    if (!p2pClient || !p2pClient.isHost) return;
+    p2pClient.startMatch({
+      mode: selectedMode,
+      map: selectedMap,
+      playerCount: selectedPlayerCount,
+      difficulty: selectedDifficulty
+    });
+  });
+
+  // Leave lobby (P2P)
+  btnP2pLeave?.addEventListener('click', () => {
+    cancelPregameCountdown();
+    if (p2pClient) {
+      p2pClient.disconnect();
+      p2pClient = null;
+    }
+    p2pPlayers = [];
+    netLocalTeam = null;
+    hideP2pLobby();
+    if (btnP2pHost) btnP2pHost.classList.remove('active');
+    if (btnP2pJoin) btnP2pJoin.classList.remove('active');
+    if (p2pHostPanel) p2pHostPanel.style.display = 'block';
+    if (p2pJoinPanel) p2pJoinPanel.style.display = 'none';
+    if (btnP2pStartHosting) {
+      btnP2pStartHosting.disabled = false;
+      btnP2pStartHosting.textContent = 'Open Online Room';
+    }
+    if (btnP2pConnect) btnP2pConnect.disabled = false;
+    void music.playMenu();
+  });
+
+  // Auto-fill from URL query parameter ?room=XYZ or ?join=XYZ
+  const urlParams = new URLSearchParams(window.location.search);
+  const roomParam = urlParams.get('room') || urlParams.get('join');
+  if (roomParam) {
+    tabOnline?.click();
+    btnP2pJoin?.click();
+    if (p2pJoinCodeInput) {
+      p2pJoinCodeInput.value = cleanRoomCode(roomParam);
+    }
+  }
+
   // ── LAN Multiplayer UI ──
   const btnLanHost = document.getElementById('btn-lan-host') as HTMLButtonElement | null;
   const btnLanJoin = document.getElementById('btn-lan-join') as HTMLButtonElement | null;
@@ -477,7 +745,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const lanRoomInfo = document.getElementById('lan-room-info');
   const lanLobbyPlayers = document.getElementById('lan-lobby-players');
 
-  function renderLobbyPlayers() {
+  function renderLanLobbyPlayers() {
     if (!lanLobbyPlayers) return;
     lanLobbyPlayers.innerHTML = lanPlayers
       .map((p) => {
@@ -490,23 +758,16 @@ document.addEventListener('DOMContentLoaded', () => {
       .join('');
   }
 
-  function showLobby() {
+  function showLanLobby() {
     if (lanHostPanel) lanHostPanel.style.display = 'none';
     if (lanJoinPanel) lanJoinPanel.style.display = 'none';
     if (lanLobby) lanLobby.style.display = 'block';
-    renderLobbyPlayers();
-    // Only host sees the Start Match button
+    renderLanLobbyPlayers();
     if (btnLanStartMatch) btnLanStartMatch.style.display = lanClient?.isHost ? 'block' : 'none';
   }
 
-  function hideLobby() {
+  function hideLanLobby() {
     if (lanLobby) lanLobby.style.display = 'none';
-  }
-
-  function updateLobbyFromRoom(roomInfo: any) {
-    lanPlayers = roomInfo.players || [];
-    renderLobbyPlayers();
-    if (btnLanStartMatch) btnLanStartMatch.style.display = lanClient?.isHost ? 'block' : 'none';
   }
 
   btnLanHost?.addEventListener('click', () => {
@@ -532,15 +793,9 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLanStartServer.textContent = 'Starting server...';
 
     try {
-      // The server runs as a separate Node process. On desktop, we can spawn it.
-      // On mobile (Capacitor), the host would need a separate server device.
       const port = (document.getElementById('lan-host-port') as HTMLInputElement)?.value || '7070';
-
-      // Try to start the server via a fetch to a local helper, or spawn a child process
-      // For now, we connect to the server URL (server must be started separately)
       const serverUrl = 'ws://localhost:' + port;
       lanClient = new LanClient(serverUrl);
-      lanMode = 'host';
 
       await lanClient.connect('Host', characterConfig);
       lanPlayers = lanClient.roomInfo?.players || [];
@@ -549,8 +804,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lanRoomInfo.innerHTML = '<p class="lan-status success">Server connected! Your LAN game is live.</p><div id="lan-player-list" class="lan-player-list"></div>';
       }
 
-      showLobby();
-      setupLanHandlers();
+      showLanLobby();
+      setupNetHandlers(lanClient);
     } catch (e: any) {
       if (lanRoomInfo) {
         lanRoomInfo.innerHTML = '<p class="lan-status error">Failed to start: ' + e.message + '</p><p class="lan-status">Make sure to run the LAN server first: <code>node server/lan-server.js</code></p>';
@@ -560,7 +815,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Join: Connect to host
+  // Join: Connect to LAN host
   btnLanConnect?.addEventListener('click', async () => {
     if (!btnLanConnect) return;
     const ip = (document.getElementById('lan-join-ip') as HTMLInputElement)?.value || 'localhost';
@@ -575,7 +830,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       lanClient = new LanClient(serverUrl);
-      lanMode = 'client';
 
       await lanClient.connect('Player', characterConfig);
       lanPlayers = lanClient.roomInfo?.players || [];
@@ -585,8 +839,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lanJoinStatus.className = 'lan-status success';
       }
 
-      showLobby();
-      setupLanHandlers();
+      showLanLobby();
+      setupNetHandlers(lanClient);
     } catch (e: any) {
       if (lanJoinStatus) {
         lanJoinStatus.textContent = 'Connection failed: ' + e.message;
@@ -596,7 +850,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Ready button
+  // Ready button (LAN)
   btnLanReady?.addEventListener('click', () => {
     if (!lanClient) return;
     const isReady = btnLanReady.textContent === 'Ready';
@@ -604,7 +858,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnLanReady.textContent = isReady ? 'Not Ready' : 'Ready';
   });
 
-  // Start Match (host only)
+  // Start Match (LAN Host only)
   btnLanStartMatch?.addEventListener('click', () => {
     if (!lanClient || !lanClient.isHost) return;
     lanClient.startMatch({
@@ -615,17 +869,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Leave lobby
+  // Leave lobby (LAN)
   btnLanLeave?.addEventListener('click', () => {
     cancelPregameCountdown();
     if (lanClient) {
       lanClient.disconnect();
       lanClient = null;
     }
-    lanMode = 'offline';
     lanPlayers = [];
-    lanLocalTeam = null;
-    hideLobby();
+    netLocalTeam = null;
+    hideLanLobby();
     if (btnLanHost) btnLanHost.classList.remove('active');
     if (btnLanJoin) btnLanJoin.classList.remove('active');
     if (lanHostPanel) lanHostPanel.style.display = 'block';
@@ -638,29 +891,46 @@ document.addEventListener('DOMContentLoaded', () => {
     void music.playMenu();
   });
 
-  function setupLanHandlers() {
-    if (!lanClient) return;
-
-    lanClient.on('playerJoin', (msg: any) => {
-      lanPlayers.push({ id: msg.player.id, name: msg.player.name, ready: msg.player.ready });
-      renderLobbyPlayers();
+  function setupNetHandlers(client: LanClient | P2PClient) {
+    client.on('playerJoin', (msg: any) => {
+      if (client instanceof P2PClient) {
+        p2pPlayers.push({ id: msg.player.id, name: msg.player.name, ready: msg.player.ready });
+        renderP2pLobbyPlayers();
+      } else {
+        lanPlayers.push({ id: msg.player.id, name: msg.player.name, ready: msg.player.ready });
+        renderLanLobbyPlayers();
+      }
     });
 
-    lanClient.on('playerLeave', (msg: any) => {
-      lanPlayers = lanPlayers.filter((p) => p.id !== msg.playerId);
-      if (msg.roomInfo) updateLobbyFromRoom(msg.roomInfo);
-      renderLobbyPlayers();
+    client.on('playerLeave', (msg: any) => {
+      if (client instanceof P2PClient) {
+        p2pPlayers = p2pPlayers.filter((p) => p.id !== msg.playerId);
+        if (msg.roomInfo) p2pPlayers = msg.roomInfo.players || [];
+        renderP2pLobbyPlayers();
+      } else {
+        lanPlayers = lanPlayers.filter((p) => p.id !== msg.playerId);
+        if (msg.roomInfo) lanPlayers = msg.roomInfo.players || [];
+        renderLanLobbyPlayers();
+      }
     });
 
-    lanClient.on('playerReady', (msg: any) => {
-      const p = lanPlayers.find((p) => p.id === msg.playerId);
+    client.on('playerReady', (msg: any) => {
+      const list = client instanceof P2PClient ? p2pPlayers : lanPlayers;
+      const p = list.find((p) => p.id === msg.playerId);
       if (p) p.ready = msg.ready;
-      renderLobbyPlayers();
+      if (client instanceof P2PClient) renderP2pLobbyPlayers();
+      else renderLanLobbyPlayers();
     });
 
-    lanClient.on('event', (event: any) => {
-      if (lanClient?.isHost) return;
-      const localId = lanClient?.playerId;
+    client.on('clientInput', (data: any) => {
+      if (game && game.netMode === 'host') {
+        game.setRemoteInput(data.playerId, data.input);
+      }
+    });
+
+    client.on('event', (event: any) => {
+      if (client.isHost) return;
+      const localId = client.playerId;
       if (event.kind === 'fire') {
         sfx.playShoot(event.data?.ownerId === localId ? 1 : 0.28);
       } else if (event.kind === 'hit' && event.data?.surface === 'wall') {
@@ -679,30 +949,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    lanClient.on('matchStart', (msg: any) => {
-      // Start the game in the appropriate mode
+    client.on('matchStart', (msg: any) => {
       const config = msg.config || {};
       const matchMode = (config.mode || selectedMode) as GameModeType;
       const matchMap = (config.map || selectedMap) as MapType;
       const matchPlayerCount = config.playerCount || selectedPlayerCount;
       const matchDifficulty = (config.difficulty || selectedDifficulty) as DifficultyLevel;
 
-      if (lanClient?.isHost) {
-        // Host: start the real game with networking hooks
-        startLanHostGame(matchMode, matchMap, matchPlayerCount, matchDifficulty);
+      if (client.isHost) {
+        startNetHostGame(client, matchMode, matchMap, matchPlayerCount, matchDifficulty);
       } else {
-        // Client: start the lightweight renderer
-        startLanClientGame(matchMode, matchMap);
+        startNetClientGame(client, matchMode, matchMap);
       }
     });
 
-    lanClient.on('state', (state: GameStateSnapshot) => {
+    client.on('state', (state: GameStateSnapshot) => {
       if (lanRenderer) {
         lanRenderer.applyState(state);
       }
-      const localPlayer = state.casters.find((caster) => caster.id === lanClient?.playerId);
+      const localPlayer = state.casters.find((caster) => caster.id === client.playerId);
       if (localPlayer) {
-        lanLocalTeam = localPlayer.team;
+        netLocalTeam = localPlayer.team;
         const danger = state.projectiles.reduce((level, projectile) => {
           if (projectile.ownerId === localPlayer.id || projectile.isDead) return level;
           const distance = Math.hypot(projectile.x - localPlayer.x, projectile.y - localPlayer.y);
@@ -712,28 +979,27 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    lanClient.on('matchEnd', (result: any) => {
-      // Show game over screen
+    client.on('matchEnd', (result: any) => {
       if (lanRenderer) {
         lanRenderer.destroy();
         lanRenderer = null;
       }
-      showLanGameOver(result);
+      showNetGameOver(client, result);
     });
 
-    lanClient.on('disconnect', () => {
+    client.on('disconnect', () => {
       cancelPregameCountdown();
       if (lanRenderer) {
         lanRenderer.destroy();
         lanRenderer = null;
       }
-      hideLobby();
-      lanMode = 'offline';
-      lanLocalTeam = null;
+      if (client instanceof P2PClient) hideP2pLobby();
+      else hideLanLobby();
+      netLocalTeam = null;
     });
   }
 
-  function startLanHostGame(mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel) {
+  function startNetHostGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel) {
     if (menuScreen) menuScreen.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
@@ -748,26 +1014,24 @@ document.addEventListener('DOMContentLoaded', () => {
       difficulty
     );
     game.netMode = 'host';
+    wireGameCallbacks(game);
 
-    // Register connected remote players
-    lanPlayers.forEach((p) => {
-      if (p.id !== lanClient?.playerId) {
+    const playersList = client instanceof P2PClient ? p2pPlayers : lanPlayers;
+    playersList.forEach((p) => {
+      if (p.id !== client.playerId) {
         game?.registerRemotePlayer(p.id, p.name);
       }
     });
 
-    // Set up state broadcasting
-    if (lanClient) {
-      game.onNetBroadcast = (state: GameStateSnapshot) => {
-        lanClient!.broadcastState(state);
-      };
-      game.onNetEvent = (event) => {
-        lanClient!.broadcastEvent(event);
-      };
-      game.onNetMatchEnd = (result) => {
-        lanClient!.broadcastEnd(result);
-      };
-    }
+    game.onNetBroadcast = (state: GameStateSnapshot) => {
+      client.broadcastState(state);
+    };
+    game.onNetEvent = (event) => {
+      client.broadcastEvent(event);
+    };
+    game.onNetMatchEnd = (result) => {
+      client.broadcastEnd(result);
+    };
 
     const activeGame = game;
     activeGame.tick();
@@ -777,27 +1041,26 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function startLanClientGame(mode: GameModeType, _map: MapType) {
+  function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, _map: MapType) {
     if (menuScreen) menuScreen.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
-    // Client uses the lightweight renderer
     lanRenderer = new ClientGameRenderer(gameContainer);
-    if (lanClient) lanRenderer.setLocalPlayerId(lanClient.playerId);
+    lanRenderer.setLocalPlayerId(client.playerId);
     void music.startMatch(mode);
     startPregameCountdown(() => {});
   }
 
-  function showLanGameOver(result: any) {
+  function showNetGameOver(client: LanClient | P2PClient, result: any) {
     cancelPregameCountdown();
     if (hudContainer) hudContainer.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'flex';
     const winnerEl = document.getElementById('gameover-winner');
     if (winnerEl) winnerEl.textContent = result?.winnerText || 'Match Over';
     let won = Boolean(result?.won);
-    if (!lanClient?.isHost) {
-      if (result?.winningTeam) won = result.winningTeam === lanLocalTeam;
-      else if (result?.winnerId) won = result.winnerId === lanClient?.playerId;
+    if (!client.isHost) {
+      if (result?.winningTeam) won = result.winningTeam === netLocalTeam;
+      else if (result?.winnerId) won = result.winnerId === client.playerId;
       else won = false;
     }
     void music.playResult(won);
@@ -931,10 +1194,98 @@ document.addEventListener('DOMContentLoaded', () => {
   refreshBadge();
   renderChallenges();
 
+  // ── Elimination and Spectator Controls ──
+  const elimOverlay = document.getElementById('elimination-overlay');
+  const spectatorHud = document.getElementById('spectator-hud');
+  const btnElimRestart = document.getElementById('btn-elim-restart');
+  const btnElimSpectate = document.getElementById('btn-elim-spectate');
+  const btnElimMenu = document.getElementById('btn-elim-menu');
+
+  const btnSpecPrev = document.getElementById('btn-spec-prev');
+  const btnSpecNext = document.getElementById('btn-spec-next');
+  const btnSpecEnd = document.getElementById('btn-spec-end');
+  const btnSpecMenu = document.getElementById('btn-spec-menu');
+
+  btnElimRestart?.addEventListener('click', () => {
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'block';
+
+    if (game) {
+      game.playerConfig = { ...characterConfig };
+      game.playerRobeColor = characterConfig.robeColor;
+      game.playerSpellColor = characterConfig.spellColor;
+      game.mapType = selectedMap;
+      game.playerCount = selectedPlayerCount;
+      game.difficulty = selectedDifficulty;
+      game.resetGame();
+      wireGameCallbacks(game);
+      const activeGame = game;
+      void music.startMatch(selectedMode);
+      startPregameCountdown(() => {
+        if (game === activeGame) activeGame.startGame();
+      });
+    }
+  });
+
+  btnElimSpectate?.addEventListener('click', () => {
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'flex';
+    if (hudContainer) hudContainer.style.display = 'block';
+    game?.startSpectating();
+  });
+
+  btnElimMenu?.addEventListener('click', () => {
+    cancelPregameCountdown();
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+    void music.playMenu();
+
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+  });
+
+  btnSpecPrev?.addEventListener('click', () => {
+    game?.cycleSpectator(-1);
+  });
+
+  btnSpecNext?.addEventListener('click', () => {
+    game?.cycleSpectator(1);
+  });
+
+  btnSpecEnd?.addEventListener('click', () => {
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    game?.endBattleImmediately();
+  });
+
+  btnSpecMenu?.addEventListener('click', () => {
+    cancelPregameCountdown();
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+    void music.playMenu();
+
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+  });
+
   // Start Game callback
   playBtn?.addEventListener('click', () => {
-    // Hide menu screen
+    // Hide overlays & menu screen
     if (menuScreen) menuScreen.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
     // Cleanup previous instance if any
@@ -953,16 +1304,11 @@ document.addEventListener('DOMContentLoaded', () => {
       { ...characterConfig },
       selectedDifficulty
     );
+    (window as any).game = game;
     game.controlMode = selectedControl;
-    game.onMatchEnd = (result) => {
-      const summary = progression.recordMatch(result);
-      showMatchSummary(result, summary);
-      refreshBadge();
-      renderChallenges();
-    };
+    wireGameCallbacks(game);
+
     const activeGame = game;
-    
-    // Start game tick loop
     activeGame.tick();
     void music.startMatch(selectedMode);
     startPregameCountdown(() => {
@@ -973,6 +1319,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Play Again callback
   restartBtn?.addEventListener('click', () => {
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
     if (game) {
@@ -983,6 +1331,7 @@ document.addEventListener('DOMContentLoaded', () => {
       game.playerCount = selectedPlayerCount;
       game.difficulty = selectedDifficulty;
       game.resetGame();
+      wireGameCallbacks(game);
       const activeGame = game;
       void music.startMatch(selectedMode);
       startPregameCountdown(() => {
@@ -996,6 +1345,8 @@ document.addEventListener('DOMContentLoaded', () => {
   backMenuBtn?.addEventListener('click', () => {
     cancelPregameCountdown();
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'none';
     if (menuScreen) menuScreen.style.display = 'flex';
     void music.playMenu();
