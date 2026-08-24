@@ -224,62 +224,105 @@ function createSymbolTexture(type: PowerUpType, color: number) {
   return texture;
 }
 
-export class PowerUp extends Entity {
-  type: PowerUpType;
-  private hoverTime: number = Math.random() * 100;
-  private symbolTexture: THREE.CanvasTexture;
-  private symbolMaterial: THREE.SpriteMaterial;
+const POWERUP_TEXTURE_CACHE = new Map<PowerUpType, THREE.CanvasTexture>();
+const POWERUP_SPRITE_MAT_CACHE = new Map<PowerUpType, THREE.SpriteMaterial>();
+const POWERUP_STANDARD_MAT_CACHE = new Map<PowerUpType, THREE.MeshStandardMaterial>();
+const POWERUP_RING_MAT_CACHE = new Map<PowerUpType, THREE.MeshBasicMaterial>();
+const POWERUP_GROUND_MAT_CACHE = new Map<PowerUpType, THREE.MeshBasicMaterial>();
 
-  constructor(x: number, y: number, type: PowerUpType) {
-    // Visual representation: floating glowing diamond
-    const group = new THREE.Group();
+const SHARED_OCTAHEDRON_GEO = new THREE.OctahedronGeometry(0.4, 0);
+const SHARED_INNER_OCTAHEDRON_GEO = new THREE.OctahedronGeometry(0.2, 0);
+const SHARED_INNER_WHITE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const SHARED_POWERUP_RING_GEO = new THREE.RingGeometry(0.5, 0.6, 16);
+const SHARED_POWERUP_GROUND_RING_GEO = new THREE.RingGeometry(0.45, 0.7, 16);
+
+function getPowerUpTexture(type: PowerUpType): THREE.CanvasTexture {
+  let tex = POWERUP_TEXTURE_CACHE.get(type);
+  if (!tex) {
+    tex = createSymbolTexture(type, POWERUP_COLORS[type]);
+    POWERUP_TEXTURE_CACHE.set(type, tex);
+  }
+  return tex;
+}
+
+function getPowerUpSpriteMaterial(type: PowerUpType): THREE.SpriteMaterial {
+  let mat = POWERUP_SPRITE_MAT_CACHE.get(type);
+  if (!mat) {
+    mat = new THREE.SpriteMaterial({ map: getPowerUpTexture(type), transparent: true, depthWrite: false });
+    POWERUP_SPRITE_MAT_CACHE.set(type, mat);
+  }
+  return mat;
+}
+
+function getPowerUpStandardMaterial(type: PowerUpType): THREE.MeshStandardMaterial {
+  let mat = POWERUP_STANDARD_MAT_CACHE.get(type);
+  if (!mat) {
     const color = POWERUP_COLORS[type];
-
-    // Core shape
-    const geometry = new THREE.OctahedronGeometry(0.4, 0);
-    const material = new THREE.MeshStandardMaterial({
-      color: color,
+    mat = new THREE.MeshStandardMaterial({
+      color,
       emissive: color,
       emissiveIntensity: 0.6,
       roughness: 0.1,
       metalness: 0.8
     });
-    const mesh = new THREE.Mesh(geometry, material);
+    POWERUP_STANDARD_MAT_CACHE.set(type, mat);
+  }
+  return mat;
+}
+
+function getPowerUpRingMaterial(type: PowerUpType): THREE.MeshBasicMaterial {
+  let mat = POWERUP_RING_MAT_CACHE.get(type);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({ color: POWERUP_COLORS[type], side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
+    POWERUP_RING_MAT_CACHE.set(type, mat);
+  }
+  return mat;
+}
+
+function getPowerUpGroundMaterial(type: PowerUpType): THREE.MeshBasicMaterial {
+  let mat = POWERUP_GROUND_MAT_CACHE.get(type);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({ color: POWERUP_COLORS[type], side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
+    POWERUP_GROUND_MAT_CACHE.set(type, mat);
+  }
+  return mat;
+}
+
+export class PowerUp extends Entity {
+  type: PowerUpType;
+  private hoverTime: number = Math.random() * 100;
+
+  constructor(x: number, y: number, type: PowerUpType) {
+    // Visual representation: floating glowing diamond using cached assets
+    const group = new THREE.Group();
+
+    // Core shape
+    const mesh = new THREE.Mesh(SHARED_OCTAHEDRON_GEO, getPowerUpStandardMaterial(type));
     mesh.castShadow = true;
     group.add(mesh);
 
     // Inner glowing core
-    const innerGeom = new THREE.OctahedronGeometry(0.2, 0);
-    const innerMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const innerMesh = new THREE.Mesh(innerGeom, innerMat);
+    const innerMesh = new THREE.Mesh(SHARED_INNER_OCTAHEDRON_GEO, SHARED_INNER_WHITE_MAT);
     group.add(innerMesh);
 
     // Ring around the diamond
-    const ringGeom = new THREE.RingGeometry(0.5, 0.6, 16);
-    const ringMat = new THREE.MeshBasicMaterial({ color: color, side: THREE.DoubleSide, transparent: true, opacity: 0.5 });
-    const ring = new THREE.Mesh(ringGeom, ringMat);
+    const ring = new THREE.Mesh(SHARED_POWERUP_RING_GEO, getPowerUpRingMaterial(type));
     ring.rotation.x = Math.PI / 2;
     group.add(ring);
 
-    const symbolTexture = createSymbolTexture(type, color);
-    const symbolMaterial = new THREE.SpriteMaterial({ map: symbolTexture, transparent: true, depthWrite: false });
-    const symbol = new THREE.Sprite(symbolMaterial);
+    const symbol = new THREE.Sprite(getPowerUpSpriteMaterial(type));
     symbol.position.y = 0.82;
     symbol.scale.set(0.92, 0.92, 0.92);
     group.add(symbol);
 
     // Ground aura ring
-    const groundRingGeo = new THREE.RingGeometry(0.45, 0.7, 16);
-    const groundRingMat = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.35 });
-    const groundRing = new THREE.Mesh(groundRingGeo, groundRingMat);
+    const groundRing = new THREE.Mesh(SHARED_POWERUP_GROUND_RING_GEO, getPowerUpGroundMaterial(type));
     groundRing.rotation.x = Math.PI / 2;
     groundRing.position.y = -0.45;
     group.add(groundRing);
 
     super(x, y, 0.45, group);
     this.type = type;
-    this.symbolTexture = symbolTexture;
-    this.symbolMaterial = symbolMaterial;
     this.mesh.position.y = 0.55; // Hover height
   }
 
@@ -302,9 +345,8 @@ export class PowerUp extends Entity {
     }
   }
 
-  destroy(scene: THREE.Scene) {
-    this.symbolTexture.dispose();
-    this.symbolMaterial.dispose();
-    super.destroy(scene);
+  override destroy(scene: THREE.Scene) {
+    // Remove mesh without destroying cached textures / materials / geometries
+    scene.remove(this.mesh);
   }
 }

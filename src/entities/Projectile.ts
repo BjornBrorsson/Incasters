@@ -14,6 +14,32 @@ export interface ProjectileStats {
   wallRunLevel?: number; // Optional wall-gliding stacks
 }
 
+// Static shared projectile geometries and materials to avoid WebGL buffer thrashing
+const SHARED_CORE_GEO = new THREE.SphereGeometry(0.18, 6, 6);
+const SHARED_GLOW_GEO = new THREE.SphereGeometry(0.32, 8, 6);
+const SHARED_RING_GEO = new THREE.RingGeometry(0.24, 0.36, 12);
+const SHARED_CORE_MAT = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const SHARED_STAR_RING_MAT = new THREE.MeshBasicMaterial({
+  color: 0xffe259,
+  side: THREE.DoubleSide,
+  transparent: true,
+  opacity: 0.75
+});
+const PROJ_GLOW_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+
+function getCachedGlowMaterial(color: number): THREE.MeshBasicMaterial {
+  let mat = PROJ_GLOW_MAT_CACHE.get(color);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.55
+    });
+    PROJ_GLOW_MAT_CACHE.set(color, mat);
+  }
+  return mat;
+}
+
 export class Projectile extends Entity {
   ownerId: string;
   stats: ProjectileStats;
@@ -44,40 +70,21 @@ export class Projectile extends Entity {
   ) {
     const color = stats.color;
     
-    // Create glowing wand-spark projectile visual group
+    // Create glowing wand-spark projectile visual group using shared static geometries
     const group = new THREE.Group();
     
     // Core white-hot spark sphere
-    const geometry = new THREE.SphereGeometry(0.18, 8, 8);
-    const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const core = new THREE.Mesh(geometry, material);
+    const core = new THREE.Mesh(SHARED_CORE_GEO, SHARED_CORE_MAT);
     group.add(core);
 
     // Glowing elemental aura
-    const glowGeo = new THREE.SphereGeometry(0.32, 10, 8);
-    const glowMat = new THREE.MeshBasicMaterial({
-      color: color,
-      transparent: true,
-      opacity: 0.55
-    });
-    const glow = new THREE.Mesh(glowGeo, glowMat);
+    const glow = new THREE.Mesh(SHARED_GLOW_GEO, getCachedGlowMaterial(color));
     group.add(glow);
 
     // Orbiting celestial stardust ring (Discworld / Pokemon star spark)
-    const ringGeo = new THREE.RingGeometry(0.24, 0.36, 12);
-    const ringMat = new THREE.MeshBasicMaterial({
-      color: 0xffe259,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.75
-    });
-    const starRing = new THREE.Mesh(ringGeo, ringMat);
+    const starRing = new THREE.Mesh(SHARED_RING_GEO, SHARED_STAR_RING_MAT);
     starRing.rotation.x = Math.PI / 3;
     group.add(starRing);
-
-    // Dynamic projectile point light casting light on arena walls
-    const pLight = new THREE.PointLight(color, 1.3, 4.0);
-    group.add(pLight);
 
     super(x, y, 0.25, group);
     
@@ -94,6 +101,11 @@ export class Projectile extends Entity {
     this.vy = Math.sin(angle) * stats.speed;
 
     this.mesh.position.y = 0.55; // Fly height
+  }
+
+  override destroy(scene: THREE.Scene) {
+    // Simply remove mesh from scene without disposing shared static geometries/materials
+    scene.remove(this.mesh);
   }
 
   update(dt: number) {

@@ -17,6 +17,8 @@ import type { CharacterConfig } from '../game/CharacterConfig';
 import type { MatchResult } from '../game/Progression';
 import { DIFFICULTY_PRESETS } from '../game/Difficulty';
 import type { DifficultyLevel, DifficultyConfig } from '../game/Difficulty';
+import { loadGraphicsQuality, getGraphicsConfig } from '../game/GraphicsSettings';
+import type { GraphicsQuality, GraphicsConfig } from '../game/GraphicsSettings';
 import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState, GameEvent } from '../net/LanClient';
 
 export interface GameParticle {
@@ -49,6 +51,7 @@ export class Game {
   scene!: THREE.Scene;
   camera!: THREE.OrthographicCamera;
   renderer!: THREE.WebGLRenderer;
+  private dirLight!: THREE.DirectionalLight;
   private container: HTMLDivElement;
   private camOffset = new THREE.Vector3(18, 25, 29);
   private cameraLookTarget = new THREE.Vector3();
@@ -56,6 +59,38 @@ export class Game {
   private animationFrameId = 0;
   private destroyed = false;
   private eventAbortController = new AbortController();
+
+  // Graphics Quality Preset
+  graphicsQuality: GraphicsQuality = 'BALANCED';
+  graphicsConfig: GraphicsConfig = getGraphicsConfig('BALANCED');
+
+  // Cached DOM elements to avoid expensive getElementById on 60fps tick
+  private hudEl = {
+    hpProgress: null as HTMLElement | null,
+    hpText: null as HTMLElement | null,
+    ammoSlots: null as HTMLElement | null,
+    fireBtn: null as HTMLElement | null,
+    coinCounter: null as HTMLElement | null,
+    coinText: null as HTMLElement | null,
+    dashOverlay: null as HTMLElement | null,
+    dashBtn: null as HTMLElement | null,
+    gpIndicator: null as HTMLElement | null,
+    matchTimer: null as HTMLElement | null,
+    leaderboardList: null as HTMLElement | null,
+    gameoverOverlay: null as HTMLElement | null,
+    gameoverWinner: null as HTMLElement | null,
+    hudContainer: null as HTMLElement | null,
+    puSlots: [] as { slot: HTMLElement | null; text: HTMLElement | null }[]
+  };
+
+  // Dirty checking cache for HUD elements
+  private lastRenderedHp = -1;
+  private lastRenderedAmmo = -1;
+  private lastRenderedCoins = -1;
+  private lastRenderedTimerStr = '';
+  private lastRenderedDashPercent = -1;
+  private lastLeaderboardUpdate = 0;
+  private lastPuStateKey = '';
 
   // Game-feel state
   private fx = new Fx();
@@ -186,10 +221,55 @@ export class Game {
     }
     this.initThree();
     this.setupInput();
+    this.initHUD();
     this.resetGame();
   }
 
+  private initHUD() {
+    this.hudEl.hpProgress = document.getElementById('hp-progress');
+    this.hudEl.hpText = document.getElementById('hp-text');
+    this.hudEl.ammoSlots = document.getElementById('ammo-slots');
+    this.hudEl.fireBtn = document.getElementById('fire-btn');
+    this.hudEl.coinCounter = document.getElementById('coin-counter');
+    this.hudEl.coinText = document.getElementById('coin-val');
+    this.hudEl.dashOverlay = document.getElementById('dash-cooldown-overlay');
+    this.hudEl.dashBtn = document.getElementById('dash-btn');
+    this.hudEl.gpIndicator = document.getElementById('gamepad-indicator');
+    this.hudEl.matchTimer = document.getElementById('match-timer');
+    this.hudEl.leaderboardList = document.getElementById('leaderboard-list');
+    this.hudEl.gameoverOverlay = document.getElementById('gameover-overlay');
+    this.hudEl.gameoverWinner = document.getElementById('gameover-winner');
+    this.hudEl.hudContainer = document.getElementById('hud-container');
+    this.hudEl.puSlots = [0, 1, 2].map((i) => ({
+      slot: document.getElementById(`pu-slot-${i}`),
+      text: document.getElementById(`pu-slot-${i}-text`)
+    }));
+  }
+
+  setGraphicsQuality(quality: GraphicsQuality) {
+    this.graphicsQuality = quality;
+    this.graphicsConfig = getGraphicsConfig(quality);
+    if (this.renderer) {
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsConfig.pixelRatioCap));
+      this.renderer.shadowMap.enabled = this.graphicsConfig.shadowsEnabled;
+      this.renderer.shadowMap.type = this.graphicsConfig.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+      this.renderer.shadowMap.needsUpdate = true;
+    }
+    if (this.dirLight) {
+      this.dirLight.castShadow = this.graphicsConfig.shadowsEnabled;
+      this.dirLight.shadow.mapSize.width = this.graphicsConfig.shadowMapSize;
+      this.dirLight.shadow.mapSize.height = this.graphicsConfig.shadowMapSize;
+      if (this.dirLight.shadow.map) {
+        this.dirLight.shadow.map.dispose();
+        (this.dirLight.shadow as any).map = null;
+      }
+    }
+  }
+
   private initThree() {
+    this.graphicsQuality = loadGraphicsQuality();
+    this.graphicsConfig = getGraphicsConfig(this.graphicsQuality);
+
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(PALETTE.skyBottom);
     this.scene.fog = new THREE.FogExp2(PALETTE.fog, PALETTE.fogDensity);
@@ -214,12 +294,12 @@ export class Game {
 
     // WebGL Renderer with ACESFilmicToneMapping for rich, vibrant, warm cartoon lighting
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsConfig.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.12;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.enabled = this.graphicsConfig.shadowsEnabled;
+    this.renderer.shadowMap.type = this.graphicsConfig.softShadows ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
     this.container.appendChild(this.renderer.domElement);
 
     // Lighting — Hogwarts / Discworld warm torchlight & twilight atmosphere
@@ -232,21 +312,21 @@ export class Game {
     this.scene.add(hemiLight);
 
     // Directional Shadow Casting Light — warm golden castle sun
-    const dirLight = new THREE.DirectionalLight(PALETTE.sunLight, 1.05);
-    dirLight.position.set(-18, 32, 18);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
-    dirLight.shadow.camera.near = 0.5;
-    dirLight.shadow.camera.far = 85;
+    this.dirLight = new THREE.DirectionalLight(PALETTE.sunLight, 1.05);
+    this.dirLight.position.set(-18, 32, 18);
+    this.dirLight.castShadow = this.graphicsConfig.shadowsEnabled;
+    this.dirLight.shadow.mapSize.width = this.graphicsConfig.shadowMapSize;
+    this.dirLight.shadow.mapSize.height = this.graphicsConfig.shadowMapSize;
+    this.dirLight.shadow.camera.near = 0.5;
+    this.dirLight.shadow.camera.far = 85;
     // Stretch shadow bounds to fit orthographic arena
     const sd = 26;
-    dirLight.shadow.camera.left = -sd;
-    dirLight.shadow.camera.right = sd;
-    dirLight.shadow.camera.top = sd;
-    dirLight.shadow.camera.bottom = -sd;
-    dirLight.shadow.bias = -0.0004;
-    this.scene.add(dirLight);
+    this.dirLight.shadow.camera.left = -sd;
+    this.dirLight.shadow.camera.right = sd;
+    this.dirLight.shadow.camera.top = sd;
+    this.dirLight.shadow.camera.bottom = -sd;
+    this.dirLight.shadow.bias = -0.0004;
+    this.scene.add(this.dirLight);
 
     // Warm torchlight fill light for environment depth
     const envLight = new THREE.DirectionalLight(0xffa840, 0.25);
@@ -495,7 +575,7 @@ export class Game {
     this.baseCameraZoom = this.getBaseCameraZoom();
     if (!this.playerGuidedProjectile) this.camera.zoom = this.baseCameraZoom;
     this.camera.updateProjectionMatrix();
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsConfig.pixelRatioCap));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
@@ -1796,130 +1876,127 @@ export class Game {
 
         const ratio = 1 - (p.lifetime / p.maxLifetime);
         p.mesh.scale.set(ratio, ratio, ratio);
-        if (p.mesh.material instanceof THREE.MeshBasicMaterial) {
-          p.mesh.material.opacity = p.opacity * ratio;
-        }
       }
     }
   }
 
   private updateHUD() {
     // 1. Health Bar
-    const hpProgress = document.getElementById('hp-progress');
-    const hpText = document.getElementById('hp-text');
-    if (hpProgress && hpText) {
-      hpProgress.style.width = `${this.player.health}%`;
-      hpText.innerText = `${Math.round(this.player.health)} / 100`;
+    const hpRounded = Math.round(this.player.health);
+    if (hpRounded !== this.lastRenderedHp) {
+      this.lastRenderedHp = hpRounded;
+      if (this.hudEl.hpProgress) this.hudEl.hpProgress.style.width = `${this.player.health}%`;
+      if (this.hudEl.hpText) this.hudEl.hpText.innerText = `${hpRounded} / 100`;
     }
     
     // Ammo slots update
-    const ammoSlots = document.getElementById('ammo-slots');
-    if (ammoSlots) {
-      const pips = ammoSlots.children;
-      for (let j = 0; j < pips.length; j++) {
-        if (j < this.player.ammo) {
-          pips[j].className = 'ammo-pip active';
-        } else {
-          pips[j].className = 'ammo-pip';
+    if (this.player.ammo !== this.lastRenderedAmmo) {
+      this.lastRenderedAmmo = this.player.ammo;
+      if (this.hudEl.ammoSlots) {
+        const pips = this.hudEl.ammoSlots.children;
+        for (let j = 0; j < pips.length; j++) {
+          pips[j].className = j < this.player.ammo ? 'ammo-pip active' : 'ammo-pip';
         }
+      }
+      if (this.hudEl.fireBtn) {
+        this.hudEl.fireBtn.classList.toggle('empty', this.player.ammo <= 0);
       }
     }
 
-    // Touch fire button ammo indicator
-    const fireBtn = document.getElementById('fire-btn');
-    if (fireBtn) {
-      fireBtn.classList.toggle('empty', this.player.ammo <= 0);
-    }
-
     // 2. Power-ups HUD
-    for (let i = 0; i < 3; i++) {
-      const slot = document.getElementById(`pu-slot-${i}`);
-      const text = document.getElementById(`pu-slot-${i}-text`);
-      if (slot && text) {
-        if (i < this.player.powerupSlotsOrder.length) {
-          const type = this.player.powerupSlotsOrder[i];
-          const stack = this.player.powerups.get(type) || 1;
-          
-          text.innerText = `${POWERUP_SYMBOLS[type]} ${type} [Lv ${stack}]`;
-          slot.className = 'pu-slot active';
-          
-          const colors: Record<PowerUpType, string> = {
-            BOUNCE: '#ffaa00',
-            PIERCE: '#aa00ff',
-            SPLIT: '#00dfff',
-            HASTE: '#39ff14',
-            SHIELD: '#ffffff',
-            FREEZE: '#4df0ff',
-            WALLRUN: '#00e0b0'
-          };
-          slot.style.borderColor = colors[type];
-          slot.style.boxShadow = `0 0 10px ${colors[type]}`;
-        } else {
-          text.innerText = 'Empty Slot';
-          slot.className = 'pu-slot';
-          slot.style.borderColor = 'rgba(255, 255, 255, 0.1)';
-          slot.style.boxShadow = 'none';
+    const currentPuKey = this.player.powerupSlotsOrder.map(t => `${t}:${this.player.powerups.get(t) || 1}`).join('|');
+    if (currentPuKey !== this.lastPuStateKey) {
+      this.lastPuStateKey = currentPuKey;
+      const colors: Record<PowerUpType, string> = {
+        BOUNCE: '#ffaa00',
+        PIERCE: '#aa00ff',
+        SPLIT: '#00dfff',
+        HASTE: '#39ff14',
+        SHIELD: '#ffffff',
+        FREEZE: '#4df0ff',
+        WALLRUN: '#00e0b0'
+      };
+      for (let i = 0; i < 3; i++) {
+        const slotObj = this.hudEl.puSlots[i];
+        if (slotObj && slotObj.slot && slotObj.text) {
+          if (i < this.player.powerupSlotsOrder.length) {
+            const type = this.player.powerupSlotsOrder[i];
+            const stack = this.player.powerups.get(type) || 1;
+            slotObj.text.innerText = `${POWERUP_SYMBOLS[type]} ${type} [Lv ${stack}]`;
+            slotObj.slot.className = 'pu-slot active';
+            slotObj.slot.style.borderColor = colors[type];
+            slotObj.slot.style.boxShadow = `0 0 10px ${colors[type]}`;
+          } else {
+            slotObj.text.innerText = 'Empty Slot';
+            slotObj.slot.className = 'pu-slot';
+            slotObj.slot.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            slotObj.slot.style.boxShadow = 'none';
+          }
         }
       }
     }
 
     // 3. Score / Cooldowns / Coin counters
-    const coinCounter = document.getElementById('coin-counter');
-    const coinText = document.getElementById('coin-val');
-    if (coinCounter && coinText) {
-      if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
-        coinCounter.style.display = 'flex';
-        coinText.innerText = `${this.player.coins}`;
-      } else {
-        coinCounter.style.display = 'none';
+    if (this.player.coins !== this.lastRenderedCoins) {
+      this.lastRenderedCoins = this.player.coins;
+      if (this.hudEl.coinCounter && this.hudEl.coinText) {
+        if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+          this.hudEl.coinCounter.style.display = 'flex';
+          this.hudEl.coinText.innerText = `${this.player.coins}`;
+        } else {
+          this.hudEl.coinCounter.style.display = 'none';
+        }
       }
     }
 
     // Dash Cooldown HUD & Mobile Dash Button state
-    const dashOverlay = document.getElementById('dash-cooldown-overlay');
-    const dashBtn = document.getElementById('dash-btn');
     const isCooling = this.player.dashCooldownTimer > 0;
-    const percent = isCooling ? (this.player.dashCooldownTimer / this.player.dashCooldown) * 100 : 0;
-
-    if (dashOverlay) {
-      dashOverlay.style.height = `${percent}%`;
-    }
-    if (dashBtn) {
-      dashBtn.classList.toggle('cooling', isCooling);
-      dashBtn.classList.toggle('ready', !isCooling);
-      dashBtn.style.setProperty('--dash-cd', `${percent}%`);
+    const percent = Math.round(isCooling ? (this.player.dashCooldownTimer / this.player.dashCooldown) * 100 : 0);
+    if (percent !== this.lastRenderedDashPercent) {
+      this.lastRenderedDashPercent = percent;
+      if (this.hudEl.dashOverlay) {
+        this.hudEl.dashOverlay.style.height = `${percent}%`;
+      }
+      if (this.hudEl.dashBtn) {
+        this.hudEl.dashBtn.classList.toggle('cooling', isCooling);
+        this.hudEl.dashBtn.classList.toggle('ready', !isCooling);
+        this.hudEl.dashBtn.style.setProperty('--dash-cd', `${percent}%`);
+      }
     }
 
     // Gamepad connection indicator
-    const gpIndicator = document.getElementById('gamepad-indicator');
-    if (gpIndicator) {
-      gpIndicator.classList.toggle('connected', this.input.gamepadConnected);
+    if (this.hudEl.gpIndicator) {
+      this.hudEl.gpIndicator.classList.toggle('connected', this.input.gamepadConnected);
     }
 
     // 4. Timer & Game Mode Info
-    const matchTimerEl = document.getElementById('match-timer');
-    if (matchTimerEl) {
+    if (this.hudEl.matchTimer) {
       const minutes = Math.floor(this.gameModeManager.matchTimer / 60);
       const seconds = Math.floor(this.gameModeManager.matchTimer % 60).toString().padStart(2, '0');
-      matchTimerEl.innerText = `${minutes}:${seconds}`;
+      const timerStr = `${minutes}:${seconds}`;
+      if (timerStr !== this.lastRenderedTimerStr) {
+        this.lastRenderedTimerStr = timerStr;
+        this.hudEl.matchTimer.innerText = timerStr;
+      }
     }
 
-    // Mode-specific leaderboard updates
-    this.updateLeaderboard();
+    // Mode-specific leaderboard updates (throttled to 4 Hz)
+    const now = performance.now();
+    if (now - this.lastLeaderboardUpdate > 250 || this.gameModeManager.isGameOver) {
+      this.lastLeaderboardUpdate = now;
+      this.updateLeaderboard();
+    }
 
     // 5. Game Over Screen check
     if (this.gameModeManager.isGameOver) {
       this.isPlaying = false;
-      const overlay = document.getElementById('gameover-overlay');
-      const text = document.getElementById('gameover-winner');
-      if (overlay && text) {
-        text.innerText = this.gameModeManager.winnerText;
-        overlay.style.display = 'flex';
+      if (this.hudEl.gameoverOverlay && this.hudEl.gameoverWinner) {
+        this.hudEl.gameoverWinner.innerText = this.gameModeManager.winnerText;
+        this.hudEl.gameoverOverlay.style.display = 'flex';
       }
       // Hide touch fire/dash buttons
       this.resetTouchControls();
-      const hud = document.getElementById('hud-container');
-      if (hud) hud.style.display = 'none';
+      if (this.hudEl.hudContainer) this.hudEl.hudContainer.style.display = 'none';
       if (!this.matchEndFired) {
         this.matchEndFired = true;
         const result = this.computeMatchResult();
@@ -1946,7 +2023,7 @@ export class Game {
   }
 
   private updateLeaderboard() {
-    const list = document.getElementById('leaderboard-list');
+    const list = this.hudEl.leaderboardList;
     if (!list) return;
 
     // Sort casters based on current game mode rules

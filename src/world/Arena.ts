@@ -64,8 +64,15 @@ export interface MovingWall {
   mesh: THREE.Mesh | null;
 }
 
+let CACHED_COBBLESTONE_TEX: THREE.CanvasTexture | null = null;
+let CACHED_PARQUET_TEX: THREE.CanvasTexture | null = null;
+let CACHED_STONEWALL_TEX: THREE.CanvasTexture | null = null;
+let CACHED_OBSERVATORY_TEX: THREE.CanvasTexture | null = null;
+let CACHED_CATACOMBS_TEX: THREE.CanvasTexture | null = null;
+
 // Procedural Texture Generators for Discworld / Hogwarts / Pokemon aesthetic
-function createCobblestoneTexture(): THREE.CanvasTexture {
+function getCobblestoneTexture(): THREE.CanvasTexture {
+  if (CACHED_COBBLESTONE_TEX) return CACHED_COBBLESTONE_TEX;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
@@ -108,10 +115,12 @@ function createCobblestoneTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(4, 4);
+  CACHED_COBBLESTONE_TEX = tex;
   return tex;
 }
 
-function createParquetTexture(): THREE.CanvasTexture {
+function getParquetTexture(): THREE.CanvasTexture {
+  if (CACHED_PARQUET_TEX) return CACHED_PARQUET_TEX;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
@@ -141,10 +150,12 @@ function createParquetTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(4, 4);
+  CACHED_PARQUET_TEX = tex;
   return tex;
 }
 
-function createStoneWallTexture(): THREE.CanvasTexture {
+function getStoneWallTexture(): THREE.CanvasTexture {
+  if (CACHED_STONEWALL_TEX) return CACHED_STONEWALL_TEX;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 256;
@@ -184,10 +195,12 @@ function createStoneWallTexture(): THREE.CanvasTexture {
   const tex = new THREE.CanvasTexture(canvas);
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
+  CACHED_STONEWALL_TEX = tex;
   return tex;
 }
 
-function createObservatoryFloorTexture(): THREE.CanvasTexture {
+function getObservatoryFloorTexture(): THREE.CanvasTexture {
+  if (CACHED_OBSERVATORY_TEX) return CACHED_OBSERVATORY_TEX;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
@@ -231,10 +244,12 @@ function createObservatoryFloorTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(3, 3);
+  CACHED_OBSERVATORY_TEX = tex;
   return tex;
 }
 
-function createCatacombsFloorTexture(): THREE.CanvasTexture {
+function getCatacombsFloorTexture(): THREE.CanvasTexture {
+  if (CACHED_CATACOMBS_TEX) return CACHED_CATACOMBS_TEX;
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 512;
@@ -268,12 +283,11 @@ function createCatacombsFloorTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set(4, 4);
+  CACHED_CATACOMBS_TEX = tex;
   return tex;
 }
 
 export class Arena {
-  width: number = 36;
-  height: number = 36;
   walls: AABB[] = [];
   spawnPoints: SpawnPoint[] = [];
   powerupSpawners: SpawnPoint[] = [];
@@ -281,12 +295,10 @@ export class Arena {
   jumpPads: JumpPad[] = [];
   hazards: Hazard[] = [];
   movingWalls: MovingWall[] = [];
-  mapType: MapType = 'ARENA';
-
-  // Fired by rotating shooting statues; wired to Game's neutral projectile spawner
   onHazardFire: ((x: number, y: number, angle: number) => void) | null = null;
-  
-  // ThreeJS Mesh Groups
+  mapType: MapType;
+  width: number = 36;
+  height: number = 36;
   private arenaGroup: THREE.Group;
   private wallMaterial: THREE.MeshStandardMaterial;
   private wallCopingMaterial: THREE.MeshStandardMaterial;
@@ -306,7 +318,7 @@ export class Arena {
     this.arenaGroup = new THREE.Group();
     
     // Whimsical Castle Masonry & Gothic Academy Materials
-    const wallTex = createStoneWallTexture();
+    const wallTex = getStoneWallTexture();
     this.wallMaterial = new THREE.MeshStandardMaterial({
       map: wallTex,
       color: 0x8a7c6e,
@@ -323,25 +335,25 @@ export class Arena {
     // Map-specific floor material
     if (mapType === 'CHAMBER') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: createParquetTexture(),
+        map: getParquetTexture(),
         roughness: 0.45,
         metalness: 0.1
       });
     } else if (mapType === 'OBSERVATORY') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: createObservatoryFloorTexture(),
+        map: getObservatoryFloorTexture(),
         roughness: 0.35,
         metalness: 0.2
       });
     } else if (mapType === 'CATACOMBS') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: createCatacombsFloorTexture(),
+        map: getCatacombsFloorTexture(),
         roughness: 0.85,
         metalness: 0.05
       });
     } else {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: createCobblestoneTexture(),
+        map: getCobblestoneTexture(),
         roughness: 0.8,
         metalness: 0.05
       });
@@ -783,11 +795,6 @@ export class Arena {
         brew.position.y = 0.86;
         cauldronGroup.add(brew);
 
-        // Cauldron magical upward glow light
-        const brewLight = new THREE.PointLight(PALETTE.cauldronBrew, 0.9, 4);
-        brewLight.position.y = 1.1;
-        cauldronGroup.add(brewLight);
-
         this.arenaGroup.add(cauldronGroup);
         this.bouncePadsMeshes.push(brew);
 
@@ -941,13 +948,6 @@ export class Arena {
       flame.position.y = candleH + 0.06;
       cGroup.add(flame);
 
-      // Tiny warm glow point light on every few candles
-      if (i % 3 === 0) {
-        const cLight = new THREE.PointLight(PALETTE.candleFlame, 0.7, 4.5);
-        cLight.position.y = candleH + 0.08;
-        cGroup.add(cLight);
-      }
-
       cGroup.position.set(cx, baseY, cz);
       this.arenaGroup.add(cGroup);
       this.floatingCandles.push({ mesh: cGroup, baseY, phase: Math.random() * Math.PI * 2 });
@@ -987,10 +987,6 @@ export class Arena {
       barrel.rotation.z = -Math.PI / 2;
       barrel.position.set(0.6, 1.5, 0);
       group.add(barrel);
-
-      const hzLight = new THREE.PointLight(0xff7722, 1.2, 6);
-      hzLight.position.set(0.7, 1.5, 0);
-      group.add(hzLight);
 
       group.position.set(hz.x, 0, hz.y);
       this.arenaGroup.add(group);

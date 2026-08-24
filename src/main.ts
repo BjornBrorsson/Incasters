@@ -21,6 +21,7 @@ import {
 import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
 import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Difficulty';
+import { loadGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from './game/GraphicsSettings';
 import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo } from './net/LanClient';
 import { P2PClient, cleanRoomCode } from './net/P2PClient';
 import {
@@ -510,6 +511,28 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.classList.add('active');
       selectedDifficulty = diff;
       saveDifficulty(diff);
+    });
+  });
+
+  // Graphics Quality Preset Buttons
+  let selectedGraphics: GraphicsQuality = loadGraphicsQuality();
+  const gfxBtns = document.querySelectorAll<HTMLButtonElement>('.gfx-btn');
+  gfxBtns.forEach((btn) => {
+    const gfx = btn.getAttribute('data-gfx') as GraphicsQuality;
+    if (gfx === selectedGraphics) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+
+    btn.addEventListener('click', () => {
+      gfxBtns.forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedGraphics = gfx;
+      saveGraphicsQuality(gfx);
+      if (game) {
+        game.setGraphicsQuality(gfx);
+      }
     });
   });
 

@@ -370,11 +370,11 @@ export class Caster extends Entity {
   }
 
   private updateStaffVisuals() {
-    if (!this.weaponCrystal || !this.weaponLight) return;
+    if (!this.weaponCrystal) return;
     const crystalMesh = this.weaponCrystal.children[0] as THREE.Mesh | undefined;
-    const lightObj = this.weaponLight.children[0] as THREE.PointLight | undefined;
+    const lightObj = this.weaponLight?.children[0] as THREE.PointLight | undefined;
 
-    if (crystalMesh && lightObj) {
+    if (crystalMesh) {
       let color = this.spellColor;
       if (this.powerupSlotsOrder.length > 0) {
         color = POWERUP_COLORS[this.powerupSlotsOrder[this.powerupSlotsOrder.length - 1]];
@@ -383,7 +383,9 @@ export class Caster extends Entity {
       if (crystalMesh.material instanceof THREE.MeshBasicMaterial) {
         crystalMesh.material.color.setHex(color);
       }
-      lightObj.color.setHex(color);
+      if (lightObj) {
+        lightObj.color.setHex(color);
+      }
     }
   }
 

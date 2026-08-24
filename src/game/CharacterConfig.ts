@@ -615,11 +615,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.58);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 1.1, 2.5);
-    crystalLight.position.set(0, 0, 0.58);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'WAND') {
     // 11-inch Ollivanders Dueling Wand
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.04, 0.2, 8), goldMat);
@@ -642,11 +637,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.7);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 0.9, 1.8);
-    crystalLight.position.set(0, 0, 0.7);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'SWORD') {
     // Silver Dueling Rapier
     const blade = new THREE.Mesh(
@@ -676,11 +666,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, -0.16);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 0.6, 1.2);
-    crystalLight.position.set(0, 0, -0.16);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'SCYTHE') {
     // Astral Scythe
     const pole = new THREE.Mesh(
@@ -705,11 +690,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.58);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 0.8, 1.8);
-    crystalLight.position.set(0, 0, 0.58);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'GRIMOIRE_FOCUS') {
     // Open Floating Spellbook Focus radiating arcane runes
     const bookCover = new THREE.Mesh(
@@ -735,11 +715,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0.25, 0.4);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 1.0, 2.0);
-    crystalLight.position.set(0, 0.25, 0.4);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'ORB_SCEPTRE') {
     // Golden Sceptre with floating crystal orb & orbital rings
     const shaft = new THREE.Mesh(
@@ -761,11 +736,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.65);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 1.2, 2.4);
-    crystalLight.position.set(0, 0, 0.65);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'BOW') {
     // Mystic Luminous Energy Bow
     const limbMat = new THREE.MeshStandardMaterial({ color: 0x2b384e, metalness: 0.7, roughness: 0.3 });
@@ -790,11 +760,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.35);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 0.9, 1.8);
-    crystalLight.position.set(0, 0, 0.35);
-    group.add(crystalLight);
-    light.add(crystalLight);
   } else if (style === 'BROOM') {
     // Witch's Flying Broomstick Focus
     const handle = new THREE.Mesh(
@@ -821,11 +786,6 @@ export function buildWeapon(style: WeaponStyle, spellColor: number): { group: TH
     crystalMesh.position.set(0, 0, 0.65);
     group.add(crystalMesh);
     crystal.add(crystalMesh);
-
-    const crystalLight = new THREE.PointLight(spellColor, 0.9, 1.8);
-    crystalLight.position.set(0, 0, 0.65);
-    group.add(crystalLight);
-    light.add(crystalLight);
   }
 
   return { group, crystal, light };
@@ -960,10 +920,6 @@ export function buildAccessory(style: AccessoryStyle, color: number): THREE.Grou
     const wisp = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), wispMat);
     wisp.position.set(0.34, 0.95, -0.15);
     group.add(wisp);
-
-    const wispLight = new THREE.PointLight(color, 0.8, 1.5);
-    wispLight.position.set(0.34, 0.95, -0.15);
-    group.add(wispLight);
 
     // Tiny spirit wings
     const wingMat = new THREE.MeshBasicMaterial({ color: 0xffffff });

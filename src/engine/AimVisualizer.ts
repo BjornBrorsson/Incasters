@@ -66,10 +66,9 @@ export class AimVisualizer {
     this.group.add(this.reticleInner);
 
     // 3. Glowing guidance line for active curving projectile
-    this.curveGuideGeo = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(0, 0.4, 0),
-      new THREE.Vector3(0, 0.4, 0)
-    ]);
+    this.curveGuidePositions = new Float32Array(6);
+    this.curveGuideGeo = new THREE.BufferGeometry();
+    this.curveGuideGeo.setAttribute('position', new THREE.BufferAttribute(this.curveGuidePositions, 3));
     this.curveGuideMaterial = new THREE.LineBasicMaterial({
       color: 0x00f0ff,
       transparent: true,
@@ -82,6 +81,8 @@ export class AimVisualizer {
 
     scene.add(this.group);
   }
+
+  private curveGuidePositions: Float32Array;
 
   setColor(hex: number) {
     if (this.currentColor === hex) return;
@@ -170,11 +171,12 @@ export class AimVisualizer {
 
     // ── 2. Active curving projectile guidance beam ───────────────
     if (guidedProj && !guidedProj.isDead && guidedProj.targetPoint) {
-      const positions = new Float32Array([
-        guidedProj.x, 0.45, guidedProj.y,
-        guidedProj.targetPoint.x, 0.45, guidedProj.targetPoint.y
-      ]);
-      this.curveGuideGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      this.curveGuidePositions[0] = guidedProj.x;
+      this.curveGuidePositions[1] = 0.45;
+      this.curveGuidePositions[2] = guidedProj.y;
+      this.curveGuidePositions[3] = guidedProj.targetPoint.x;
+      this.curveGuidePositions[4] = 0.45;
+      this.curveGuidePositions[5] = guidedProj.targetPoint.y;
       this.curveGuideGeo.attributes.position.needsUpdate = true;
       this.curveGuideMaterial.opacity = 0.6 + Math.sin(this.pulseTimer * 2) * 0.3;
       this.curveGuideLine.visible = true;

@@ -25,7 +25,7 @@ export class CharacterPreview {
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setSize(w, h);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     container.appendChild(this.renderer.domElement);
 
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
