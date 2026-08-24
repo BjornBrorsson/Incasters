@@ -1,6 +1,25 @@
 import * as THREE from 'three';
 
-const STICK_DEADZONE = 0.22;
+export interface ControllerSettings {
+  deadzone: number;
+  sensitivity: number;
+  haptics: boolean;
+}
+
+export function loadControllerSettings(): ControllerSettings {
+  try {
+    const raw = localStorage.getItem('incasters_controller_settings');
+    if (raw) return { deadzone: 0.20, sensitivity: 1.0, haptics: true, ...JSON.parse(raw) };
+  } catch {}
+  return { deadzone: 0.20, sensitivity: 1.0, haptics: true };
+}
+
+export function saveControllerSettings(settings: ControllerSettings): void {
+  try {
+    localStorage.setItem('incasters_controller_settings', JSON.stringify(settings));
+  } catch {}
+}
+
 const TRIGGER_THRESHOLD = 0.35;
 
 /**
@@ -9,6 +28,11 @@ const TRIGGER_THRESHOLD = 0.35;
  * on-screen virtual joystick UI, but it merges into the same downstream paths.
  */
 export class InputManager {
+  // Configurable Gamepad tuning
+  deadzone: number = 0.20;
+  sensitivity: number = 1.0;
+  hapticsEnabled: boolean = true;
+
   // Keyboard
   keys: Record<string, boolean> = {};
 
@@ -40,6 +64,11 @@ export class InputManager {
   private boundGpDisconnect: (e: Event) => void;
 
   constructor() {
+    const saved = loadControllerSettings();
+    this.deadzone = saved.deadzone;
+    this.sensitivity = saved.sensitivity;
+    this.hapticsEnabled = saved.haptics;
+
     this.boundKeyDown = (e) => {
       this.keys[e.key.toLowerCase()] = true;
       this.usingGamepad = false;
@@ -85,6 +114,25 @@ export class InputManager {
     return null;
   }
 
+  /** Trigger tactile haptic rumble on connected gamepads. */
+  vibrate(durationMs: number, strongMagnitude = 0.5, weakMagnitude = 0.5) {
+    if (!this.hapticsEnabled) return;
+    const gp = this.getActiveGamepad();
+    if (!gp) return;
+    try {
+      if (gp.vibrationActuator && typeof gp.vibrationActuator.playEffect === 'function') {
+        gp.vibrationActuator.playEffect('dual-rumble', {
+          startDelay: 0,
+          duration: durationMs,
+          weakMagnitude: Math.min(1, Math.max(0, weakMagnitude)),
+          strongMagnitude: Math.min(1, Math.max(0, strongMagnitude))
+        }).catch(() => {});
+      } else if ((gp as any).hapticActuators && (gp as any).hapticActuators[0]) {
+        (gp as any).hapticActuators[0].pulse?.(strongMagnitude, durationMs);
+      }
+    } catch {}
+  }
+
   /** Poll the gamepad once per frame to refresh the snapshot and edge events. */
   pollGamepad() {
     const gp = this.getActiveGamepad();
@@ -98,11 +146,18 @@ export class InputManager {
     }
     this.gamepadConnected = true;
 
-    const dz = (v: number) => (Math.abs(v) < STICK_DEADZONE ? 0 : v);
-    let lx = dz(gp.axes[0] || 0);
-    let ly = dz(gp.axes[1] || 0);
-    const rx = dz(gp.axes[2] || 0);
-    const ry = dz(gp.axes[3] || 0);
+    const applyDeadzoneAndSens = (v: number) => {
+      const mag = Math.abs(v);
+      if (mag < this.deadzone) return 0;
+      const normalized = (mag - this.deadzone) / Math.max(0.01, 1 - this.deadzone);
+      const sign = Math.sign(v);
+      return sign * Math.min(1.0, Math.pow(normalized, 1.05) * this.sensitivity);
+    };
+
+    let lx = applyDeadzoneAndSens(gp.axes[0] || 0);
+    let ly = applyDeadzoneAndSens(gp.axes[1] || 0);
+    const rx = applyDeadzoneAndSens(gp.axes[2] || 0);
+    const ry = applyDeadzoneAndSens(gp.axes[3] || 0);
 
     // D-pad acts as digital movement fallback
     if (gp.buttons[12] && gp.buttons[12].pressed) ly = -1;
@@ -114,7 +169,7 @@ export class InputManager {
     this.gpMoveY = ly;
 
     const aimMag = Math.sqrt(rx * rx + ry * ry);
-    this.gpAimActive = aimMag > STICK_DEADZONE;
+    this.gpAimActive = aimMag > 0.05;
     this.gpAimX = rx;
     this.gpAimY = ry;
 

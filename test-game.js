@@ -297,6 +297,60 @@ async function run() {
     await new Promise(r => setTimeout(r, 400));
     console.log("  ✓ Left P2P lobby cleanly.");
 
+    // 7. Test Options Menu HUD Customization & Controller Sliders
+    console.log("\n7. Testing Options Menu HUD Customization & Controller Sliders...");
+    await page.click('#btn-options');
+    await new Promise(r => setTimeout(r, 300));
+
+    const optionsCheck = await page.evaluate(() => {
+      const hudScale = document.getElementById('hud-scale');
+      const hudOpacity = document.getElementById('hud-opacity');
+      const deadzone = document.getElementById('stick-deadzone');
+      const sens = document.getElementById('stick-sensitivity');
+      const haptics = document.getElementById('gamepad-haptics');
+
+      if (!hudScale || !hudOpacity || !deadzone || !sens || !haptics) {
+        return { ok: false, reason: 'Options sliders not found in DOM' };
+      }
+
+      // Simulate slider changes
+      hudScale.value = '115';
+      hudScale.dispatchEvent(new Event('input'));
+      hudOpacity.value = '80';
+      hudOpacity.dispatchEvent(new Event('input'));
+      deadzone.value = '25';
+      deadzone.dispatchEvent(new Event('input'));
+      sens.value = '140';
+      sens.dispatchEvent(new Event('input'));
+      haptics.checked = false;
+      haptics.dispatchEvent(new Event('change'));
+
+      const scaleVar = document.documentElement.style.getPropertyValue('--hud-scale');
+      const opacityVar = document.documentElement.style.getPropertyValue('--hud-opacity');
+      const storedScale = localStorage.getItem('incasters_hud_scale');
+      const storedOpacity = localStorage.getItem('incasters_hud_opacity');
+      const storedCtrl = localStorage.getItem('incasters_controller_settings');
+
+      return {
+        ok: true,
+        scaleVar,
+        opacityVar,
+        storedScale,
+        storedOpacity,
+        storedCtrl: JSON.parse(storedCtrl || '{}')
+      };
+    });
+
+    if (!optionsCheck.ok) throw new Error(optionsCheck.reason);
+    if (optionsCheck.scaleVar !== '1.15' || optionsCheck.opacityVar !== '0.8') {
+      throw new Error(`CSS vars did not update: scale=${optionsCheck.scaleVar}, opacity=${optionsCheck.opacityVar}`);
+    }
+    if (optionsCheck.storedCtrl.deadzone !== 0.25 || optionsCheck.storedCtrl.sensitivity !== 1.4 || optionsCheck.storedCtrl.haptics !== false) {
+      throw new Error(`Controller settings did not persist properly: ${JSON.stringify(optionsCheck.storedCtrl)}`);
+    }
+    console.log("  ✓ HUD Scale and Opacity CSS variables and local storage applied correctly.");
+    console.log("  ✓ Gamepad Deadzone, Sensitivity, and Haptic settings saved and loaded seamlessly.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);

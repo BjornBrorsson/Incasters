@@ -44,6 +44,34 @@
             <input id="music-enabled" type="checkbox" />
             <span>Music enabled</span>
           </label>
+          <div class="options-subhead">HUD &amp; DISPLAY</div>
+          <div class="audio-row">
+            <label for="hud-scale">HUD Scale</label>
+            <input id="hud-scale" type="range" min="70" max="130" step="5" value="100" />
+            <output id="hud-scale-value" for="hud-scale">100%</output>
+          </div>
+          <div class="audio-row">
+            <label for="hud-opacity">HUD Opacity</label>
+            <input id="hud-opacity" type="range" min="30" max="100" step="5" value="95" />
+            <output id="hud-opacity-value" for="hud-opacity">95%</output>
+          </div>
+
+          <div class="options-subhead">GAMEPAD &amp; CONTROLS</div>
+          <div class="audio-row">
+            <label for="stick-deadzone">Deadzone</label>
+            <input id="stick-deadzone" type="range" min="5" max="35" step="1" value="20" />
+            <output id="stick-deadzone-value" for="stick-deadzone">20%</output>
+          </div>
+          <div class="audio-row">
+            <label for="stick-sensitivity">Sensitivity</label>
+            <input id="stick-sensitivity" type="range" min="50" max="200" step="5" value="100" />
+            <output id="stick-sensitivity-value" for="stick-sensitivity">100%</output>
+          </div>
+          <label class="music-toggle" for="gamepad-haptics">
+            <input id="gamepad-haptics" type="checkbox" checked />
+            <span>Gamepad Rumble (Haptics)</span>
+          </label>
+
           <div class="options-subhead">GRAPHICS QUALITY</div>
           <div class="graphics-selector">
             <button id="btn-gfx-performance" class="gfx-btn" data-gfx="PERFORMANCE" type="button">

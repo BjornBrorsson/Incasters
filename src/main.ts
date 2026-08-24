@@ -33,6 +33,7 @@ import {
   setSfxVolume,
   sfx
 } from './engine/Audio';
+import { loadControllerSettings, saveControllerSettings } from './engine/InputManager';
 
 /**
  * Lightweight keyboard + gamepad navigator for the menu / game-over screens.
@@ -319,6 +320,89 @@ document.addEventListener('DOMContentLoaded', () => {
   if (musicEnabled) {
     musicEnabled.checked = savedAudio.musicEnabled;
     musicEnabled.addEventListener('change', () => setMusicEnabled(musicEnabled.checked));
+  }
+
+  // ── HUD Customization (Scale & Opacity) ──
+  const hudScaleInput = document.getElementById('hud-scale') as HTMLInputElement | null;
+  const hudScaleOutput = document.getElementById('hud-scale-value') as HTMLOutputElement | null;
+  const hudOpacityInput = document.getElementById('hud-opacity') as HTMLInputElement | null;
+  const hudOpacityOutput = document.getElementById('hud-opacity-value') as HTMLOutputElement | null;
+
+  const applyHudSettings = (scalePct: number, opacityPct: number) => {
+    document.documentElement.style.setProperty('--hud-scale', String(scalePct / 100));
+    document.documentElement.style.setProperty('--hud-opacity', String(opacityPct / 100));
+  };
+
+  const savedHudScale = parseInt(localStorage.getItem('incasters_hud_scale') || '100', 10);
+  const savedHudOpacity = parseInt(localStorage.getItem('incasters_hud_opacity') || '95', 10);
+  if (hudScaleInput && hudScaleOutput) {
+    hudScaleInput.value = String(savedHudScale);
+    hudScaleOutput.value = `${savedHudScale}%`;
+    hudScaleInput.addEventListener('input', () => {
+      const v = Number(hudScaleInput.value);
+      hudScaleOutput.value = `${v}%`;
+      localStorage.setItem('incasters_hud_scale', String(v));
+      applyHudSettings(v, Number(hudOpacityInput?.value || 95));
+    });
+  }
+  if (hudOpacityInput && hudOpacityOutput) {
+    hudOpacityInput.value = String(savedHudOpacity);
+    hudOpacityOutput.value = `${savedHudOpacity}%`;
+    hudOpacityInput.addEventListener('input', () => {
+      const v = Number(hudOpacityInput.value);
+      hudOpacityOutput.value = `${v}%`;
+      localStorage.setItem('incasters_hud_opacity', String(v));
+      applyHudSettings(Number(hudScaleInput?.value || 100), v);
+    });
+  }
+  applyHudSettings(savedHudScale, savedHudOpacity);
+
+  // ── Gamepad & Controller Settings ──
+  const ctrlSettings = loadControllerSettings();
+  const deadzoneInput = document.getElementById('stick-deadzone') as HTMLInputElement | null;
+  const deadzoneOutput = document.getElementById('stick-deadzone-value') as HTMLOutputElement | null;
+  const sensInput = document.getElementById('stick-sensitivity') as HTMLInputElement | null;
+  const sensOutput = document.getElementById('stick-sensitivity-value') as HTMLOutputElement | null;
+  const hapticsToggle = document.getElementById('gamepad-haptics') as HTMLInputElement | null;
+
+  if (deadzoneInput && deadzoneOutput) {
+    deadzoneInput.value = String(Math.round(ctrlSettings.deadzone * 100));
+    deadzoneOutput.value = `${Math.round(ctrlSettings.deadzone * 100)}%`;
+    deadzoneInput.addEventListener('input', () => {
+      const v = Number(deadzoneInput.value);
+      deadzoneOutput.value = `${v}%`;
+      ctrlSettings.deadzone = v / 100;
+      saveControllerSettings(ctrlSettings);
+      if (game) {
+        game.input.deadzone = ctrlSettings.deadzone;
+      }
+    });
+  }
+
+  if (sensInput && sensOutput) {
+    sensInput.value = String(Math.round(ctrlSettings.sensitivity * 100));
+    sensOutput.value = `${Math.round(ctrlSettings.sensitivity * 100)}%`;
+    sensInput.addEventListener('input', () => {
+      const v = Number(sensInput.value);
+      sensOutput.value = `${v}%`;
+      ctrlSettings.sensitivity = v / 100;
+      saveControllerSettings(ctrlSettings);
+      if (game) {
+        game.input.sensitivity = ctrlSettings.sensitivity;
+      }
+    });
+  }
+
+  if (hapticsToggle) {
+    hapticsToggle.checked = ctrlSettings.haptics;
+    hapticsToggle.addEventListener('change', () => {
+      ctrlSettings.haptics = hapticsToggle.checked;
+      saveControllerSettings(ctrlSettings);
+      if (game) {
+        game.input.hapticsEnabled = ctrlSettings.haptics;
+        if (ctrlSettings.haptics) game.input.vibrate(50, 0.4, 0.4);
+      }
+    });
   }
 
   let audioStarted = false;

@@ -117,7 +117,7 @@ export class Game {
   private powerupSpawnCooldowns: number[] = [0, 0, 0, 0]; // matching arena spawners
 
   // Input states
-  private input!: InputManager;
+  public input!: InputManager;
   private groundTarget = new THREE.Vector3(); // Mouse unprojected position
   private raycaster = new THREE.Raycaster();
   private planeY0 = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
