@@ -222,6 +222,99 @@ class SoundSynthesizer {
     this.playAsset('fizzle', volume * 0.45, 100, 0.035);
   }
 
+  playSpellClash(volume = 1) {
+    this.init();
+    if (!this.ctx) return;
+    const time = this.ctx.currentTime;
+
+    // Resonant crystal sparkle + impact burst
+    const osc1 = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+
+    osc1.type = 'triangle';
+    osc1.frequency.setValueAtTime(880, time);
+    osc1.frequency.exponentialRampToValueAtTime(1760, time + 0.06);
+    osc1.frequency.exponentialRampToValueAtTime(440, time + 0.18);
+
+    osc2.type = 'sine';
+    osc2.frequency.setValueAtTime(1320, time);
+    osc2.frequency.exponentialRampToValueAtTime(2200, time + 0.04);
+    osc2.frequency.exponentialRampToValueAtTime(660, time + 0.18);
+
+    gain.gain.setValueAtTime(0.18 * volume, time);
+    gain.gain.exponentialRampToValueAtTime(0.005, time + 0.18);
+
+    osc1.connect(gain);
+    osc2.connect(gain);
+    gain.connect(this.masterGain!);
+
+    osc1.start(time);
+    osc2.start(time);
+    osc1.stop(time + 0.18);
+    osc2.stop(time + 0.18);
+  }
+
+  playHeartbeat() {
+    this.init();
+    if (!this.ctx) return;
+    const time = this.ctx.currentTime;
+
+    // Low sub-bass thud pulse (lub-dub)
+    const playThud = (offset: number, freq: number, dur: number) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time + offset);
+      osc.frequency.exponentialRampToValueAtTime(35, time + offset + dur);
+      gain.gain.setValueAtTime(0.22, time + offset);
+      gain.gain.exponentialRampToValueAtTime(0.01, time + offset + dur);
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(time + offset);
+      osc.stop(time + offset + dur);
+    };
+
+    playThud(0, 75, 0.1);
+    playThud(0.13, 65, 0.12);
+  }
+
+  playKillStreak(streakCount: number) {
+    this.init();
+    if (!this.ctx) return;
+    const time = this.ctx.currentTime;
+
+    const chords: number[][] = [
+      [523.25, 659.25],          // 2x: C5 + E5
+      [523.25, 659.25, 783.99],  // 3x: C5 + E5 + G5
+      [659.25, 783.99, 1046.50], // 4x: E5 + G5 + C6
+      [783.99, 987.77, 1318.51]  // 5x+: G5 + B5 + E6 Rampage!
+    ];
+    const notes = chords[Math.min(streakCount - 2, chords.length - 1)] || chords[0];
+
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx!.createOscillator();
+      const gain = this.ctx!.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, time + idx * 0.04);
+
+      const filter = this.ctx!.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(2000, time);
+      filter.frequency.exponentialRampToValueAtTime(500, time + 0.3);
+
+      gain.gain.setValueAtTime(0.12, time + idx * 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.005, time + idx * 0.04 + 0.28);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(time + idx * 0.04);
+      osc.stop(time + idx * 0.04 + 0.28);
+    });
+  }
+
   playHit() {
     this.init();
     if (!this.ctx) return;

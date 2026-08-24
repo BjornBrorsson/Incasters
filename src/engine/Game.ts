@@ -99,6 +99,7 @@ export class Game {
   private playerCombo = 0;
   private playerComboTimer = 0;
   private firstBlood = false;
+  private heartbeatTimer = 0;
 
   // Game Entities
   arena!: THREE.Group;
@@ -1224,6 +1225,18 @@ export class Game {
       musicDanger
     );
 
+    // Low-health heartbeat warning
+    if (!this.player.isDead && this.player.health / Math.max(1, this.player.maxHealth) <= 0.28) {
+      this.heartbeatTimer -= dt;
+      if (this.heartbeatTimer <= 0) {
+        this.heartbeatTimer = 0.95; // 1 heartbeat per second
+        sfx.playHeartbeat();
+        this.input.vibrate(60, 0.3, 0.45);
+      }
+    } else {
+      this.heartbeatTimer = 0;
+    }
+
     // Camera follow player or spectated bot using the fixed offset angle (smooth lerp).
     const followTarget = !this.player.isDead ? this.player : this.isSpectating ? this.getSpectateTarget() : null;
     if (followTarget) {
@@ -1550,9 +1563,16 @@ export class Game {
   private registerPlayerKill() {
     this.playerCombo = this.playerComboTimer > 0 ? this.playerCombo + 1 : 1;
     this.playerComboTimer = 3.0;
-    if (this.playerCombo === 2) this.fx.announce('DOUBLE KILL!', '#ff8a3d');
-    else if (this.playerCombo === 3) this.fx.announce('TRIPLE KILL!', '#ff5fa2');
-    else if (this.playerCombo >= 4) this.fx.announce('RAMPAGE!', '#ffd23d', true);
+    if (this.playerCombo === 2) {
+      this.fx.announce('DOUBLE KILL!', '#ff8a3d');
+      sfx.playKillStreak(2);
+    } else if (this.playerCombo === 3) {
+      this.fx.announce('TRIPLE KILL!', '#ff5fa2');
+      sfx.playKillStreak(3);
+    } else if (this.playerCombo >= 4) {
+      this.fx.announce('RAMPAGE!', '#ffd23d', true);
+      sfx.playKillStreak(4);
+    }
   }
 
   private onCasterKilled(killer: Caster | null, victim: Caster) {
@@ -1710,11 +1730,19 @@ export class Game {
           p1.playFizzleOnDestroy = true;
           p2.playFizzleOnDestroy = true;
 
-          // Play cancel sound and spark burst
-          sfx.playHit();
+          // Play spell clash sound, dual-spark burst and haptic feedback
+          sfx.playSpellClash();
           if (this.netMode === 'host') this.onNetEvent?.({ kind: 'hit', data: { surface: 'clash' } });
-          const mixColor = Math.random() < 0.5 ? p1.trailColor : p2.trailColor;
-          this.spawnBlastParticles((p1.x + p2.x) / 2, (p1.y + p2.y) / 2, mixColor, 12, 1.2);
+          const clashX = (p1.x + p2.x) / 2;
+          const clashY = (p1.y + p2.y) / 2;
+          this.spawnBlastParticles(clashX, clashY, 0xffea78, 16, 1.4);
+          this.spawnBlastParticles(clashX, clashY, p1.trailColor, 8, 1.0);
+          this.spawnBlastParticles(clashX, clashY, p2.trailColor, 8, 1.0);
+
+          if (p1.ownerId === 'player' || p2.ownerId === 'player') {
+            this.input.rumble(80, 0.45, 0.7);
+            this.addShake(0.12);
+          }
         }
       }
     }
