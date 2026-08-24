@@ -31,6 +31,7 @@ import {
   setMusicEnabled,
   setMusicVolume,
   setSfxVolume,
+  setMuted,
   sfx
 } from './engine/Audio';
 import { loadControllerSettings, saveControllerSettings } from './engine/InputManager';
@@ -414,6 +415,13 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   window.addEventListener('pointerdown', startAudio, { once: true });
   window.addEventListener('keydown', startAudio, { once: true });
+
+  // Mute game audio automatically when window loses focus or app is backgrounded
+  document.addEventListener('visibilitychange', () => {
+    setMuted(document.hidden);
+  });
+  window.addEventListener('blur', () => setMuted(true));
+  window.addEventListener('focus', () => setMuted(false));
 
   // Progression UI helpers
   const refreshBadge = () => {

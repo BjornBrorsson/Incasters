@@ -331,7 +331,21 @@ export class Game {
     // Warm torchlight fill light for environment depth
     const envLight = new THREE.DirectionalLight(0xffa840, 0.25);
     envLight.position.set(16, 20, -16);
-    this.scene.add(envLight);
+    // WebGL Context Lost and Restored recovery handling
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('Incasters: WebGL Context Lost. Pausing animation frame...');
+      if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
+    }, { signal: this.eventAbortController.signal });
+
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.info('Incasters: WebGL Context Restored. Rebuilding scene & resuming renderer...');
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsConfig.pixelRatioCap));
+      this.renderer.setSize(window.innerWidth, window.innerHeight);
+      if (this.isPlaying) {
+        this.animationFrameId = requestAnimationFrame(this.tick.bind(this));
+      }
+    }, { signal: this.eventAbortController.signal });
 
     // Listen to resize
     window.addEventListener('resize', this.onResize.bind(this), { signal: this.eventAbortController.signal });
@@ -1039,25 +1053,30 @@ export class Game {
     this.updateHUD();
   }
 
-  /** Apply all remote player inputs to their caster entities (host mode). */
+  /** Apply all remote player inputs to their caster entities with host-side anti-cheat validation. */
   private applyRemoteInputs() {
     this.remoteInputs.forEach((input, playerId) => {
       const caster = this.remoteCasters.get(playerId);
       if (!caster || caster.isDead) return;
 
       const speed = caster.getSpeed();
-      caster.vx = input.moveX * speed;
-      caster.vy = input.moveY * speed;
+      // Host-side velocity validation: clamp input magnitude to 1.0 to prevent speed hacks
+      const inputMag = Math.hypot(input.moveX, input.moveY);
+      const safeMoveX = inputMag > 1 ? input.moveX / inputMag : input.moveX;
+      const safeMoveY = inputMag > 1 ? input.moveY / inputMag : input.moveY;
+
+      caster.vx = safeMoveX * speed;
+      caster.vy = safeMoveY * speed;
       caster.aimAngle = input.aimAngle;
 
       if (input.firing && caster.shootTimer <= 0 && caster.ammo > 0) {
         this.spawnProjectile(caster, input.aimAngle, null);
+        caster.shootTimer = caster.getFireRateCooldown();
       }
 
-      if (input.dashing && caster.dashCooldownTimer <= 0) {
-        const mag = Math.sqrt(input.moveX * input.moveX + input.moveY * input.moveY);
-        if (mag > 0.1) {
-          caster.dash((input.moveX / mag) * speed, (input.moveY / mag) * speed);
+      if (input.dashing && caster.dashCooldownTimer <= 0 && !caster.isDashing) {
+        if (inputMag > 0.1) {
+          caster.dash(safeMoveX, safeMoveY);
           this.onNetEvent?.({ kind: 'dash', data: { casterId: caster.id } });
         }
       }

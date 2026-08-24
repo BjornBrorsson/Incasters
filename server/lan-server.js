@@ -156,6 +156,11 @@ wss.on('connection', (ws, req) => {
         break;
       }
 
+      case 'ping': {
+        sendTo(ws, { type: 'pong', t: msg.t });
+        break;
+      }
+
       case 'leave': {
         handleDisconnect();
         break;

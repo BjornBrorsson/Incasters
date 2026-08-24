@@ -756,3 +756,16 @@ export function setMusicEnabled(enabled: boolean) {
   music.setEnabled(enabled);
   saveAudioSettings(audioSettings);
 }
+
+let isAppMuted = false;
+export function setMuted(muted: boolean) {
+  if (isAppMuted === muted) return;
+  isAppMuted = muted;
+  if (muted) {
+    sfx.setLevels(0, 0);
+    music.setLevels(0, 0);
+  } else {
+    sfx.setLevels(audioSettings.masterVolume, audioSettings.sfxVolume);
+    music.setLevels(audioSettings.masterVolume, audioSettings.musicVolume);
+  }
+}

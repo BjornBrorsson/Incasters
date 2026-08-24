@@ -189,6 +189,15 @@ export class LanClient {
           case 'clientInput':
             this.emit('clientInput', msg);
             break;
+          case 'ping':
+            this.send({ type: 'pong', t: msg.t });
+            break;
+          case 'pong': {
+            const pingMs = Math.max(1, Math.round(performance.now() - msg.t));
+            this.updatePingUI(pingMs);
+            this.emit('ping', pingMs);
+            break;
+          }
         }
       };
 
@@ -236,7 +245,39 @@ export class LanClient {
     this.send({ type: 'end', result });
   }
 
+  private pingInterval: any = null;
+
+  startPingLoop() {
+    this.stopPingLoop();
+    this.pingInterval = setInterval(() => {
+      if (this.connected) {
+        this.send({ type: 'ping', t: performance.now() });
+      }
+    }, 2000);
+  }
+
+  stopPingLoop() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+  }
+
+  updatePingUI(pingMs: number) {
+    const pingContainer = document.getElementById('net-ping');
+    const pingVal = document.getElementById('net-ping-val');
+    const pingDot = document.getElementById('net-ping-dot');
+    if (pingContainer) pingContainer.style.display = 'flex';
+    if (pingVal) pingVal.textContent = `${pingMs}ms`;
+    if (pingDot) {
+      pingDot.className = pingMs < 60 ? 'ping-dot' : pingMs < 150 ? 'ping-dot medium' : 'ping-dot poor';
+    }
+  }
+
   disconnect() {
+    this.stopPingLoop();
+    const pingContainer = document.getElementById('net-ping');
+    if (pingContainer) pingContainer.style.display = 'none';
     if (this.ws) {
       this.send({ type: 'leave' });
       this.ws.close();
@@ -286,6 +327,7 @@ export class ClientGameRenderer {
   private lastLeftTapY = 0;
   private localAimAngle: number = 0;
   private lastLocalPlayerState: CasterNetState | null = null;
+  private casterTargets = new Map<string, { x: number; y: number }>();
 
   // Cached HUD DOM elements
   private hud = {
@@ -331,6 +373,19 @@ export class ClientGameRenderer {
 
     const signal = this.eventAbortController.signal;
     window.addEventListener('resize', this.onResize, { signal });
+
+    // WebGL Context Lost & Restored recovery
+    this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      console.warn('ClientGameRenderer: WebGL context lost.');
+      if (this.rafId) cancelAnimationFrame(this.rafId);
+    }, { signal });
+
+    this.renderer.domElement.addEventListener('webglcontextrestored', () => {
+      console.info('ClientGameRenderer: WebGL context restored. Resuming rendering...');
+      this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
+      this.animate();
+    }, { signal });
 
     // Scene Environment: background, fog, and celestial sky dome
     this.scene.background = new THREE.Color(PALETTE.skyBottom);
@@ -666,11 +721,20 @@ export class ClientGameRenderer {
   private animate = () => {
     this.rafId = requestAnimationFrame(this.animate);
 
-    // 1. Poll inputs and stream to host
+    // 1. Smoothly interpolate casters toward their target positions
+    this.casterMeshes.forEach((group, id) => {
+      const target = this.casterTargets.get(id);
+      if (target) {
+        group.position.x += (target.x - group.position.x) * 0.4;
+        group.position.z += (target.y - group.position.z) * 0.4;
+      }
+    });
+
+    // 2. Poll inputs and stream to host
     const inputState = this.pollLocalInput();
     this.onSendInput?.(inputState);
 
-    // 2. Update Aim Visualizer for local player
+    // 3. Update Aim Visualizer for local player
     if (this.lastLocalPlayerState && !this.lastLocalPlayerState.isDead) {
       const dummyPlayer = {
         x: this.lastLocalPlayerState.x,
@@ -684,7 +748,7 @@ export class ClientGameRenderer {
       this.aimVisualizer.update(dummyPlayer as any, true, null, this.arena.walls, 0.016);
     }
 
-    // 3. Render Three.js Scene
+    // 4. Render Three.js Scene
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -697,11 +761,20 @@ export class ClientGameRenderer {
       let group = this.casterMeshes.get(cs.id);
       if (!group) {
         group = this.createCasterMesh(cs.robeColor, cs.spellColor);
+        group.position.set(cs.x, 0, cs.y);
         this.casterMeshes.set(cs.id, group);
+        this.casterTargets.set(cs.id, { x: cs.x, y: cs.y });
         this.scene.add(group);
+      } else {
+        const target = this.casterTargets.get(cs.id);
+        if (target) {
+          target.x = cs.x;
+          target.y = cs.y;
+        } else {
+          this.casterTargets.set(cs.id, { x: cs.x, y: cs.y });
+        }
       }
 
-      group.position.set(cs.x, 0, cs.y);
       group.visible = !cs.isDead;
 
       // Update color if changed

@@ -513,6 +513,34 @@ body {
   text-shadow: 0 0 10px rgba(200, 150, 10, 0.45);
 }
 
+.net-ping {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-family: monospace;
+  margin-top: 1px;
+}
+
+.ping-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #33ff88;
+  box-shadow: 0 0 6px #33ff88;
+}
+
+.ping-dot.medium {
+  background: #ffcc00;
+  box-shadow: 0 0 6px #ffcc00;
+}
+
+.ping-dot.poor {
+  background: #ff4444;
+  box-shadow: 0 0 6px #ff4444;
+}
+
 /* Leaderboard (Top-Right) */
 .leaderboard-panel {
   top: 20px;

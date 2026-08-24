@@ -351,6 +351,39 @@ async function run() {
     console.log("  ✓ HUD Scale and Opacity CSS variables and local storage applied correctly.");
     console.log("  ✓ Gamepad Deadzone, Sensitivity, and Haptic settings saved and loaded seamlessly.");
 
+    // 8. Test Background Audio Muting, WebGL Context Listeners, and Network Ping Indicator
+    console.log("\n8. Testing Background Audio Muting, WebGL Context Listeners, and Network Ping Indicator...");
+    const engineCheck = await page.evaluate(() => {
+      // Simulate window blur and focus
+      window.dispatchEvent(new Event('blur'));
+      window.dispatchEvent(new Event('focus'));
+
+      const pingEl = document.getElementById('net-ping');
+      const pingVal = document.getElementById('net-ping-val');
+      const pingDot = document.getElementById('net-ping-dot');
+
+      if (!pingEl || !pingVal || !pingDot) {
+        return { ok: false, reason: 'Ping indicator elements missing from DOM' };
+      }
+
+      // Check canvas webgl context loss listener
+      const canvas = document.querySelector('canvas');
+      if (canvas) {
+        // Trigger simulated WebGL context events
+        const lostEvent = new Event('webglcontextlost', { cancelable: true });
+        canvas.dispatchEvent(lostEvent);
+        const restoredEvent = new Event('webglcontextrestored');
+        canvas.dispatchEvent(restoredEvent);
+      }
+
+      return { ok: true };
+    });
+
+    if (!engineCheck.ok) throw new Error(engineCheck.reason);
+    console.log("  ✓ Audio muting/unmuting on window focus/blur dispatched cleanly.");
+    console.log("  ✓ WebGL context lost & restored lifecycle listeners handled without errors.");
+    console.log("  ✓ Network Ping HUD elements validated.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);
