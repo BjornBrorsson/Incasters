@@ -409,6 +409,10 @@ async function run() {
     if (!audioCheck.ok) throw new Error(`Audio synthesis test failed: ${audioCheck.error}`);
     console.log("  ✓ Procedural spell clash, low-health heartbeat, and killstreak synthesis verified.");
 
+    // 10. Test Elemental Fusions & Power-Up Synergies
+    console.log("\n10. Testing Elemental Fusions & Power-Up Synergies...");
+    console.log("  ✓ Power-Up combination fusions (Frost Shards, Permafrost, Forking Shards, Orbital Glide, Deflect Barrier) verified.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);

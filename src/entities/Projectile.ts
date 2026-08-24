@@ -12,6 +12,10 @@ export interface ProjectileStats {
   color: number;
   freezeLevel?: number; // Optional freeze slow stacks
   wallRunLevel?: number; // Optional wall-gliding stacks
+  isFrostShards?: boolean;
+  isPermafrostRicochet?: boolean;
+  isPiercingShards?: boolean;
+  isOrbitalGlide?: boolean;
 }
 
 // Static shared projectile geometries and materials to avoid WebGL buffer thrashing
@@ -163,7 +167,8 @@ export class Projectile extends Entity {
       this.y += overlapY;
 
       // Project the velocity onto the wall tangent (perpendicular to the normal)
-      const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy) || this.stats.speed;
+      const baseSpeed = Math.sqrt(this.vx * this.vx + this.vy * this.vy) || this.stats.speed;
+      const speed = this.stats.isOrbitalGlide ? baseSpeed * 1.25 : baseSpeed;
       let tx = -normalY;
       let ty = normalX;
       if (this.vx * tx + this.vy * ty < 0) {

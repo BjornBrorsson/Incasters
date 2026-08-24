@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Caster } from '../entities/Caster';
+import { Caster, getActiveFusions } from '../entities/Caster';
 import { Bot } from '../entities/Bot';
 import { Projectile } from '../entities/Projectile';
 import type { ProjectileStats } from '../entities/Projectile';
@@ -956,14 +956,16 @@ export class Game {
     for (let i = 0; i < count; i++) {
       const angle = startAngle + i * angleStep;
       
-      // Reduced stats for splits
+      // Reduced stats for splits with synergy fusions
       const splitStats: ProjectileStats = {
         ...proj.stats,
         damage: Math.round(proj.stats.damage * 0.6),
         speed: proj.stats.speed * 0.85,
         maxBounces: Math.max(0, proj.stats.maxBounces - 1),
-        maxPierces: 0, // Splits don't pierce
-        splitLevel: proj.splitLevel - 1 // Reduce split counter
+        maxPierces: proj.stats.isPiercingShards ? 1 : 0, // Piercing Shards synergy
+        splitLevel: proj.splitLevel - 1, // Reduce split counter
+        freezeLevel: proj.stats.isFrostShards ? 1 : proj.stats.freezeLevel,
+        color: proj.stats.isFrostShards ? 0x50f0ff : proj.stats.color
       };
 
       // Spawn slightly offset in direction
@@ -2001,13 +2003,16 @@ export class Game {
         FREEZE: '#4df0ff',
         WALLRUN: '#00e0b0'
       };
+
+      const activeFusions = getActiveFusions(this.player.powerups);
       for (let i = 0; i < 3; i++) {
         const slotObj = this.hudEl.puSlots[i];
         if (slotObj && slotObj.slot && slotObj.text) {
           if (i < this.player.powerupSlotsOrder.length) {
             const type = this.player.powerupSlotsOrder[i];
             const stack = this.player.powerups.get(type) || 1;
-            slotObj.text.innerText = `${POWERUP_SYMBOLS[type]} ${type} [Lv ${stack}]`;
+            const fusionTag = activeFusions.length > 0 && i === 0 ? ` ✨ ${activeFusions[0].name}` : '';
+            slotObj.text.innerText = `${POWERUP_SYMBOLS[type]} ${type} [Lv ${stack}]${fusionTag}`;
             slotObj.slot.className = 'pu-slot active';
             slotObj.slot.style.borderColor = colors[type];
             slotObj.slot.style.boxShadow = `0 0 10px ${colors[type]}`;

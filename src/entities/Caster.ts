@@ -6,6 +6,34 @@ import { sfx } from '../engine/Audio';
 import { buildHat, buildAccessory, buildHair, buildFaceGear, buildWeapon } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
 
+export interface PowerUpFusion {
+  name: string;
+  desc: string;
+  icon: string;
+}
+
+export function getActiveFusions(powerups: Map<PowerUpType, number>): PowerUpFusion[] {
+  const fusions: PowerUpFusion[] = [];
+  const has = (t: PowerUpType) => (powerups.get(t) || 0) > 0;
+
+  if (has(PowerUpType.FREEZE) && has(PowerUpType.SPLIT)) {
+    fusions.push({ name: 'Frost Shards', desc: 'Splits leave slowing frost zones', icon: '❄️' });
+  }
+  if (has(PowerUpType.FREEZE) && has(PowerUpType.BOUNCE)) {
+    fusions.push({ name: 'Permafrost', desc: 'Ricochets spawn freezing frost rings', icon: '🧊' });
+  }
+  if (has(PowerUpType.SPLIT) && has(PowerUpType.PIERCE)) {
+    fusions.push({ name: 'Forking Shards', desc: 'Piercing splits through enemies', icon: '⚡' });
+  }
+  if (has(PowerUpType.HASTE) && has(PowerUpType.WALLRUN)) {
+    fusions.push({ name: 'Orbital Glide', desc: 'Speed boost and corner acceleration', icon: '🌀' });
+  }
+  if (has(PowerUpType.SHIELD) && has(PowerUpType.BOUNCE)) {
+    fusions.push({ name: 'Deflect Barrier', desc: 'Shield reflects enemy spells', icon: '🛡️' });
+  }
+  return fusions;
+}
+
 export class Caster extends Entity {
   id: string;
   name: string;
@@ -307,11 +335,21 @@ export class Caster extends Entity {
     const wallrun = this.powerups.get(PowerUpType.WALLRUN) || 0;
     stats.wallRunLevel = wallrun;
 
+    // 7. Synergies and Elemental Fusions
+    stats.isFrostShards = freeze > 0 && split > 0;
+    stats.isPermafrostRicochet = freeze > 0 && bounce > 0;
+    stats.isPiercingShards = split > 0 && pierce > 0;
+    stats.isOrbitalGlide = haste > 0 && wallrun > 0;
+
     // If there's an active power-up combination, color-mix the shot
     if (this.powerupSlotsOrder.length > 0) {
-      // Prioritize the highest-level power-up color or first slot color
-      const primaryPowerUp = this.powerupSlotsOrder[0];
-      stats.color = POWERUP_COLORS[primaryPowerUp];
+      if (stats.isFrostShards) stats.color = 0x50e0ff;
+      else if (stats.isPiercingShards) stats.color = 0xbf55ff;
+      else if (stats.isOrbitalGlide) stats.color = 0x20f5a0;
+      else {
+        const primaryPowerUp = this.powerupSlotsOrder[0];
+        stats.color = POWERUP_COLORS[primaryPowerUp];
+      }
     }
 
     return stats;
