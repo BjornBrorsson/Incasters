@@ -648,6 +648,9 @@ body {
 
 /* GAME OVER OVERLAY SCREEN */
 .gameover-overlay {
+  position: relative;
+  z-index: 150;
+  pointer-events: auto;
   width: 90%;
   max-width: 440px;
   max-height: 95vh;
@@ -668,11 +671,18 @@ body {
   gap: 12px;
   width: 100%;
   flex-wrap: wrap;
+  position: relative;
+  z-index: 151;
 }
 
 .gameover-buttons .play-btn {
   flex: 1;
   min-width: 140px;
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  position: relative;
+  z-index: 152;
 }
 
 .play-btn.secondary {
@@ -1961,6 +1971,56 @@ body {
 .lobby-code-badge strong {
   color: #ffd23d;
   letter-spacing: 1px;
+}
+
+.lan-player-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.85rem;
+}
+
+.player-host {
+  background: linear-gradient(135deg, #ffd23d, #ff8a00);
+  color: #04060f;
+  font-size: 0.6rem;
+  font-weight: 900;
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.player-ready {
+  color: #39ff14;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  text-shadow: 0 0 8px rgba(57, 255, 20, 0.4);
+}
+
+.player-ready::before {
+  content: '✓ ';
+}
+
+.player-not-ready {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.75rem;
+}
+
+.lan-action-btn.active {
+  background: rgba(57, 255, 20, 0.2);
+  border-color: #39ff14;
+  color: #39ff14;
+  box-shadow: 0 0 15px rgba(57, 255, 20, 0.35);
 }
 
 .lan-action-btn.success {

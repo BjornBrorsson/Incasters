@@ -7,8 +7,9 @@ android {
         applicationId "com.incasters.game"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        def runNumber = System.getenv("VERSION_CODE") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "100"
+        versionCode runNumber.toInteger()
+        versionName "1.0." + runNumber
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -25,6 +26,8 @@ android {
                 storePassword System.getenv("KEYSTORE_PASSWORD") ?: "incastersrelease"
                 keyAlias System.getenv("KEY_ALIAS") ?: "incasters-key"
                 keyPassword System.getenv("KEY_PASSWORD") ?: "incastersrelease"
+                v1SigningEnabled true
+                v2SigningEnabled true
             }
         }
     }

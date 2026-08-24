@@ -10,12 +10,14 @@
     "preview": "vite preview",
     "lan-server": "node server/lan-server.js",
     "desktop": "npm run build && electron .",
-    "desktop:build": "npm run build && electron-builder --win portable --x64"
+    "desktop:build": "npm run build && electron-builder --win portable --x64",
+    "generate-keystore": "node scripts/generate-keystore.cjs"
   },
   "devDependencies": {
     "@types/three": "^0.184.1",
     "electron": "43.3.0",
     "electron-builder": "26.15.3",
+    "node-forge": "^1.4.0",
     "puppeteer-core": "^25.2.1",
     "typescript": "~6.0.2",
     "vite": "^8.1.0"

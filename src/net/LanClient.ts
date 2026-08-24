@@ -9,6 +9,11 @@
  */
 
 import * as THREE from 'three';
+import { Arena, type MapType } from '../world/Arena';
+import { InputManager } from '../engine/InputManager';
+import { AimVisualizer } from '../engine/AimVisualizer';
+import { screenToWorldIso, screenAngleToWorldIso } from '../engine/Physics';
+import { GameModeType } from '../world/GameModes';
 
 export interface PlayerInputState {
   moveX: number;
@@ -238,28 +243,73 @@ export class LanClient {
 }
 
 /**
- * Lightweight client-side renderer for LAN multiplayer client mode.
- * Does NOT run any game simulation — just renders state snapshots from the host.
+ * Lightweight client-side renderer for LAN / Online P2P multiplayer client mode.
+ * Renders the full 3D arena and state snapshots from the host, captures client inputs,
+ * and streams PlayerInputState to the host.
  */
 export class ClientGameRenderer {
   private scene = new THREE.Scene();
   private camera: THREE.OrthographicCamera;
   private renderer: THREE.WebGLRenderer;
   private container: HTMLDivElement;
+  private arena: Arena;
+  private input: InputManager;
+  private aimVisualizer: AimVisualizer;
   private casterMeshes = new Map<string, THREE.Group>();
   private projectileMeshes = new Map<number, THREE.Mesh>();
+  private powerupMeshes = new Map<number, THREE.Mesh>();
   private rafId = 0;
   private baseCameraZoom = 1;
   private eventAbortController = new AbortController();
+  private localPlayerId: string = '';
+  public readonly mapType: MapType;
+  public readonly modeType: GameModeType;
 
   // Camera offset matching the host's isometric view
   private camOffset = new THREE.Vector3(18, 25, 29);
 
-  constructor(container: HTMLDivElement) {
+  // Local client input & aiming state
+  public onSendInput: ((input: PlayerInputState) => void) | null = null;
+  private touchControlsActive = false;
+  private touchFireHeld = false;
+  private touchDashQueued = false;
+  private touchJoysticks = {
+    left: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 },
+    right: { active: false, id: -1, startX: 0, startY: 0, curX: 0, curY: 0, dirX: 0, dirY: 0 }
+  };
+  private lastLeftTapTime = 0;
+  private lastLeftTapX = 0;
+  private lastLeftTapY = 0;
+  private localAimAngle: number = 0;
+  private lastLocalPlayerState: CasterNetState | null = null;
+
+  // Cached HUD DOM elements
+  private hud = {
+    hpProgress: document.getElementById('hp-progress'),
+    hpText: document.getElementById('hp-text'),
+    ammoSlots: document.getElementById('ammo-slots'),
+    matchTimer: document.getElementById('match-timer'),
+    matchTimerLabel: document.getElementById('match-timer-label'),
+    coinCounter: document.getElementById('coin-counter'),
+    coinVal: document.getElementById('coin-val'),
+    leaderboardList: document.getElementById('leaderboard-list'),
+    dashOverlay: document.getElementById('dash-cooldown-overlay'),
+    dashBtn: document.getElementById('dash-btn'),
+    fireBtn: document.getElementById('fire-btn')
+  };
+
+  constructor(
+    container: HTMLDivElement,
+    mapType: MapType = 'ARENA',
+    modeType: GameModeType = GameModeType.BATTLE_ROYALE
+  ) {
     this.container = container;
-    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+    this.mapType = mapType;
+    this.modeType = modeType;
+
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setSize(container.clientWidth, container.clientHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
     this.container.appendChild(this.renderer.domElement);
 
@@ -274,22 +324,236 @@ export class ClientGameRenderer {
     this.baseCameraZoom = this.getBaseCameraZoom();
     this.camera.zoom = this.baseCameraZoom;
     this.camera.updateProjectionMatrix();
-    window.addEventListener('resize', this.onResize, { signal: this.eventAbortController.signal });
 
-    // Simple ambient lighting
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
-    dir.position.set(10, 20, 10);
-    this.scene.add(dir);
+    const signal = this.eventAbortController.signal;
+    window.addEventListener('resize', this.onResize, { signal });
 
-    // Ground plane
-    const groundGeo = new THREE.PlaneGeometry(60, 60);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2e });
-    const ground = new THREE.Mesh(groundGeo, groundMat);
-    ground.rotation.x = -Math.PI / 2;
-    this.scene.add(ground);
+    // 1. Build Arena
+    this.arena = new Arena(mapType);
+    this.arena.buildArena(this.scene);
+
+    // 2. Setup Input Manager
+    this.input = new InputManager();
+
+    // 3. Setup Aim Visualizer
+    this.aimVisualizer = new AimVisualizer(this.scene);
+
+    // 4. Setup Touch Controls
+    this.setupTouchControls(signal);
 
     this.animate();
+  }
+
+  setLocalPlayerId(id: string) {
+    this.localPlayerId = id;
+  }
+
+  private setupTouchControls(signal: AbortSignal) {
+    const isTouchDevice =
+      window.matchMedia('(pointer: coarse)').matches ||
+      (navigator.maxTouchPoints > 0 && window.matchMedia('(hover: none)').matches) ||
+      window.innerWidth <= 1024;
+
+    if (isTouchDevice) {
+      this.ensureTouchButtonsVisible();
+    }
+
+    window.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false, signal });
+    window.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false, signal });
+    window.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false, signal });
+    window.addEventListener('touchcancel', this.onTouchEnd.bind(this), { passive: false, signal });
+
+    // Dash button click listener
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) {
+      const onDash = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchDashQueued = true;
+      };
+      dashBtn.addEventListener('touchstart', onDash, { passive: false, signal });
+      dashBtn.addEventListener('click', onDash, { signal });
+    }
+
+    // Fire button click listener
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      const onFireStart = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchFireHeld = true;
+        fireBtn.classList.add('pressed');
+      };
+      const onFireEnd = (e: Event) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.touchFireHeld = false;
+        fireBtn.classList.remove('pressed');
+      };
+      fireBtn.addEventListener('touchstart', onFireStart, { passive: false, signal });
+      fireBtn.addEventListener('touchend', onFireEnd, { passive: false, signal });
+      fireBtn.addEventListener('touchcancel', onFireEnd, { passive: false, signal });
+      fireBtn.addEventListener('mousedown', onFireStart, { signal });
+      fireBtn.addEventListener('mouseup', onFireEnd, { signal });
+      fireBtn.addEventListener('mouseleave', onFireEnd, { signal });
+    }
+  }
+
+  private ensureTouchButtonsVisible() {
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) fireBtn.style.display = 'block';
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) dashBtn.style.display = 'flex';
+  }
+
+  private onTouchStart(e: TouchEvent) {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.closest('.gameover-overlay') || target.closest('#menu-screen') || target.closest('#spectator-hud'))) {
+      return;
+    }
+    if (target && (target.id === 'fire-btn' || target.id === 'dash-btn' || target.closest('#fire-btn') || target.closest('#dash-btn') || target.closest('.dash-panel'))) {
+      return;
+    }
+
+    this.touchControlsActive = true;
+    this.ensureTouchButtonsVisible();
+
+    const screenWidthHalf = window.innerWidth / 2;
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (touch.clientX < screenWidthHalf && !this.touchJoysticks.left.active) {
+        e.preventDefault();
+        const now = performance.now();
+        if (now - this.lastLeftTapTime < 340 && Math.hypot(touch.clientX - this.lastLeftTapX, touch.clientY - this.lastLeftTapY) < 85) {
+          this.touchDashQueued = true;
+          this.lastLeftTapTime = 0;
+        } else {
+          this.lastLeftTapTime = now;
+          this.lastLeftTapX = touch.clientX;
+          this.lastLeftTapY = touch.clientY;
+        }
+        this.touchJoysticks.left.active = true;
+        this.touchJoysticks.left.id = touch.identifier;
+        this.touchJoysticks.left.startX = touch.clientX;
+        this.touchJoysticks.left.startY = touch.clientY;
+        this.showJoystickUI('left', touch.clientX, touch.clientY);
+      } else if (touch.clientX >= screenWidthHalf && !this.touchJoysticks.right.active) {
+        e.preventDefault();
+        this.touchJoysticks.right.active = true;
+        this.touchJoysticks.right.id = touch.identifier;
+        this.touchJoysticks.right.startX = touch.clientX;
+        this.touchJoysticks.right.startY = touch.clientY;
+        this.showJoystickUI('right', touch.clientX, touch.clientY);
+      }
+    }
+  }
+
+  private onTouchMove(e: TouchEvent) {
+    for (let i = 0; i < e.touches.length; i++) {
+      const touch = e.touches[i];
+      if (this.touchJoysticks.left.active && touch.identifier === this.touchJoysticks.left.id) {
+        e.preventDefault();
+        const dx = touch.clientX - this.touchJoysticks.left.startX;
+        const dy = touch.clientY - this.touchJoysticks.left.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const maxDist = 50;
+        const limit = Math.min(dist, maxDist);
+        if (dist > 6) {
+          this.touchJoysticks.left.dirX = (dx / dist) * (limit / maxDist);
+          this.touchJoysticks.left.dirY = (dy / dist) * (limit / maxDist);
+        } else {
+          this.touchJoysticks.left.dirX = 0;
+          this.touchJoysticks.left.dirY = 0;
+        }
+        this.updateJoystickUI('left', (dx / dist) * limit, (dy / dist) * limit);
+      }
+
+      if (this.touchJoysticks.right.active && touch.identifier === this.touchJoysticks.right.id) {
+        e.preventDefault();
+        const dx = touch.clientX - this.touchJoysticks.right.startX;
+        const dy = touch.clientY - this.touchJoysticks.right.startY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        const maxDist = 50;
+        const limit = Math.min(dist, maxDist);
+        if (dist > 6) {
+          this.touchJoysticks.right.dirX = dx / dist;
+          this.touchJoysticks.right.dirY = dy / dist;
+          const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+          this.localAimAngle = screenAngleToWorldIso(screenAngle);
+        } else {
+          this.touchJoysticks.right.dirX = 0;
+          this.touchJoysticks.right.dirY = 0;
+        }
+        this.updateJoystickUI('right', (dx / dist) * limit, (dy / dist) * limit);
+      }
+    }
+  }
+
+  private onTouchEnd(e: TouchEvent) {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const touch = e.changedTouches[i];
+      if (this.touchJoysticks.left.active && touch.identifier === this.touchJoysticks.left.id) {
+        this.touchJoysticks.left.active = false;
+        this.touchJoysticks.left.id = -1;
+        this.touchJoysticks.left.dirX = 0;
+        this.touchJoysticks.left.dirY = 0;
+        this.hideJoystickUI('left');
+      }
+      if (this.touchJoysticks.right.active && touch.identifier === this.touchJoysticks.right.id) {
+        this.touchJoysticks.right.active = false;
+        this.touchJoysticks.right.id = -1;
+        this.touchJoysticks.right.dirX = 0;
+        this.touchJoysticks.right.dirY = 0;
+        this.hideJoystickUI('right');
+      }
+    }
+  }
+
+  private showJoystickUI(side: 'left' | 'right', x: number, y: number) {
+    const el = document.getElementById(`joy-${side}`);
+    if (el) {
+      el.style.left = `${x - 40}px`;
+      el.style.top = `${y - 40}px`;
+      el.style.display = 'block';
+    }
+  }
+
+  private updateJoystickUI(side: 'left' | 'right', dx: number, dy: number) {
+    const knob = document.getElementById(`joy-${side}-knob`);
+    if (knob) knob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+
+  private hideJoystickUI(side: 'left' | 'right') {
+    const knob = document.getElementById(`joy-${side}-knob`);
+    if (knob) knob.style.transform = `translate(0px, 0px)`;
+    const el = document.getElementById(`joy-${side}`);
+    if (el) el.style.display = 'none';
+  }
+
+  private resetTouchControls() {
+    this.touchControlsActive = false;
+    this.touchFireHeld = false;
+    this.touchDashQueued = false;
+    this.touchJoysticks.left.active = false;
+    this.touchJoysticks.left.id = -1;
+    this.touchJoysticks.left.dirX = 0;
+    this.touchJoysticks.left.dirY = 0;
+    this.touchJoysticks.right.active = false;
+    this.touchJoysticks.right.id = -1;
+    this.touchJoysticks.right.dirX = 0;
+    this.touchJoysticks.right.dirY = 0;
+    this.hideJoystickUI('left');
+    this.hideJoystickUI('right');
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      fireBtn.style.display = 'none';
+      fireBtn.classList.remove('pressed', 'empty');
+    }
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) {
+      dashBtn.style.display = 'none';
+      dashBtn.classList.remove('pressed');
+    }
   }
 
   private getBaseCameraZoom() {
@@ -314,8 +578,88 @@ export class ClientGameRenderer {
     this.renderer.setSize(width, height);
   };
 
+  private pollLocalInput(): PlayerInputState {
+    this.input.pollGamepad();
+
+    let rawMoveX = 0;
+    let rawMoveY = 0;
+
+    // Movement: Touch joystick > Gamepad > Keyboard
+    if (this.touchJoysticks.left.active) {
+      rawMoveX = this.touchJoysticks.left.dirX;
+      rawMoveY = this.touchJoysticks.left.dirY;
+    } else if (this.input.usingGamepad) {
+      const gm = this.input.gamepadMove();
+      rawMoveX = gm.x;
+      rawMoveY = gm.y;
+    } else {
+      const km = this.input.keyboardMove();
+      rawMoveX = km.x;
+      rawMoveY = km.y;
+    }
+
+    let worldMoveX = 0;
+    let worldMoveY = 0;
+    const moveMag = Math.hypot(rawMoveX, rawMoveY);
+    if (moveMag > 0.12) {
+      const wm = screenToWorldIso(rawMoveX, rawMoveY);
+      worldMoveX = wm.x;
+      worldMoveY = wm.y;
+    }
+
+    // Aiming: Touch stick > Gamepad > Mouse
+    if (this.touchJoysticks.right.active && (this.touchJoysticks.right.dirX !== 0 || this.touchJoysticks.right.dirY !== 0)) {
+      const screenAngle = Math.atan2(this.touchJoysticks.right.dirY, this.touchJoysticks.right.dirX);
+      this.localAimAngle = screenAngleToWorldIso(screenAngle);
+    } else if (this.input.usingGamepad) {
+      const ga = this.input.gamepadAim();
+      if (ga.active) {
+        const screenAngle = Math.atan2(ga.y, ga.x);
+        this.localAimAngle = screenAngleToWorldIso(screenAngle);
+      }
+    } else if (!this.touchControlsActive) {
+      if (Math.hypot(this.input.mouseNDC.x, this.input.mouseNDC.y) > 0.08) {
+        const screenAngle = Math.atan2(-this.input.mouseNDC.y, this.input.mouseNDC.x);
+        this.localAimAngle = screenAngleToWorldIso(screenAngle);
+      }
+    }
+
+    // Firing & Dashing
+    const firing = this.input.isFireHeld() || this.touchFireHeld;
+    const dashing = this.input.consumeDash() || this.touchDashQueued;
+    if (dashing) this.touchDashQueued = false;
+
+    return {
+      moveX: worldMoveX,
+      moveY: worldMoveY,
+      aimAngle: this.localAimAngle,
+      firing,
+      dashing
+    };
+  }
+
   private animate = () => {
     this.rafId = requestAnimationFrame(this.animate);
+
+    // 1. Poll inputs and stream to host
+    const inputState = this.pollLocalInput();
+    this.onSendInput?.(inputState);
+
+    // 2. Update Aim Visualizer for local player
+    if (this.lastLocalPlayerState && !this.lastLocalPlayerState.isDead) {
+      const dummyPlayer = {
+        x: this.lastLocalPlayerState.x,
+        y: this.lastLocalPlayerState.y,
+        radius: 0.55,
+        aimAngle: this.localAimAngle,
+        clothingColor: this.lastLocalPlayerState.robeColor,
+        spellColor: this.lastLocalPlayerState.spellColor,
+        isDead: false
+      };
+      this.aimVisualizer.update(dummyPlayer as any, true, null, this.arena.walls, 0.016);
+    }
+
+    // 3. Render Three.js Scene
     this.renderer.render(this.scene, this.camera);
   };
 
@@ -388,35 +732,74 @@ export class ClientGameRenderer {
 
     // Camera follows the local player
     const localPlayer = state.casters.find((c) => c.id === this.localPlayerId);
-    if (localPlayer && !localPlayer.isDead) {
-      const targetX = localPlayer.x + this.camOffset.x;
-      const targetZ = localPlayer.y + this.camOffset.z;
-      this.camera.position.x += (targetX - this.camera.position.x) * 0.1;
-      this.camera.position.z += (targetZ - this.camera.position.z) * 0.1;
-      this.camera.lookAt(localPlayer.x, 0, localPlayer.y);
-      this.camera.updateMatrixWorld();
-      let edgeAtBase = 1;
-      state.projectiles.forEach((projectile) => {
-        if (projectile.ownerId !== this.localPlayerId || projectile.isDead) return;
-        const projected = new THREE.Vector3(projectile.x, 0.5, projectile.y).project(this.camera);
-        const zoomRatio = this.baseCameraZoom / Math.max(0.01, this.camera.zoom);
-        edgeAtBase = Math.max(
-          edgeAtBase,
-          Math.abs(projected.x) * zoomRatio / 0.68,
-          Math.abs(projected.y) * zoomRatio / 0.72
-        );
-      });
-      const targetZoom = Math.max(this.baseCameraZoom * 0.66, this.baseCameraZoom / edgeAtBase);
-      const zoomAmount = targetZoom < this.camera.zoom ? 0.22 : 0.08;
-      this.camera.zoom += (targetZoom - this.camera.zoom) * zoomAmount;
-      this.camera.updateProjectionMatrix();
+    if (localPlayer) {
+      this.lastLocalPlayerState = localPlayer;
+      if (!localPlayer.isDead) {
+        const targetX = localPlayer.x + this.camOffset.x;
+        const targetZ = localPlayer.y + this.camOffset.z;
+        this.camera.position.x += (targetX - this.camera.position.x) * 0.14;
+        this.camera.position.z += (targetZ - this.camera.position.z) * 0.14;
+        this.camera.lookAt(localPlayer.x, 0, localPlayer.y);
+        this.camera.updateMatrixWorld();
+        this.camera.zoom = this.baseCameraZoom;
+        this.camera.updateProjectionMatrix();
+      }
+
+      // Update HUD elements
+      if (this.hud.hpProgress) {
+        this.hud.hpProgress.style.width = `${Math.max(0, Math.min(100, (localPlayer.health / Math.max(1, localPlayer.maxHealth)) * 100))}%`;
+      }
+      if (this.hud.hpText) {
+        this.hud.hpText.innerText = `${Math.max(0, Math.round(localPlayer.health))} / ${localPlayer.maxHealth}`;
+      }
+      if (this.hud.ammoSlots) {
+        const pips = this.hud.ammoSlots.children;
+        for (let j = 0; j < pips.length; j++) {
+          pips[j].className = j < localPlayer.ammo ? 'ammo-pip active' : 'ammo-pip';
+        }
+      }
+      if (this.hud.fireBtn) {
+        this.hud.fireBtn.classList.toggle('empty', localPlayer.ammo <= 0);
+      }
+      if (this.hud.coinCounter && this.hud.coinVal) {
+        if (this.modeType === GameModeType.GOLD_RUSH) {
+          this.hud.coinCounter.style.display = 'flex';
+          this.hud.coinVal.innerText = `${localPlayer.coins}`;
+        } else {
+          this.hud.coinCounter.style.display = 'none';
+        }
+      }
     }
-  }
 
-  private localPlayerId: string = '';
+    // Match Timer
+    if (this.hud.matchTimer) {
+      const t = Math.max(0, Math.floor(state.matchTimer));
+      const mins = Math.floor(t / 60);
+      const secs = t % 60;
+      this.hud.matchTimer.innerText = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    }
 
-  setLocalPlayerId(id: string) {
-    this.localPlayerId = id;
+    // Leaderboard
+    if (this.hud.leaderboardList) {
+      const sorted = [...state.casters].sort((a, b) => b.score - a.score);
+      const limit = window.innerHeight <= 500 ? 3 : 5;
+      const topN = sorted.slice(0, limit);
+      this.hud.leaderboardList.innerHTML = topN
+        .map((c, idx) => {
+          const isLocal = c.id === this.localPlayerId;
+          const isDeadStyle = c.isDead ? 'opacity: 0.4; text-decoration: line-through;' : '';
+          const activeStyle = isLocal ? 'background: rgba(255,255,255,0.06); font-weight: bold; border-left: 3px solid #ffd700; padding-left: 4px;' : '';
+          const teamStyle = c.team === 'RED' ? 'color: #ff5a6e;' : c.team === 'BLUE' ? 'color: #3388ff;' : 'color: #ffd700;';
+          const scoreStr = this.modeType === GameModeType.GOLD_RUSH ? `${c.coins} 🪙` : `${c.score} Kills`;
+          return `
+            <div class="leaderboard-item" style="${isDeadStyle} ${activeStyle}">
+              <span style="${teamStyle}">#${idx + 1} ${c.name}</span>
+              <span>${scoreStr}</span>
+            </div>
+          `;
+        })
+        .join('');
+    }
   }
 
   private disposeCasterMesh(group: THREE.Group) {
@@ -480,6 +863,11 @@ export class ClientGameRenderer {
   destroy() {
     cancelAnimationFrame(this.rafId);
     this.eventAbortController.abort();
+    this.resetTouchControls();
+    if (this.input) this.input.dispose();
+    if (this.arena) this.arena.destroy(this.scene);
+    if (this.aimVisualizer) this.aimVisualizer.destroy(this.scene);
+
     this.casterMeshes.forEach((group) => {
       this.scene.remove(group);
       this.disposeCasterMesh(group);
@@ -489,8 +877,14 @@ export class ClientGameRenderer {
       m.geometry.dispose();
       (m.material as THREE.Material).dispose();
     });
+    this.powerupMeshes.forEach((m) => {
+      this.scene.remove(m);
+      m.geometry.dispose();
+      (m.material as THREE.Material).dispose();
+    });
     this.casterMeshes.clear();
     this.projectileMeshes.clear();
+    this.powerupMeshes.clear();
     this.renderer.dispose();
     if (this.renderer.domElement.parentElement === this.container) {
       this.container.removeChild(this.renderer.domElement);

@@ -22,7 +22,7 @@ import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
 import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Difficulty';
 import { loadGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from './game/GraphicsSettings';
-import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo } from './net/LanClient';
+import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo, type PlayerInputState } from './net/LanClient';
 import { P2PClient, cleanRoomCode } from './net/P2PClient';
 import {
   getAudioSettings,
@@ -379,8 +379,26 @@ document.addEventListener('DOMContentLoaded', () => {
     matchSummary.innerHTML = html;
   };
 
+  const hideGlobalTouchControls = () => {
+    const fireBtn = document.getElementById('fire-btn');
+    if (fireBtn) {
+      fireBtn.style.display = 'none';
+      fireBtn.classList.remove('pressed', 'empty');
+    }
+    const dashBtn = document.getElementById('dash-btn');
+    if (dashBtn) {
+      dashBtn.style.display = 'none';
+      dashBtn.classList.remove('pressed');
+    }
+    const joyLeft = document.getElementById('joy-left');
+    if (joyLeft) joyLeft.style.display = 'none';
+    const joyRight = document.getElementById('joy-right');
+    if (joyRight) joyRight.style.display = 'none';
+  };
+
   const wireGameCallbacks = (activeGame: Game) => {
     activeGame.onMatchEnd = (result) => {
+      hideGlobalTouchControls();
       const specHud = document.getElementById('spectator-hud');
       if (specHud) specHud.style.display = 'none';
       const elimOverlay = document.getElementById('elimination-overlay');
@@ -393,6 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     activeGame.onPlayerEliminated = (data) => {
+      hideGlobalTouchControls();
       const summary = progression.recordMatch({ won: false, kills: data.kills, mode: activeGame.gameModeManager.type });
       const elimOverlay = document.getElementById('elimination-overlay');
       const elimRank = document.getElementById('elimination-rank');
@@ -702,11 +721,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Ready button (P2P)
+  let isP2pReady = false;
   btnP2pReady?.addEventListener('click', () => {
     if (!p2pClient) return;
-    const isReady = btnP2pReady.textContent === 'Ready';
-    p2pClient.setReady(!isReady);
-    btnP2pReady.textContent = isReady ? 'Not Ready' : 'Ready';
+    isP2pReady = !isP2pReady;
+    p2pClient.setReady(isP2pReady);
+    btnP2pReady.textContent = isP2pReady ? 'Cancel Ready' : 'Ready';
+    btnP2pReady.classList.toggle('active', isP2pReady);
   });
 
   // Start Match (P2P Host only)
@@ -729,6 +750,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     p2pPlayers = [];
     netLocalTeam = null;
+    isP2pReady = false;
+    if (btnP2pReady) {
+      btnP2pReady.textContent = 'Ready';
+      btnP2pReady.classList.remove('active');
+    }
     hideP2pLobby();
     if (btnP2pHost) btnP2pHost.classList.remove('active');
     if (btnP2pJoin) btnP2pJoin.classList.remove('active');
@@ -874,11 +900,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Ready button (LAN)
+  let isLanReady = false;
   btnLanReady?.addEventListener('click', () => {
     if (!lanClient) return;
-    const isReady = btnLanReady.textContent === 'Ready';
-    lanClient.setReady(!isReady);
-    btnLanReady.textContent = isReady ? 'Not Ready' : 'Ready';
+    isLanReady = !isLanReady;
+    lanClient.setReady(isLanReady);
+    btnLanReady.textContent = isLanReady ? 'Cancel Ready' : 'Ready';
+    btnLanReady.classList.toggle('active', isLanReady);
   });
 
   // Start Match (LAN Host only)
@@ -901,6 +929,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     lanPlayers = [];
     netLocalTeam = null;
+    isLanReady = false;
+    if (btnLanReady) {
+      btnLanReady.textContent = 'Ready';
+      btnLanReady.classList.remove('active');
+    }
     hideLanLobby();
     if (btnLanHost) btnLanHost.classList.remove('active');
     if (btnLanJoin) btnLanJoin.classList.remove('active');
@@ -1064,18 +1097,30 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, _map: MapType) {
+  function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType) {
     if (menuScreen) menuScreen.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
-    lanRenderer = new ClientGameRenderer(gameContainer);
+    if (lanRenderer) {
+      lanRenderer.destroy();
+      lanRenderer = null;
+    }
+
+    lanRenderer = new ClientGameRenderer(gameContainer, map, mode);
     lanRenderer.setLocalPlayerId(client.playerId);
+    lanRenderer.onSendInput = (input: PlayerInputState) => {
+      client.sendInput(input);
+    };
     void music.startMatch(mode);
     startPregameCountdown(() => {});
   }
 
   function showNetGameOver(client: LanClient | P2PClient, result: any) {
     cancelPregameCountdown();
+    hideGlobalTouchControls();
     if (hudContainer) hudContainer.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'flex';
     const winnerEl = document.getElementById('gameover-winner');
@@ -1261,6 +1306,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnElimMenu?.addEventListener('click', () => {
     cancelPregameCountdown();
+    hideGlobalTouchControls();
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (spectatorHud) spectatorHud.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
@@ -1289,6 +1335,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   btnSpecMenu?.addEventListener('click', () => {
     cancelPregameCountdown();
+    hideGlobalTouchControls();
     if (spectatorHud) spectatorHud.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
@@ -1367,6 +1414,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const backMenuBtn = document.getElementById('btn-back-menu');
   backMenuBtn?.addEventListener('click', () => {
     cancelPregameCountdown();
+    hideGlobalTouchControls();
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (spectatorHud) spectatorHud.style.display = 'none';

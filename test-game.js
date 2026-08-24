@@ -201,13 +201,97 @@ async function run() {
     }
     console.log("  ✓ URL invite query parameter correctly populated room code input with 'TEST'.");
 
+    // 5. Test Game Over Overlay Responsiveness & Mobile Controls Cleanup
+    console.log("\n5. Testing Post-Game Menu Responsiveness & Touch Buttons Cleanup...");
+    await page.goto(`http://127.0.0.1:${PORT}/`, { waitUntil: "networkidle2" });
+    await page.click('#btn-play');
+    await new Promise(r => setTimeout(r, 600));
+
+    // Force Game Over overlay
+    await page.evaluate(() => {
+      const g = window.game;
+      if (g) {
+        g.endBattleImmediately();
+      }
+    });
+    await new Promise(r => setTimeout(r, 500));
+
+    const gameOverVisible = await page.evaluate(() => {
+      const overlay = document.getElementById('gameover-overlay');
+      return overlay && overlay.style.display === 'flex';
+    });
+    if (!gameOverVisible) throw new Error("Game Over overlay is not visible after ending battle!");
+    console.log("  ✓ Game Over overlay is visible.");
+
+    // Click Main Menu button on Game Over overlay
+    await page.click('#btn-back-menu');
+    await new Promise(r => setTimeout(r, 400));
+
+    const returnedToMenu = await page.evaluate(() => {
+      const menu = document.getElementById('menu-screen');
+      const fireBtn = document.getElementById('fire-btn');
+      const dashBtn = document.getElementById('dash-btn');
+      const fireHidden = !fireBtn || fireBtn.style.display === 'none' || getComputedStyle(fireBtn).display === 'none';
+      const dashHidden = !dashBtn || dashBtn.style.display === 'none' || getComputedStyle(dashBtn).display === 'none';
+      return {
+        menuVisible: menu && menu.style.display !== 'none',
+        fireHidden,
+        dashHidden
+      };
+    });
+
+    if (!returnedToMenu.menuVisible) throw new Error("Could not click Back to Menu button on Game Over overlay!");
+    if (!returnedToMenu.fireHidden || !returnedToMenu.dashHidden) {
+      throw new Error("Touch buttons leaked into Menu screen!");
+    }
+    console.log("  ✓ Game Over 'Back to Menu' button clicked successfully.");
+    console.log("  ✓ Mobile touch buttons (#fire-btn, #dash-btn) are properly hidden in menu.");
+
+    // 6. Test P2P and LAN Ready Button Toggling
+    console.log("\n6. Testing P2P / LAN Ready Button State Toggling...");
+    await page.click('#tab-online');
+    await page.click('#btn-p2p-host');
+    await page.click('#btn-p2p-start-hosting');
+    await new Promise(r => setTimeout(r, 800));
+
+    // Check ready button in lobby
+    const readyState = await page.evaluate(() => {
+      const readyBtn = document.getElementById('btn-p2p-ready');
+      if (!readyBtn) return { found: false };
+      const initialText = readyBtn.textContent;
+      readyBtn.click();
+      const clickedText = readyBtn.textContent;
+      const hasActiveClass = readyBtn.classList.contains('active');
+      readyBtn.click();
+      const toggledBackText = readyBtn.textContent;
+      return {
+        found: true,
+        initialText,
+        clickedText,
+        hasActiveClass,
+        toggledBackText
+      };
+    });
+
+    if (readyState.found) {
+      if (readyState.clickedText !== 'Cancel Ready' || !readyState.hasActiveClass || readyState.toggledBackText !== 'Ready') {
+        throw new Error(`P2P Ready toggle unexpected behavior: ${JSON.stringify(readyState)}`);
+      }
+      console.log("  ✓ P2P Ready button toggles state between Ready and Cancel Ready correctly.");
+    }
+
+    // Leave P2P lobby
+    await page.click('#btn-p2p-leave');
+    await new Promise(r => setTimeout(r, 400));
+    console.log("  ✓ Left P2P lobby cleanly.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);
     }
 
     console.log("\n=======================================================");
-    console.log(" ALL TESTS PASSED! ALL THREE FEATURES ARE FULLY VERIFIED!");
+    console.log(" ALL TESTS PASSED! ALL FEATURES AND FIXES VERIFIED!");
     console.log("=======================================================");
 
   } catch (err) {

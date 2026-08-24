@@ -335,10 +335,35 @@ export class Game {
 
     // Listen to resize
     window.addEventListener('resize', this.onResize.bind(this), { signal: this.eventAbortController.signal });
+
+    this.initHudElements();
+  }
+
+  private initHudElements() {
+    this.hudEl.hpProgress = document.getElementById('hp-progress');
+    this.hudEl.hpText = document.getElementById('hp-text');
+    this.hudEl.ammoSlots = document.getElementById('ammo-slots');
+    this.hudEl.fireBtn = document.getElementById('fire-btn');
+    this.hudEl.coinCounter = document.getElementById('coin-counter');
+    this.hudEl.coinText = document.getElementById('coin-val');
+    this.hudEl.dashOverlay = document.getElementById('dash-cooldown-overlay');
+    this.hudEl.dashBtn = document.getElementById('dash-btn');
+    this.hudEl.gpIndicator = document.getElementById('gp-indicator');
+    this.hudEl.matchTimer = document.getElementById('match-timer');
+    this.hudEl.leaderboardList = document.getElementById('leaderboard-list');
+    this.hudEl.gameoverOverlay = document.getElementById('gameover-overlay');
+    this.hudEl.gameoverWinner = document.getElementById('gameover-winner');
+    this.hudEl.hudContainer = document.getElementById('hud-container');
+    this.hudEl.puSlots = [
+      { slot: document.getElementById('pu-slot-0'), text: document.getElementById('pu-text-0') },
+      { slot: document.getElementById('pu-slot-1'), text: document.getElementById('pu-text-1') },
+      { slot: document.getElementById('pu-slot-2'), text: document.getElementById('pu-text-2') }
+    ];
   }
 
   resetGame() {
     this.isPlaying = false;
+    this.initHudElements();
     this.resetTouchControls();
 
     // 1. Clean up old game state
@@ -581,7 +606,13 @@ export class Game {
 
   // Mobile virtual dual sticks logic
   private onTouchStart(e: TouchEvent) {
-    if (!this.isPlaying) return;
+    if (!this.isPlaying || this.gameModeManager.isGameOver || this.playerEliminationHandled) return;
+
+    const target = e.target as HTMLElement | null;
+    if (target && (target.closest('.gameover-overlay') || target.closest('#menu-screen') || target.closest('#spectator-hud'))) {
+      return;
+    }
+
     this.touchControlsActive = true;
     this.ensureTouchButtonsVisible();
 
@@ -589,7 +620,6 @@ export class Game {
       const touch = e.changedTouches[i];
 
       // Ignore touches that land on the fire/dash buttons (they have their own handlers)
-      const target = touch.target as HTMLElement | null;
       if (target && (target.id === 'fire-btn' || target.id === 'dash-btn' ||
                      target.closest('#fire-btn') || target.closest('#dash-btn') ||
                      target.id === 'dash-cooldown-circle' || target.closest('.dash-panel'))) {
@@ -772,7 +802,7 @@ export class Game {
     if (el) el.style.display = 'none';
   }
 
-  private resetTouchControls() {
+  public resetTouchControls() {
     this.touchControlsActive = false;
     this.touchFireHeld = false;
     this.touchDashQueued = false;
@@ -1006,6 +1036,7 @@ export class Game {
   endBattleImmediately() {
     this.isSpectating = false;
     this.gameModeManager.endGame(this.casters);
+    this.updateHUD();
   }
 
   /** Apply all remote player inputs to their caster entities (host mode). */

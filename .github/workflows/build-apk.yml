@@ -61,10 +61,7 @@ jobs:
             echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
             echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
           else
-            echo "Generating production release signing keystore..."
-            keytool -genkey -v -keystore android/app/release.keystore -alias incasters-key -keyalg RSA -keysize 2048 -validity 10000 \
-              -storepass incastersrelease -keypass incastersrelease \
-              -dname "CN=Incasters, OU=Game Studio, O=Incasters, L=Stockholm, ST=Stockholm, C=SE"
+            echo "Using persistent repository release signing keystore..."
             echo "KEYSTORE_PASSWORD=incastersrelease" >> $GITHUB_ENV
             echo "KEY_ALIAS=incasters-key" >> $GITHUB_ENV
             echo "KEY_PASSWORD=incastersrelease" >> $GITHUB_ENV
@@ -75,6 +72,9 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build Signed Android Release APK
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
           cd android
           ./gradlew assembleRelease --no-daemon --stacktrace
