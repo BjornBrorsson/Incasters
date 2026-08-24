@@ -81,6 +81,18 @@ async function run() {
     if (!menuVisible) throw new Error("Main Menu is not visible on page load!");
     console.log("  ✓ Main Menu is visible.");
 
+    const touchButtonsHiddenOnMenu = await page.evaluate(() => {
+      const fireBtn = document.getElementById('fire-btn');
+      const dashBtn = document.getElementById('dash-btn');
+      const fireComputed = fireBtn ? window.getComputedStyle(fireBtn).display : 'none';
+      const dashComputed = dashBtn ? window.getComputedStyle(dashBtn).display : 'none';
+      return fireComputed === 'none' && dashComputed === 'none';
+    });
+    if (!touchButtonsHiddenOnMenu) {
+      throw new Error("Touch buttons (#fire-btn, #dash-btn) are visible on initial main menu!");
+    }
+    console.log("  ✓ Touch buttons are completely hidden on initial Main Menu load.");
+
     // Test Online Multiplayer tab and room creation UI
     await page.click('#tab-online');
     await page.click('#btn-p2p-host');

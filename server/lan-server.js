@@ -118,6 +118,12 @@ wss.on('connection', (ws, req) => {
       case 'input': {
         if (!player) return;
         player.input = msg.input || player.input;
+        if (hostId && hostId !== clientId) {
+          const hostPlayer = players.get(hostId);
+          if (hostPlayer && hostPlayer.ws.readyState === 1) {
+            sendTo(hostPlayer.ws, { type: 'clientInput', playerId: clientId, input: player.input });
+          }
+        }
         break;
       }
 

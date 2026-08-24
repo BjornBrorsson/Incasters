@@ -14,6 +14,7 @@ import { InputManager } from '../engine/InputManager';
 import { AimVisualizer } from '../engine/AimVisualizer';
 import { screenToWorldIso, screenAngleToWorldIso } from '../engine/Physics';
 import { GameModeType } from '../world/GameModes';
+import { PALETTE, createSkyDome } from '../engine/Theme';
 
 export interface PlayerInputState {
   moveX: number;
@@ -185,6 +186,9 @@ export class LanClient {
             this.isHost = msg.isHost;
             this.emit('hostChange', msg);
             break;
+          case 'clientInput':
+            this.emit('clientInput', msg);
+            break;
         }
       };
 
@@ -327,6 +331,27 @@ export class ClientGameRenderer {
 
     const signal = this.eventAbortController.signal;
     window.addEventListener('resize', this.onResize, { signal });
+
+    // Scene Environment: background, fog, and celestial sky dome
+    this.scene.background = new THREE.Color(PALETTE.skyBottom);
+    this.scene.fog = new THREE.FogExp2(PALETTE.fog, PALETTE.fogDensity);
+    this.scene.add(createSkyDome());
+
+    // Lighting — Hogwarts / Discworld warm torchlight & twilight atmosphere
+    const ambientLight = new THREE.AmbientLight(PALETTE.ambient, 0.55);
+    this.scene.add(ambientLight);
+
+    const hemiLight = new THREE.HemisphereLight(PALETTE.hemiSky, PALETTE.hemiGround, 0.65);
+    hemiLight.position.set(0, 40, 0);
+    this.scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(PALETTE.sunLight, 1.05);
+    dirLight.position.set(-18, 32, 18);
+    this.scene.add(dirLight);
+
+    const envLight = new THREE.DirectionalLight(0xffa840, 0.25);
+    envLight.position.set(16, 20, -16);
+    this.scene.add(envLight);
 
     // 1. Build Arena
     this.arena = new Arena(mapType);

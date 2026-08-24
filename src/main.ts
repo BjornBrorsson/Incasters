@@ -396,6 +396,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (joyRight) joyRight.style.display = 'none';
   };
 
+  // Ensure touch controls are hidden initially on menu load
+  hideGlobalTouchControls();
+
   const wireGameCallbacks = (activeGame: Game) => {
     activeGame.onMatchEnd = (result) => {
       hideGlobalTouchControls();

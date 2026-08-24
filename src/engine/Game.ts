@@ -1114,6 +1114,13 @@ export class Game {
 
     if (!this.isPlaying) {
       this.renderer.render(this.scene, this.camera);
+      if (this.netMode === 'host' && this.onNetBroadcast) {
+        this.netBroadcastTimer += 0.016;
+        if (this.netBroadcastTimer >= this.netBroadcastInterval) {
+          this.netBroadcastTimer = 0;
+          this.onNetBroadcast(this.serializeNetState());
+        }
+      }
       return;
     }
 

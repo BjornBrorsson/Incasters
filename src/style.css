@@ -912,13 +912,11 @@ body {
 
 @media (pointer: coarse), (max-width: 1024px) {
   .dash-btn {
-    display: flex;
     right: max(20px, env(safe-area-inset-right));
     bottom: max(24px, env(safe-area-inset-bottom));
   }
 
   .fire-btn {
-    display: flex;
     right: calc(max(20px, env(safe-area-inset-right)) + 84px);
     bottom: max(20px, env(safe-area-inset-bottom));
   }
