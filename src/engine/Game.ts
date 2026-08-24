@@ -173,6 +173,7 @@ export class Game {
   mapType: MapType = 'ARENA';
   difficulty: DifficultyLevel = 'NORMAL';
   private difficultyConfig: DifficultyConfig = DIFFICULTY_PRESETS.NORMAL;
+  private casterPortalCooldowns: Map<string, number> = new Map();
 
   // ── LAN Multiplayer ──
   /** 'offline' = single-player vs bots, 'host' = hosting a LAN match, 'client' = connected to a host. */
@@ -1226,10 +1227,13 @@ export class Game {
     // 6. Physics Collision Checks
     this.handleCollisions();
 
-    // 7. Spawning power-ups in arena spawners
+    // 7. Interactive Arena Objects: Portals & Acceleration Runes
+    this.updatePortalsAndRunes(dt);
+
+    // 8. Spawning power-ups in arena spawners
     this.updatePowerUpSpawning(dt);
 
-    // 8. Update decorative particle trails & bursts
+    // 9. Update decorative particle trails & bursts
     this.updateParticles(dt);
 
     let musicDanger = 0;
@@ -1846,7 +1850,51 @@ export class Game {
       });
     });
 
-    // 6. Caster vs PowerUp collisions
+    // 6. Projectile vs Destructible Props
+    this.projectiles.forEach((proj) => {
+      if (proj.isDead) return;
+
+      this.physicsArena.destructibleProps.forEach((prop) => {
+        if (prop.isDestroyed) return;
+
+        const dx = proj.x - prop.x;
+        const dy = proj.y - prop.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist < proj.radius + prop.radius) {
+          prop.health -= proj.stats.damage;
+          proj.isDead = true;
+          proj.playFizzleOnDestroy = true;
+
+          const sparkColor = prop.type === 'MANA_CRYSTAL' ? 0x00ffff : prop.type === 'BARREL' ? 0x995522 : 0xb5653b;
+          this.spawnBlastParticles(proj.x, proj.y, sparkColor, 8, 0.8);
+          sfx.playWallHit(proj.ownerId === 'player' ? 0.9 : 0.3);
+
+          if (prop.health <= 0) {
+            prop.isDestroyed = true;
+            prop.mesh.visible = false;
+            // Disable blocking physical wall
+            if (this.physicsArena.walls[prop.wallIndex]) {
+              this.physicsArena.walls[prop.wallIndex].minX = -9999;
+              this.physicsArena.walls[prop.wallIndex].maxX = -9999;
+            }
+
+            this.spawnBlastParticles(prop.x, prop.y, sparkColor, 20, 1.4);
+            sfx.playBounce();
+
+            // Spawn powerup / coins
+            if (prop.dropsPowerup) {
+              const types = [PowerUpType.BOUNCE, PowerUpType.SPLIT, PowerUpType.HASTE, PowerUpType.SHIELD, PowerUpType.FREEZE];
+              const pType = types[Math.floor(Math.random() * types.length)];
+              const pu = new PowerUp(prop.x, prop.y, pType);
+              this.scene.add(pu.mesh);
+              this.powerups.push(pu);
+            }
+          }
+        }
+      });
+    });
+
+    // 7. Caster vs PowerUp collisions
     this.casters.forEach((caster) => {
       if (caster.isDead) return;
 
@@ -1868,7 +1916,7 @@ export class Game {
       }
     });
 
-    // 7. Clean up deceased Projectiles (and trigger split upgrades if necessary)
+    // 8. Clean up deceased Projectiles (and trigger split upgrades if necessary)
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const proj = this.projectiles[i];
       if (proj.isDead) {
@@ -1923,6 +1971,51 @@ export class Game {
         this.powerupSpawnCooldowns[i] = 0;
       }
     }
+  }
+
+  private updatePortalsAndRunes(dt: number) {
+    // 1. Update teleport cooldowns
+    for (const [id, cd] of this.casterPortalCooldowns.entries()) {
+      if (cd > 0) {
+        this.casterPortalCooldowns.set(id, cd - dt);
+      } else {
+        this.casterPortalCooldowns.delete(id);
+      }
+    }
+
+    // 2. Process Arcane Portals
+    this.physicsArena.portals.forEach((portal) => {
+      this.casters.forEach((caster) => {
+        if (caster.isDead || caster.isLeaping) return;
+        const cd = this.casterPortalCooldowns.get(caster.id) || 0;
+        if (cd > 0) return;
+
+        const dx = caster.x - portal.x;
+        const dy = caster.y - portal.y;
+        if (Math.hypot(dx, dy) < portal.radius) {
+          // Teleport caster to destination
+          caster.x = portal.targetX;
+          caster.y = portal.targetY;
+          this.casterPortalCooldowns.set(caster.id, 1.8);
+          this.spawnBlastParticles(portal.x, portal.y, 0x9933ff, 14, 1.2);
+          this.spawnBlastParticles(portal.targetX, portal.targetY, 0xdd88ff, 14, 1.2);
+          sfx.playPowerup();
+        }
+      });
+    });
+
+    // 3. Process Acceleration Runes
+    this.physicsArena.speedRunes.forEach((rune) => {
+      this.casters.forEach((caster) => {
+        if (caster.isDead) return;
+        const dx = caster.x - rune.x;
+        const dy = caster.y - rune.y;
+        if (Math.hypot(dx, dy) < rune.radius) {
+          caster.vx *= 1.2;
+          caster.vy *= 1.2;
+        }
+      });
+    });
   }
 
   private bulletTrailTimer: number = 0;

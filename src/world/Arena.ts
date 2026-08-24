@@ -64,6 +64,38 @@ export interface MovingWall {
   mesh: THREE.Mesh | null;
 }
 
+export interface DestructibleProp {
+  id: string;
+  type: 'URN' | 'BARREL' | 'MANA_CRYSTAL';
+  x: number;
+  y: number;
+  radius: number;
+  health: number;
+  maxHealth: number;
+  wallIndex: number;
+  mesh: THREE.Group;
+  isDestroyed: boolean;
+  dropsPowerup: boolean;
+}
+
+export interface ArcanePortal {
+  id: string;
+  x: number;
+  y: number;
+  targetX: number;
+  targetY: number;
+  radius: number;
+  mesh: THREE.Group;
+}
+
+export interface SpeedRune {
+  id: string;
+  x: number;
+  y: number;
+  radius: number;
+  mesh: THREE.Group;
+}
+
 let CACHED_COBBLESTONE_TEX: THREE.CanvasTexture | null = null;
 let CACHED_PARQUET_TEX: THREE.CanvasTexture | null = null;
 let CACHED_STONEWALL_TEX: THREE.CanvasTexture | null = null;
@@ -295,6 +327,9 @@ export class Arena {
   jumpPads: JumpPad[] = [];
   hazards: Hazard[] = [];
   movingWalls: MovingWall[] = [];
+  destructibleProps: DestructibleProp[] = [];
+  portals: ArcanePortal[] = [];
+  speedRunes: SpeedRune[] = [];
   onHazardFire: ((x: number, y: number, angle: number) => void) | null = null;
   mapType: MapType;
   width: number = 36;
@@ -486,6 +521,16 @@ export class Arena {
       this.addMovingWall(0, -15, 3.5, 1.2, 'x', 7, 0.45);
       this.addMovingWall(0, 15, 3.5, 1.2, 'x', 7, 0.45);
 
+      // Arcane Portals (Celestial Teleportation Pairs)
+      this.addPortalPair('portal_w', -14, 0, 'portal_e', 14, 0);
+      this.addPortalPair('portal_n', 0, -14, 'portal_s', 0, 14);
+
+      // Acceleration Runes on Orbital Walkways
+      this.addSpeedRune('rune_nw', -8, -8);
+      this.addSpeedRune('rune_ne', 8, -8);
+      this.addSpeedRune('rune_sw', -8, 8);
+      this.addSpeedRune('rune_se', 8, 8);
+
     } else if (this.mapType === 'CATACOMBS') {
       // 🧪 The Alchemist's Undercroft / Potion Vaults
       // Interlocking Vault Corridors & Chambers
@@ -531,6 +576,14 @@ export class Arena {
       this.addHazard(-10, -10, 1.2, 1.0, 1.8);
       this.addMovingWall(-12, 0, 1.5, 3, 'y', 4, 0.35);
       this.addMovingWall(12, 0, 1.5, 3, 'y', 4, 0.35);
+
+      // Destructible Vault Props: Urns and Barrels
+      this.addDestructibleProp('urn_1', 'URN', -5, -9, true);
+      this.addDestructibleProp('urn_2', 'URN', 5, -9, true);
+      this.addDestructibleProp('urn_3', 'URN', -5, 9, true);
+      this.addDestructibleProp('urn_4', 'URN', 5, 9, true);
+      this.addDestructibleProp('barrel_1', 'BARREL', -8, 0, true);
+      this.addDestructibleProp('barrel_2', 'BARREL', 8, 0, true);
 
     } else if (this.mapType === 'COLOSSEUM') {
       // Spacius Colosseum with an open center surrounded by pillars
@@ -621,6 +674,12 @@ export class Arena {
 
       // Hazard: a single slow sliding wall in the lower lane
       this.addMovingWall(0, -10.5, 2, 1, 'x', 3.5, 0.4);
+
+      // Destructible Mana Crystals at four quadrant choke points
+      this.addDestructibleProp('crystal_1', 'MANA_CRYSTAL', -6, -6, true);
+      this.addDestructibleProp('crystal_2', 'MANA_CRYSTAL', 6, -6, true);
+      this.addDestructibleProp('crystal_3', 'MANA_CRYSTAL', -6, 6, true);
+      this.addDestructibleProp('crystal_4', 'MANA_CRYSTAL', 6, 6, true);
 
     } else {
       // Standard ARENA
@@ -724,6 +783,174 @@ export class Arena {
       mesh: null,
       wallIndex
     });
+  }
+
+  addDestructibleProp(id: string, type: 'URN' | 'BARREL' | 'MANA_CRYSTAL', x: number, y: number, dropsPowerup = true) {
+    const radius = type === 'MANA_CRYSTAL' ? 0.75 : 0.65;
+    const wallIndex = this.walls.length;
+    this.walls.push({
+      minX: x - radius,
+      minY: y - radius,
+      maxX: x + radius,
+      maxY: y + radius
+    });
+
+    const mesh = this.buildPropMesh(type, x, y);
+
+    this.destructibleProps.push({
+      id,
+      type,
+      x,
+      y,
+      radius,
+      health: type === 'MANA_CRYSTAL' ? 50 : 30,
+      maxHealth: type === 'MANA_CRYSTAL' ? 50 : 30,
+      wallIndex,
+      mesh,
+      isDestroyed: false,
+      dropsPowerup
+    });
+  }
+
+  addPortalPair(id1: string, x1: number, y1: number, id2: string, x2: number, y2: number) {
+    const mesh1 = this.buildPortalMesh(x1, y1);
+    const mesh2 = this.buildPortalMesh(x2, y2);
+
+    this.portals.push({
+      id: id1,
+      x: x1,
+      y: y1,
+      targetX: x2,
+      targetY: y2,
+      radius: 1.1,
+      mesh: mesh1
+    });
+
+    this.portals.push({
+      id: id2,
+      x: x2,
+      y: y2,
+      targetX: x1,
+      targetY: y1,
+      radius: 1.1,
+      mesh: mesh2
+    });
+  }
+
+  addSpeedRune(id: string, x: number, y: number) {
+    const mesh = this.buildSpeedRuneMesh(x, y);
+    this.speedRunes.push({
+      id,
+      x,
+      y,
+      radius: 0.95,
+      mesh
+    });
+  }
+
+  private buildPropMesh(type: 'URN' | 'BARREL' | 'MANA_CRYSTAL', x: number, y: number): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(x, 0, y);
+
+    if (type === 'MANA_CRYSTAL') {
+      const crystalGeo = new THREE.OctahedronGeometry(0.65, 0);
+      const crystalMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffff,
+        emissive: 0x0088ff,
+        emissiveIntensity: 0.65,
+        roughness: 0.2,
+        metalness: 0.8
+      });
+      const crystal = new THREE.Mesh(crystalGeo, crystalMat);
+      crystal.position.y = 0.8;
+      crystal.castShadow = true;
+      group.add(crystal);
+
+      const socketGeo = new THREE.CylinderGeometry(0.6, 0.7, 0.2, 8);
+      const socketMat = new THREE.MeshStandardMaterial({ color: 0x3a3040, roughness: 0.8 });
+      const socket = new THREE.Mesh(socketGeo, socketMat);
+      socket.position.y = 0.1;
+      group.add(socket);
+    } else if (type === 'BARREL') {
+      const barrelGeo = new THREE.CylinderGeometry(0.48, 0.48, 0.95, 12);
+      const barrelMat = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.7 });
+      const barrel = new THREE.Mesh(barrelGeo, barrelMat);
+      barrel.position.y = 0.48;
+      barrel.castShadow = true;
+      group.add(barrel);
+
+      const hoopMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.8, roughness: 0.3 });
+      [-0.25, 0.25].forEach((hy) => {
+        const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.03, 6, 12), hoopMat);
+        hoop.rotation.x = Math.PI / 2;
+        hoop.position.y = 0.48 + hy;
+        group.add(hoop);
+      });
+    } else {
+      const urnBodyGeo = new THREE.SphereGeometry(0.45, 10, 10);
+      const urnMat = new THREE.MeshStandardMaterial({ color: 0xb5653b, roughness: 0.6 });
+      const body = new THREE.Mesh(urnBodyGeo, urnMat);
+      body.position.y = 0.55;
+      body.castShadow = true;
+      group.add(body);
+
+      const neckGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.35, 10);
+      const neck = new THREE.Mesh(neckGeo, urnMat);
+      neck.position.y = 0.9;
+      group.add(neck);
+    }
+
+    this.arenaGroup.add(group);
+    return group;
+  }
+
+  private buildPortalMesh(x: number, y: number): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(x, 0.03, y);
+
+    const ringGeo = new THREE.RingGeometry(0.55, 1.05, 24);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x9933ff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    group.add(ring);
+
+    const innerGeo = new THREE.CircleGeometry(0.5, 16);
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xdd88ff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.7
+    });
+    const inner = new THREE.Mesh(innerGeo, innerMat);
+    inner.rotation.x = -Math.PI / 2;
+    group.add(inner);
+
+    this.arenaGroup.add(group);
+    return group;
+  }
+
+  private buildSpeedRuneMesh(x: number, y: number): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(x, 0.025, y);
+
+    const padGeo = new THREE.PlaneGeometry(1.6, 1.6);
+    const padMat = new THREE.MeshBasicMaterial({
+      color: 0x00ffaa,
+      transparent: true,
+      opacity: 0.75,
+      side: THREE.DoubleSide
+    });
+    const pad = new THREE.Mesh(padGeo, padMat);
+    pad.rotation.x = -Math.PI / 2;
+    group.add(pad);
+
+    this.arenaGroup.add(group);
+    return group;
   }
 
   buildArena(scene: THREE.Scene) {

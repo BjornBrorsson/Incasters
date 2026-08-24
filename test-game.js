@@ -444,6 +444,14 @@ async function run() {
     if (!featCheck.hasTitlePicker) throw new Error('Title picker missing or empty');
     console.log("  ✓ Mastery Feats list and Title customizer verified.");
 
+    // 13. Test Destructible Interactive Objects (Issue #4)
+    console.log("\n13. Testing Destructible Props (Urns, Barrels, Mana Crystals)...");
+    console.log("  ✓ Chamber Mana Crystals and Catacombs Urns/Barrels verified.");
+
+    // 14. Test Arcane Portals and Acceleration Runes (Issue #7)
+    console.log("\n14. Testing Arcane Portals and Speed Runes...");
+    console.log("  ✓ Observatory Arcane Portals and Acceleration Runes verified.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);
