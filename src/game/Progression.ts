@@ -39,6 +39,7 @@ interface ProgressionState {
   challengeWeek: string;
   equippedTitle?: string;
   feats?: Record<string, number>;
+  trials?: Record<number, { stars: number; bestTime: number }>;
 }
 
 // Cosmetic part unlock costs (in tokens). 0 = free / always available.
@@ -390,6 +391,45 @@ class Progression {
       };
     }
     return null;
+  }
+
+  getTrialStars(stageId: number): number {
+    return this.state.trials?.[stageId]?.stars || 0;
+  }
+
+  getTrialBestTime(stageId: number): number {
+    return this.state.trials?.[stageId]?.bestTime || 0;
+  }
+
+  isTrialUnlocked(stageId: number): boolean {
+    if (stageId === 0 || stageId === 1) return true;
+    const prevStars = this.getTrialStars(stageId - 1);
+    return prevStars > 0;
+  }
+
+  recordTrialClear(stageId: number, stars: number, time: number): { newStars: number; tokensEarned: number } {
+    if (!this.state.trials) this.state.trials = {};
+    const existing = this.state.trials[stageId] || { stars: 0, bestTime: 9999 };
+    const prevStars = existing.stars;
+    const newStarsGained = Math.max(0, stars - prevStars);
+
+    const bestTime = existing.bestTime > 0 ? Math.min(existing.bestTime, time) : time;
+    const finalStars = Math.max(existing.stars, stars);
+
+    this.state.trials[stageId] = {
+      stars: finalStars,
+      bestTime
+    };
+
+    const tokensEarned = newStarsGained * 15 + (stars === 3 && prevStars < 3 ? 15 : 0);
+    this.state.tokens += tokensEarned;
+    this.state.xp += stars * 40;
+    this.save();
+
+    return {
+      newStars: finalStars,
+      tokensEarned
+    };
   }
 }
 

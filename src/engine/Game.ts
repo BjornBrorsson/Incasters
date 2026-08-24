@@ -20,6 +20,7 @@ import type { DifficultyLevel, DifficultyConfig } from '../game/Difficulty';
 import { loadGraphicsQuality, getGraphicsConfig } from '../game/GraphicsSettings';
 import type { GraphicsQuality, GraphicsConfig } from '../game/GraphicsSettings';
 import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState, GameEvent } from '../net/LanClient';
+import { TRIAL_STAGES, type TrialStage, type TargetDummy, buildDummyMesh } from '../game/Trials';
 
 export interface GameParticle {
   position: THREE.Vector3;
@@ -174,6 +175,13 @@ export class Game {
   difficulty: DifficultyLevel = 'NORMAL';
   private difficultyConfig: DifficultyConfig = DIFFICULTY_PRESETS.NORMAL;
   private casterPortalCooldowns: Map<string, number> = new Map();
+
+  // ── Trickshot Trials Mode ──
+  trialStage: TrialStage | null = null;
+  trialDummies: TargetDummy[] = [];
+  trialElapsed: number = 0;
+  trialShotsFired: number = 0;
+  onTrialCompleted: ((result: { stageId: number; stars: number; time: number; shots: number; tokens: number }) => void) | null = null;
 
   // ── LAN Multiplayer ──
   /** 'offline' = single-player vs bots, 'host' = hosting a LAN match, 'client' = connected to a host. */
@@ -506,6 +514,137 @@ export class Game {
     ) {
       this.ensureTouchButtonsVisible();
     }
+  }
+
+  loadTrial(stageId: number) {
+    const stage = TRIAL_STAGES.find((s) => s.id === stageId) || TRIAL_STAGES[0];
+    this.trialStage = stage;
+    this.trialElapsed = 0;
+    this.trialShotsFired = 0;
+    this.isPlaying = true;
+
+    // Clear all existing non-player casters
+    for (let i = this.casters.length - 1; i >= 0; i--) {
+      const c = this.casters[i];
+      if (c.id !== 'player') {
+        c.destroy(this.scene);
+        this.casters.splice(i, 1);
+      }
+    }
+
+    this.projectiles.forEach((p) => p.destroy(this.scene));
+    this.projectiles = [];
+    this.powerups.forEach((pu) => pu.destroy(this.scene));
+    this.powerups = [];
+
+    // Clear existing trial dummies
+    this.trialDummies.forEach((d) => {
+      this.scene.remove(d.mesh);
+      d.mesh.traverse((ch) => {
+        if (ch instanceof THREE.Mesh) {
+          ch.geometry.dispose();
+          if (Array.isArray(ch.material)) ch.material.forEach((m) => m.dispose());
+          else (ch.material as THREE.Material).dispose();
+        }
+      });
+    });
+    this.trialDummies = [];
+
+    // Reposition player
+    this.player.x = stage.playerSpawn.x;
+    this.player.y = stage.playerSpawn.y;
+    this.player.reset();
+    this.player.syncMeshPosition();
+
+    // Setup custom stage walls
+    this.physicsArena.walls = [...stage.walls];
+    this.physicsArena.destructibleProps = [];
+    this.physicsArena.portals = [];
+    this.physicsArena.speedRunes = [];
+
+    // Setup stage portals & speed runes
+    if (stage.portals) {
+      stage.portals.forEach((p) => {
+        this.physicsArena.addPortalPair(p.id1, p.x1, p.y1, p.id2, p.x2, p.y2);
+      });
+    }
+    if (stage.speedRunes) {
+      stage.speedRunes.forEach((r) => {
+        this.physicsArena.addSpeedRune(r.id, r.x, r.y);
+      });
+    }
+
+    // Spawn powerups
+    if (stage.powerups) {
+      stage.powerups.forEach((p) => {
+        const pu = new PowerUp(p.x, p.y, p.type);
+        this.scene.add(pu.mesh);
+        this.powerups.push(pu);
+      });
+    }
+
+    // Build stage target dummies
+    stage.dummies.forEach((dummyDef) => {
+      const mesh = buildDummyMesh(dummyDef.radius);
+      mesh.position.set(dummyDef.x, 0, dummyDef.y);
+      this.scene.add(mesh);
+
+      this.trialDummies.push({
+        id: dummyDef.id,
+        x: dummyDef.x,
+        y: dummyDef.y,
+        radius: dummyDef.radius,
+        health: dummyDef.health,
+        maxHealth: dummyDef.health,
+        isDead: false,
+        mesh,
+        isMoving: dummyDef.isMoving,
+        baseX: dummyDef.x,
+        baseY: dummyDef.y,
+        moveAxis: dummyDef.moveAxis,
+        moveRange: dummyDef.moveRange,
+        moveSpeed: dummyDef.moveSpeed,
+        movePhase: Math.random() * Math.PI * 2
+      });
+    });
+
+    // Reset camera to player
+    this.cameraLookTarget.set(this.player.x, 0, this.player.y);
+    this.camera.position.set(
+      this.player.x + this.camOffset.x,
+      this.camOffset.y,
+      this.player.y + this.camOffset.z
+    );
+    this.camera.lookAt(this.cameraLookTarget);
+
+    // Show stage announcement
+    this.fx.announce(stage.title, '#ffd700');
+  }
+
+  private completeTrial() {
+    if (!this.trialStage) return;
+    this.isPlaying = false;
+    const stage = this.trialStage;
+    const time = this.trialElapsed;
+    const shots = this.trialShotsFired;
+
+    let stars = 1;
+    if (time <= stage.parTime && shots <= stage.maxShots) {
+      stars = 3;
+    } else if (time <= stage.star2Time) {
+      stars = 2;
+    }
+
+    const { tokensEarned } = progression.recordTrialClear(stage.id, stars, time);
+    sfx.playStart();
+
+    this.onTrialCompleted?.({
+      stageId: stage.id,
+      stars,
+      time,
+      shots,
+      tokens: tokensEarned
+    });
   }
 
   private ensureTouchButtonsVisible() {
@@ -1234,8 +1373,25 @@ export class Game {
     // 8. Spawning power-ups in arena spawners
     this.updatePowerUpSpawning(dt);
 
-    // 9. Update decorative particle trails & bursts
+    // 5. Update Particle Systems
     this.updateParticles(dt);
+
+    // 5b. Update Trial Mode state & moving target dummies
+    if (this.trialStage) {
+      this.trialElapsed += dt;
+
+      this.trialDummies.forEach((d) => {
+        if (d.isDead || !d.isMoving) return;
+        d.movePhase = (d.movePhase || 0) + dt * (d.moveSpeed || 3.0);
+        const offset = Math.sin(d.movePhase) * (d.moveRange || 4.0);
+        if (d.moveAxis === 'y') {
+          d.y = (d.baseY || 0) + offset;
+        } else {
+          d.x = (d.baseX || 0) + offset;
+        }
+        d.mesh.position.set(d.x, 0, d.y);
+      });
+    }
 
     let musicDanger = 0;
     this.projectiles.forEach((projectile) => {
@@ -1474,6 +1630,9 @@ export class Game {
       );
       this.playerGuidedProjectile = proj;
       this.player.shootTimer = this.player.getFireRateCooldown();
+      if (this.trialStage) {
+        this.trialShotsFired++;
+      }
     }
   }
 
@@ -1895,6 +2054,43 @@ export class Game {
       });
     });
 
+    // 6b. Projectile vs Trial Target Dummies
+    if (this.trialStage && this.trialDummies.length > 0) {
+      this.projectiles.forEach((proj) => {
+        if (proj.isDead) return;
+
+        this.trialDummies.forEach((dummy) => {
+          if (dummy.isDead) return;
+
+          const dx = proj.x - dummy.x;
+          const dy = proj.y - dummy.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < proj.radius + dummy.radius) {
+            dummy.health -= proj.stats.damage;
+            proj.isDead = true;
+            proj.playFizzleOnDestroy = true;
+
+            this.spawnBlastParticles(dummy.x, dummy.y, 0xff3355, 12, 1.0);
+            sfx.playWallHit(1.0);
+            this.input.rumble(150, 0.4, 0.7);
+
+            if (dummy.health <= 0) {
+              dummy.isDead = true;
+              dummy.mesh.visible = false;
+              this.spawnBlastParticles(dummy.x, dummy.y, 0xffd700, 24, 1.8);
+              sfx.playStart();
+
+              // Check if all dummies destroyed
+              const allDead = this.trialDummies.every((d) => d.isDead);
+              if (allDead) {
+                this.completeTrial();
+              }
+            }
+          }
+        });
+      });
+    }
+
     // 7. Caster vs PowerUp collisions
     this.casters.forEach((caster) => {
       if (caster.isDead) return;
@@ -2258,6 +2454,31 @@ export class Game {
         if (scoreEl) scoreEl.innerText = `${Math.floor(maxScore)} / 100`;
       } else {
         cauldronHud.style.display = 'none';
+      }
+    }
+
+    // Trial Mode HUD
+    const trialHud = document.getElementById('trial-hud');
+    if (trialHud) {
+      if (this.trialStage) {
+        trialHud.style.display = 'flex';
+        const titleEl = document.getElementById('trial-hud-title');
+        const targetsEl = document.getElementById('trial-hud-targets');
+        const timeEl = document.getElementById('trial-hud-time');
+        const parEl = document.getElementById('trial-hud-par');
+        const shotsEl = document.getElementById('trial-hud-shots');
+        const parShotsEl = document.getElementById('trial-hud-par-shots');
+
+        const remainingDummies = this.trialDummies.filter((d) => !d.isDead).length;
+
+        if (titleEl) titleEl.innerText = this.trialStage.title;
+        if (targetsEl) targetsEl.innerText = `🎯 ${remainingDummies} Target${remainingDummies === 1 ? '' : 's'} Left`;
+        if (timeEl) timeEl.innerText = `${this.trialElapsed.toFixed(1)}s`;
+        if (parEl) parEl.innerText = `${this.trialStage.parTime.toFixed(1)}s`;
+        if (shotsEl) shotsEl.innerText = `${this.trialShotsFired} Shot${this.trialShotsFired === 1 ? '' : 's'}`;
+        if (parShotsEl) parShotsEl.innerText = `${this.trialStage.maxShots} max`;
+      } else {
+        trialHud.style.display = 'none';
       }
     }
 

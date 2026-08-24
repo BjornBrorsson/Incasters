@@ -341,11 +341,58 @@
           <p>⚡ <strong>Dodge Dash:</strong> Spacebar</p>
         </div>
 
-        <button id="btn-play" class="play-btn">START BATTLE</button>
+        <div class="menu-action-row">
+          <button id="btn-play" class="play-btn">START BATTLE</button>
+          <button id="btn-open-trials" class="trials-btn">⭐ PRACTICE &amp; TRIALS</button>
+        </div>
+      </div>
+
+      <!-- TRICKSHOT TRIALS MODAL -->
+      <div id="trials-modal" class="modal-overlay" style="display: none;">
+        <div class="trials-dialog glass-panel">
+          <div class="trials-header">
+            <div>
+              <h2>TRICKSHOT ACADEMY &amp; TRIALS</h2>
+              <p class="trials-subtitle">Master curved shot trajectories, bank angles, and elemental combos. Earn ⭐ stars and tokens!</p>
+            </div>
+            <button id="btn-close-trials" class="close-modal-btn">✕</button>
+          </div>
+          <div id="trials-stages-list" class="trials-stages-grid"></div>
+        </div>
+      </div>
+
+      <!-- TRIAL COMPLETE MODAL -->
+      <div id="trial-result-modal" class="modal-overlay" style="display: none;">
+        <div class="trial-result-dialog glass-panel">
+          <h2 id="trial-result-title">TRIAL COMPLETE!</h2>
+          <div id="trial-result-stars" class="trial-stars-display">⭐⭐⭐</div>
+          <div class="trial-stats-row">
+            <div><span>TIME:</span> <strong id="trial-result-time">0.0s</strong></div>
+            <div><span>SHOTS:</span> <strong id="trial-result-shots">0</strong></div>
+            <div><span>TOKENS:</span> <strong id="trial-result-tokens">+0</strong></div>
+          </div>
+          <div class="trial-result-actions">
+            <button id="btn-trial-next" class="lan-action-btn success">Next Trial</button>
+            <button id="btn-trial-retry" class="lan-action-btn">Retry</button>
+            <button id="btn-trial-menu" class="lan-action-btn danger">Trials Menu</button>
+          </div>
+        </div>
       </div>
 
       <!-- IN-GAME HUD -->
       <div id="hud-container" style="display: none;">
+        
+        <!-- Trial In-Game HUD -->
+        <div id="trial-hud" class="hud-panel glass-panel-light trial-hud-panel" style="display: none;">
+          <div class="trial-hud-header">
+            <span id="trial-hud-title" class="trial-hud-title">Stage 1: The Curved Arc</span>
+            <span id="trial-hud-targets" class="trial-hud-targets">🎯 1 Target Left</span>
+          </div>
+          <div class="trial-hud-stats">
+            <span>⏱️ <strong id="trial-hud-time">0.0s</strong> / <span id="trial-hud-par">8.0s</span></span>
+            <span>🔥 <strong id="trial-hud-shots">0 Shots</strong> / <span id="trial-hud-par-shots">2 max</span></span>
+          </div>
+        </div>
         
         <!-- Player Stats (Top-Left) -->
         <div class="hud-panel player-panel glass-panel-light">

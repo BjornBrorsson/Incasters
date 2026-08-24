@@ -28,6 +28,7 @@ import { loadDifficulty, saveDifficulty, type DifficultyLevel } from './game/Dif
 import { loadGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from './game/GraphicsSettings';
 import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo, type PlayerInputState } from './net/LanClient';
 import { P2PClient, cleanRoomCode } from './net/P2PClient';
+import { TRIAL_STAGES } from './game/Trials';
 import {
   getAudioSettings,
   music,
@@ -1582,6 +1583,161 @@ document.addEventListener('DOMContentLoaded', () => {
       game.cleanup();
       game = null;
     }
+  });
+
+  // ── Trickshot Trials & Academy UI ──
+  const openTrialsBtn = document.getElementById('btn-open-trials');
+  const trialsModal = document.getElementById('trials-modal');
+  const closeTrialsBtn = document.getElementById('btn-close-trials');
+  const trialsStagesList = document.getElementById('trials-stages-list');
+  const trialResultModal = document.getElementById('trial-result-modal');
+  const trialNextBtn = document.getElementById('btn-trial-next');
+  const trialRetryBtn = document.getElementById('btn-trial-retry');
+  const trialMenuBtn = document.getElementById('btn-trial-menu');
+
+  let currentTrialStageId = 0;
+
+  function renderTrialsGrid() {
+    if (!trialsStagesList) return;
+    trialsStagesList.innerHTML = '';
+
+    TRIAL_STAGES.forEach((stage) => {
+      const unlocked = progression.isTrialUnlocked(stage.id);
+      const stars = progression.getTrialStars(stage.id);
+      const bestTime = progression.getTrialBestTime(stage.id);
+
+      const card = document.createElement('div');
+      card.className = `trial-stage-card ${unlocked ? 'unlocked' : 'locked'}`;
+
+      let starIcons = '☆☆☆';
+      if (stars === 3) starIcons = '⭐⭐⭐';
+      else if (stars === 2) starIcons = '⭐⭐☆';
+      else if (stars === 1) starIcons = '⭐☆☆';
+
+      const timeText = bestTime > 0 ? `Best: ${bestTime.toFixed(1)}s` : `Par: ${stage.parTime}s`;
+
+      card.innerHTML = `
+        <div class="trial-card-top">
+          <span class="trial-card-title">${stage.title}</span>
+          <span class="trial-card-stars">${unlocked ? starIcons : '🔒'}</span>
+        </div>
+        <div class="trial-card-desc">${stage.description}</div>
+        <div class="trial-card-footer">
+          <span class="trial-card-best">${timeText}</span>
+          ${unlocked ? `<button class="trial-launch-btn" data-stage="${stage.id}">Launch</button>` : ''}
+        </div>
+      `;
+
+      const launchBtn = card.querySelector('.trial-launch-btn');
+      launchBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        launchTrial(stage.id);
+      });
+
+      if (unlocked) {
+        card.addEventListener('click', () => launchTrial(stage.id));
+      }
+
+      trialsStagesList.appendChild(card);
+    });
+  }
+
+  function launchTrial(stageId: number) {
+    currentTrialStageId = stageId;
+    if (trialsModal) trialsModal.style.display = 'none';
+    if (trialResultModal) trialResultModal.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'block';
+
+    if (game) {
+      game.cleanup();
+    }
+
+    game = new Game(
+      gameContainer,
+      'BATTLE_ROYALE',
+      characterConfig.robeColor,
+      characterConfig.spellColor,
+      'ARENA',
+      1,
+      { ...characterConfig },
+      selectedDifficulty
+    );
+    (window as any).game = game;
+    game.controlMode = selectedControl;
+
+    game.onTrialCompleted = (res) => {
+      hideGlobalTouchControls();
+      refreshBadge();
+      renderChallenges();
+
+      if (trialResultModal) {
+        trialResultModal.style.display = 'flex';
+        const titleEl = document.getElementById('trial-result-title');
+        const starsEl = document.getElementById('trial-result-stars');
+        const timeEl = document.getElementById('trial-result-time');
+        const shotsEl = document.getElementById('trial-result-shots');
+        const tokensEl = document.getElementById('trial-result-tokens');
+
+        if (titleEl) titleEl.innerText = res.stars === 3 ? '⭐ PERFECT TRICKSHOT! ⭐' : 'TRIAL COMPLETE!';
+        if (starsEl) {
+          starsEl.innerText = res.stars === 3 ? '⭐⭐⭐' : res.stars === 2 ? '⭐⭐☆' : '⭐☆☆';
+        }
+        if (timeEl) timeEl.innerText = `${res.time.toFixed(1)}s`;
+        if (shotsEl) shotsEl.innerText = `${res.shots}`;
+        if (tokensEl) tokensEl.innerText = `+${res.tokens} 🪙`;
+
+        if (trialNextBtn) {
+          const nextExists = TRIAL_STAGES.some((s) => s.id === res.stageId + 1);
+          trialNextBtn.style.display = nextExists ? 'block' : 'none';
+        }
+      }
+    };
+
+    game.loadTrial(stageId);
+    const activeGame = game;
+    activeGame.tick();
+    void music.startMatch('BATTLE_ROYALE');
+    startPregameCountdown(() => {
+      if (game === activeGame) activeGame.startGame();
+    });
+  }
+
+  openTrialsBtn?.addEventListener('click', () => {
+    renderTrialsGrid();
+    if (trialsModal) trialsModal.style.display = 'flex';
+  });
+
+  closeTrialsBtn?.addEventListener('click', () => {
+    if (trialsModal) trialsModal.style.display = 'none';
+  });
+
+  trialRetryBtn?.addEventListener('click', () => {
+    launchTrial(currentTrialStageId);
+  });
+
+  trialNextBtn?.addEventListener('click', () => {
+    launchTrial(currentTrialStageId + 1);
+  });
+
+  trialMenuBtn?.addEventListener('click', () => {
+    cancelPregameCountdown();
+    hideGlobalTouchControls();
+    if (trialResultModal) trialResultModal.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+    void music.playMenu();
+
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+
+    renderTrialsGrid();
+    if (trialsModal) trialsModal.style.display = 'flex';
   });
 
   // Enable keyboard + gamepad navigation of menu & game-over screens

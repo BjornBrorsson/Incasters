@@ -469,6 +469,31 @@ async function run() {
     if (!cauldronCheck.hasHud) throw new Error('King of the Cauldron HUD elements missing');
     console.log("  ✓ King of the Cauldron button and HUD control panels verified.");
 
+    // 16. Test Practice & Trickshot Trials (Issue #5)
+    console.log("\n16. Testing Practice & Trickshot Trials Mode...");
+    const trialsCheck = await page.evaluate(() => {
+      const trialsBtn = document.getElementById('btn-open-trials');
+      const trialsModal = document.getElementById('trials-modal');
+      const stagesList = document.getElementById('trials-stages-list');
+      if (trialsBtn) trialsBtn.click();
+      return {
+        hasBtn: !!trialsBtn,
+        modalVisible: trialsModal && trialsModal.style.display !== 'none',
+        stageCount: stagesList ? stagesList.children.length : 0
+      };
+    });
+    if (!trialsCheck.hasBtn) throw new Error('Practice & Trials button missing in menu');
+    if (!trialsCheck.modalVisible) throw new Error('Trials modal did not open on click');
+    if (trialsCheck.stageCount < 11) throw new Error(`Expected at least 11 trial stages, found ${trialsCheck.stageCount}`);
+    console.log(`  ✓ Practice & Trickshot Trials modal opened with ${trialsCheck.stageCount} challenge stages rendered.`);
+
+    // Close trials modal
+    await page.evaluate(() => {
+      const closeBtn = document.getElementById('btn-close-trials');
+      if (closeBtn) closeBtn.click();
+    });
+    console.log("  ✓ Closed trials modal cleanly.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);
