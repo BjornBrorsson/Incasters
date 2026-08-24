@@ -452,6 +452,23 @@ async function run() {
     console.log("\n14. Testing Arcane Portals and Speed Runes...");
     console.log("  ✓ Observatory Arcane Portals and Acceleration Runes verified.");
 
+    // 15. Test King of the Cauldron Mode (Issue #6)
+    console.log("\n15. Testing King of the Cauldron Mode...");
+    const cauldronCheck = await page.evaluate(() => {
+      const cauldronBtn = document.getElementById('btn-mode-cauldron');
+      const cauldronHud = document.getElementById('cauldron-hud');
+      const cauldronStatus = document.getElementById('cauldron-status');
+      const cauldronProgress = document.getElementById('cauldron-progress');
+      const cauldronScore = document.getElementById('cauldron-score');
+      return {
+        hasBtn: !!cauldronBtn,
+        hasHud: !!cauldronHud && !!cauldronStatus && !!cauldronProgress && !!cauldronScore
+      };
+    });
+    if (!cauldronCheck.hasBtn) throw new Error('King of the Cauldron button missing in menu');
+    if (!cauldronCheck.hasHud) throw new Error('King of the Cauldron HUD elements missing');
+    console.log("  ✓ King of the Cauldron button and HUD control panels verified.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);

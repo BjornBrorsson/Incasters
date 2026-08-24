@@ -3,11 +3,12 @@ import { Caster } from '../entities/Caster';
 import { sfx } from '../engine/Audio';
 import { PALETTE } from '../engine/Theme';
 
-export type GameModeType = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH';
+export type GameModeType = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH' | 'KING_OF_THE_CAULDRON';
 export const GameModeType = {
   BATTLE_ROYALE: 'BATTLE_ROYALE' as GameModeType,
   TEAM_BATTLE: 'TEAM_BATTLE' as GameModeType,
-  GOLD_RUSH: 'GOLD_RUSH' as GameModeType
+  GOLD_RUSH: 'GOLD_RUSH' as GameModeType,
+  KING_OF_THE_CAULDRON: 'KING_OF_THE_CAULDRON' as GameModeType
 };
 
 
@@ -30,6 +31,22 @@ export interface BankZone {
   controllingTeam: 'RED' | 'BLUE' | null;
   depositTimer: number;
   relocateTimer: number;
+}
+
+export interface CauldronZone {
+  x: number;
+  y: number;
+  radius: number;
+  mesh: THREE.Group;
+  controllingCasterId: string | null;
+  controllingName: string | null;
+  controllingColor: number;
+  captureProgress: number; // 0 to 100
+  holdScores: Map<string, number>;
+  targetScore: number;
+  cauldronSpots: { x: number; y: number }[];
+  relocateTimer: number;
+  pulseTime: number;
 }
 
 export class GameModeManager {
@@ -68,6 +85,9 @@ export class GameModeManager {
   private bankSpots: { x: number; y: number }[] = [];
   private prevBankControl: 'RED' | 'BLUE' | null = null;
   private bankPulse: number = 0;
+
+  // King of the Cauldron (dynamic zone control)
+  cauldron: CauldronZone | null = null;
 
   // Announcements callback wired by Game to the on-screen Fx announcer
   onAnnounce: ((text: string, color?: string) => void) | null = null;
@@ -194,6 +214,17 @@ export class GameModeManager {
       // Create the Bank Vault at a random open spawner spot
       const spots = this.bankSpots.length > 0 ? this.bankSpots : [{ x: 0, y: 0 }];
       this.createBank(scene, spots[Math.floor(Math.random() * spots.length)]);
+
+    } else if (this.type === GameModeType.KING_OF_THE_CAULDRON) {
+      // FFA or Team King of the Cauldron Zone Control
+      casters.forEach((c) => {
+        c.team = 'GOLD';
+        c.reset();
+        c.coins = 0;
+      });
+
+      const spots = this.bankSpots.length > 0 ? this.bankSpots : [{ x: 0, y: 0 }];
+      this.createCauldron(scene, spots[Math.floor(Math.random() * spots.length)], spots);
     }
   }
 
@@ -207,8 +238,8 @@ export class GameModeManager {
       return;
     }
 
-    // 1. Handle Respawning for Team Battle & Gold Rush
-    if (this.type === GameModeType.TEAM_BATTLE || this.type === GameModeType.GOLD_RUSH) {
+    // 1. Handle Respawning for Team Battle, Gold Rush & King of the Cauldron
+    if (this.type === GameModeType.TEAM_BATTLE || this.type === GameModeType.GOLD_RUSH || this.type === GameModeType.KING_OF_THE_CAULDRON) {
       casters.forEach((c) => {
         if (c.isDead) {
           let time = this.respawnTimers.get(c.id) || 3.0;
@@ -352,6 +383,11 @@ export class GameModeManager {
         }
       }
     }
+
+    // 4. Handle King of the Cauldron Zone Control
+    if (this.type === GameModeType.KING_OF_THE_CAULDRON) {
+      this.updateCauldron(dt, casters);
+    }
   }
 
   handleCasterDeath(scene: THREE.Scene, deceased: Caster, killer: Caster | null, allCasters: Caster[]) {
@@ -387,6 +423,12 @@ export class GameModeManager {
         this.spawnSpilledCoin(scene, deceased.x, deceased.y, Math.cos(angle) * force, Math.sin(angle) * force);
       }
 
+      this.respawnTimers.set(deceased.id, 3.0);
+      scene.remove(deceased.mesh);
+    }
+
+    // 3. King of the Cauldron: respawn caster after 3s
+    if (this.type === GameModeType.KING_OF_THE_CAULDRON) {
       this.respawnTimers.set(deceased.id, 3.0);
       scene.remove(deceased.mesh);
     }
@@ -571,6 +613,158 @@ export class GameModeManager {
     this.bank.mesh.rotation.y += dt * 0.5;
   }
 
+  private createCauldron(scene: THREE.Scene, spot: { x: number; y: number }, spots: { x: number; y: number }[]) {
+    const group = new THREE.Group();
+    const radius = 3.2;
+
+    // Outer magical capture ring
+    const ringGeo = new THREE.RingGeometry(radius - 0.35, radius, 48);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x9933ff,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.85
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.03;
+    group.add(ring);
+
+    // Inner glowing fill disc
+    const fillGeo = new THREE.CircleGeometry(radius - 0.4, 32);
+    const fillMat = new THREE.MeshBasicMaterial({
+      color: 0xaa44ff,
+      transparent: true,
+      opacity: 0.18,
+      side: THREE.DoubleSide
+    });
+    const fill = new THREE.Mesh(fillGeo, fillMat);
+    fill.rotation.x = -Math.PI / 2;
+    fill.position.y = 0.02;
+    group.add(fill);
+
+    // Central ancient bubbling cauldron
+    const cauldronGeo = new THREE.SphereGeometry(0.85, 16, 12);
+    const cauldronMat = new THREE.MeshStandardMaterial({
+      color: 0x1f1f28,
+      roughness: 0.8,
+      metalness: 0.3
+    });
+    const cauldronMesh = new THREE.Mesh(cauldronGeo, cauldronMat);
+    cauldronMesh.position.y = 0.55;
+    cauldronMesh.castShadow = true;
+    group.add(cauldronMesh);
+
+    // Cauldron potion brew surface
+    const brewGeo = new THREE.CircleGeometry(0.7, 16);
+    const brewMat = new THREE.MeshStandardMaterial({
+      color: 0x9933ff,
+      emissive: 0x7711dd,
+      emissiveIntensity: 0.8,
+      roughness: 0.2
+    });
+    const brew = new THREE.Mesh(brewGeo, brewMat);
+    brew.rotation.x = -Math.PI / 2;
+    brew.position.y = 0.92;
+    group.add(brew);
+
+    group.position.set(spot.x, 0, spot.y);
+    scene.add(group);
+
+    this.cauldron = {
+      x: spot.x,
+      y: spot.y,
+      radius,
+      mesh: group,
+      controllingCasterId: null,
+      controllingName: null,
+      controllingColor: 0x9933ff,
+      captureProgress: 0,
+      holdScores: new Map(),
+      targetScore: 100,
+      cauldronSpots: spots,
+      relocateTimer: 30,
+      pulseTime: 0
+    };
+  }
+
+  private updateCauldron(dt: number, casters: Caster[]) {
+    if (!this.cauldron) return;
+    const cauldron = this.cauldron;
+    cauldron.pulseTime += dt * 3;
+
+    // Relocate periodically
+    cauldron.relocateTimer -= dt;
+    if (cauldron.relocateTimer <= 0 && cauldron.cauldronSpots.length > 1) {
+      this.relocateCauldron();
+    }
+
+    // Count casters inside
+    const inside: Caster[] = [];
+    casters.forEach((c) => {
+      if (c.isDead) return;
+      const dx = c.x - cauldron.x;
+      const dy = c.y - cauldron.y;
+      if (dx * dx + dy * dy < cauldron.radius * cauldron.radius) {
+        inside.push(c);
+      }
+    });
+
+    if (inside.length === 1) {
+      const controller = inside[0];
+      if (cauldron.controllingCasterId !== controller.id) {
+        cauldron.controllingCasterId = controller.id;
+        cauldron.controllingName = controller.name;
+        cauldron.controllingColor = controller.clothingColor;
+        this.onAnnounce?.(`${controller.name.toUpperCase()} HOLDS THE CAULDRON!`, '#d288ff');
+      }
+
+      // Add points
+      const curScore = cauldron.holdScores.get(controller.id) || 0;
+      const newScore = curScore + dt * 8.5; // ~12 seconds to win
+      cauldron.holdScores.set(controller.id, newScore);
+
+      if (newScore >= cauldron.targetScore) {
+        this.endGame(casters);
+        return;
+      }
+    }
+
+    this.updateCauldronVisual(dt);
+  }
+
+  private relocateCauldron() {
+    if (!this.cauldron || this.cauldron.cauldronSpots.length === 0) return;
+    let spot = this.cauldron.cauldronSpots[Math.floor(Math.random() * this.cauldron.cauldronSpots.length)];
+    for (let tries = 0; tries < 4 && Math.abs(spot.x - this.cauldron.x) < 0.1 && Math.abs(spot.y - this.cauldron.y) < 0.1; tries++) {
+      spot = this.cauldron.cauldronSpots[Math.floor(Math.random() * this.cauldron.cauldronSpots.length)];
+    }
+    this.cauldron.x = spot.x;
+    this.cauldron.y = spot.y;
+    this.cauldron.mesh.position.set(spot.x, 0, spot.y);
+    this.cauldron.relocateTimer = 30;
+    this.cauldron.controllingCasterId = null;
+    this.cauldron.controllingName = null;
+    this.onAnnounce?.('THE CAULDRON RELOCATED!', '#d288ff');
+  }
+
+  private updateCauldronVisual(dt: number) {
+    if (!this.cauldron) return;
+    const ring = this.cauldron.mesh.children[0] as THREE.Mesh;
+    const fill = this.cauldron.mesh.children[1] as THREE.Mesh;
+
+    const color = this.cauldron.controllingColor;
+    if (ring && ring.material instanceof THREE.MeshBasicMaterial) {
+      ring.material.color.setHex(color);
+      ring.material.opacity = 0.75 + Math.sin(this.cauldron.pulseTime) * 0.2;
+    }
+    if (fill && fill.material instanceof THREE.MeshBasicMaterial) {
+      fill.material.color.setHex(color);
+      fill.material.opacity = (this.cauldron.controllingCasterId ? 0.25 : 0.12) + Math.sin(this.cauldron.pulseTime) * 0.04;
+    }
+    this.cauldron.mesh.rotation.y += dt * 0.4;
+  }
+
   public endGame(casters: Caster[]) {
     this.isGameOver = true;
 
@@ -607,6 +801,25 @@ export class GameModeManager {
         sfx.playSadGameOver();
       } else {
         this.winnerText = 'TIE GAME!';
+        sfx.playSadGameOver();
+      }
+
+    } else if (this.type === GameModeType.KING_OF_THE_CAULDRON) {
+      let bestId: string | null = null;
+      let maxScore = -1;
+      this.cauldron?.holdScores.forEach((score, id) => {
+        if (score > maxScore) {
+          maxScore = score;
+          bestId = id;
+        }
+      });
+      const winner = casters.find((c) => c.id === bestId);
+      if (winner) {
+        this.winnerText = `${winner.name.toUpperCase()} IS KING OF THE CAULDRON (${Math.floor(maxScore)} pts)!`;
+        if (winner.id === 'player') sfx.playStart();
+        else sfx.playSadGameOver();
+      } else {
+        this.winnerText = 'TIME UP! No Cauldron Master!';
         sfx.playSadGameOver();
       }
     }
@@ -740,5 +953,16 @@ export class GameModeManager {
       this.bank = null;
     }
     this.prevBankControl = null;
+
+    if (this.cauldron) {
+      scene.remove(this.cauldron.mesh);
+      this.cauldron.mesh.traverse((ch) => {
+        if (ch instanceof THREE.Mesh) {
+          ch.geometry.dispose();
+          (ch.material as THREE.Material).dispose();
+        }
+      });
+      this.cauldron = null;
+    }
   }
 }

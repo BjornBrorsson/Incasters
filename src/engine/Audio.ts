@@ -39,7 +39,7 @@ function saveAudioSettings(settings: AudioSettings) {
 
 const audioSettings = loadAudioSettings();
 
-export type MusicMatchMode = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH';
+export type MusicMatchMode = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH' | 'KING_OF_THE_CAULDRON';
 type MusicCueId = 'menu' | 'battleRoyale' | 'teamBattle' | 'goldRush' | 'victory' | 'defeat';
 type StemRole = 'drums' | 'other' | 'vocals';
 type SfxAsset = 'conjure' | 'air' | 'fizzle' | 'wallHit' | 'wizardHit';
@@ -577,7 +577,7 @@ class DynamicMusicPlayer {
   }
 
   startMatch(mode: MusicMatchMode) {
-    const cue: MusicCueId = mode === 'BATTLE_ROYALE' ? 'battleRoyale' : mode === 'TEAM_BATTLE' ? 'teamBattle' : 'goldRush';
+    const cue: MusicCueId = mode === 'BATTLE_ROYALE' || mode === 'KING_OF_THE_CAULDRON' ? 'battleRoyale' : mode === 'TEAM_BATTLE' ? 'teamBattle' : 'goldRush';
     return this.transitionTo(cue);
   }
 

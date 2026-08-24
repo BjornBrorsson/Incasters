@@ -35,7 +35,8 @@ export class Bot extends Caster {
     walls: AABB[],
     coinsList: { x: number; y: number; mesh: any }[],
     safeRadius: number, // Last Caster Standing mode
-    bankTarget: { x: number; y: number } | null = null // Gold Rush bank to deposit at
+    bankTarget: { x: number; y: number } | null = null, // Gold Rush bank to deposit at
+    cauldronTarget: { x: number; y: number; radius: number } | null = null // King of the Cauldron zone
   ) {
     if (this.isDead) return;
 
@@ -91,7 +92,7 @@ export class Bot extends Caster {
       this.vx = this.dodgeVx;
       this.vy = this.dodgeVy;
     } else {
-      // 2. Regular AI behavior (Fight / Hunt powerup / Collect coins / Patrol)
+      // 2. Regular AI behavior (Fight / Hunt powerup / Collect coins / Patrol / Cauldron)
       
       // Keep within the safe zone if active (Battle Royale shrinking ring)
       const distToCenter = Math.sqrt(this.x * this.x + this.y * this.y);
@@ -115,6 +116,34 @@ export class Bot extends Caster {
         } else {
           this.vx = 0;
           this.vy = 0;
+        }
+      } else if (cauldronTarget) {
+        // King of the Cauldron: Move to contest and hold the Cauldron zone
+        const cdx = cauldronTarget.x - this.x;
+        const cdy = cauldronTarget.y - this.y;
+        const cdist = Math.sqrt(cdx * cdx + cdy * cdy);
+        
+        // Scan for nearest enemy to aim at while holding or capturing
+        this.targetCaster = this.findNearestEnemy(allCasters);
+        if (this.targetCaster) {
+          this.aimAngle = Math.atan2(this.targetCaster.y - this.y, this.targetCaster.x - this.x);
+          const enemyDist = Math.hypot(this.targetCaster.x - this.x, this.targetCaster.y - this.y);
+          if (enemyDist < 14 && this.shootTimer <= 0 && this.ammo > 0) {
+            this.shootCurvedProj(this.aimAngle, this.targetCaster);
+          }
+        } else {
+          this.aimAngle = Math.atan2(cdy, cdx);
+        }
+
+        if (cdist > cauldronTarget.radius * 0.6) {
+          const moveAngle = Math.atan2(cdy, cdx);
+          this.vx = Math.cos(moveAngle) * this.getSpeed() * this.difficulty.botSpeedMultiplier;
+          this.vy = Math.sin(moveAngle) * this.getSpeed() * this.difficulty.botSpeedMultiplier;
+        } else {
+          // Inside the cauldron: circle slightly to dodge shots
+          const circleAngle = Math.atan2(cdy, cdx) + Math.PI / 2;
+          this.vx = Math.cos(circleAngle) * this.getSpeed() * 0.4;
+          this.vy = Math.sin(circleAngle) * this.getSpeed() * 0.4;
         }
       } else {
         // Select nearest enemy

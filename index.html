@@ -104,6 +104,10 @@
               <span class="mode-title">Gold Rush</span>
               <span class="mode-desc">Two teams grab coins &amp; capture the Bank to deposit. First to 50 banked wins</span>
             </button>
+            <button id="btn-mode-cauldron" class="mode-btn" data-mode="KING_OF_THE_CAULDRON">
+              <span class="mode-title">King of the Cauldron</span>
+              <span class="mode-desc">Control the rotating Arcane Cauldron zone. First to 100 control points wins</span>
+            </button>
           </div>
         </div>
 
@@ -379,6 +383,18 @@
             <span id="net-ping-dot" class="ping-dot"></span>
             <span id="net-ping-val">24ms</span>
           </div>
+        </div>
+
+        <!-- Cauldron Zone HUD (King of the Cauldron Only) -->
+        <div id="cauldron-hud" class="hud-panel glass-panel-light cauldron-hud-panel" style="display: none;">
+          <span class="cauldron-icon">🍲</span>
+          <div class="cauldron-info">
+            <div class="cauldron-status" id="cauldron-status">Cauldron Neutral</div>
+            <div class="cauldron-progress-bar">
+              <div id="cauldron-progress" class="cauldron-fill" style="width: 0%;"></div>
+            </div>
+          </div>
+          <span id="cauldron-score" class="cauldron-score">0 / 100</span>
         </div>
 
         <!-- Leaderboard (Top-Right) -->

@@ -254,6 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modeBrBtn = document.getElementById('btn-mode-br');
   const modeTdmBtn = document.getElementById('btn-mode-tdm');
   const modeGoldBtn = document.getElementById('btn-mode-gold');
+  const modeCauldronBtn = document.getElementById('btn-mode-cauldron');
 
   const ctrlTargetBtn = document.getElementById('btn-ctrl-target');
   const ctrlManualBtn = document.getElementById('btn-ctrl-manual');
@@ -548,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Toggle Mode Selection
   const setMode = (mode: GameModeType, activeBtn: HTMLElement) => {
     selectedMode = mode;
-    [modeBrBtn, modeTdmBtn, modeGoldBtn].forEach((btn) => {
+    [modeBrBtn, modeTdmBtn, modeGoldBtn, modeCauldronBtn].forEach((btn) => {
       btn?.classList.remove('active');
     });
     activeBtn.classList.add('active');
@@ -557,6 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
   modeBrBtn?.addEventListener('click', () => setMode(GameModeType.BATTLE_ROYALE, modeBrBtn));
   modeTdmBtn?.addEventListener('click', () => setMode(GameModeType.TEAM_BATTLE, modeTdmBtn));
   modeGoldBtn?.addEventListener('click', () => setMode(GameModeType.GOLD_RUSH, modeGoldBtn));
+  modeCauldronBtn?.addEventListener('click', () => setMode(GameModeType.KING_OF_THE_CAULDRON, modeCauldronBtn));
 
   // Toggle Control Selection
   const setControl = (control: 'TARGET' | 'MANUAL', activeBtn: HTMLElement) => {

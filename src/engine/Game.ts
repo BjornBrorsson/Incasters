@@ -1210,7 +1210,8 @@ export class Game {
           this.physicsArena.walls,
           this.gameModeManager.coins,
           this.gameModeManager.type === GameModeType.BATTLE_ROYALE ? this.gameModeManager.safeRadius : 0,
-          this.gameModeManager.bank
+          this.gameModeManager.bank,
+          this.gameModeManager.cauldron
         );
       }
     });
@@ -2224,6 +2225,42 @@ export class Game {
       this.updateLeaderboard();
     }
 
+    // Cauldron Zone HUD (King of the Cauldron)
+    const cauldronHud = document.getElementById('cauldron-hud');
+    if (cauldronHud) {
+      if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON && this.gameModeManager.cauldron) {
+        cauldronHud.style.display = 'flex';
+        const c = this.gameModeManager.cauldron;
+        const statusEl = document.getElementById('cauldron-status');
+        const progressEl = document.getElementById('cauldron-progress');
+        const scoreEl = document.getElementById('cauldron-score');
+
+        // Find leader score
+        let maxScore = 0;
+        c.holdScores.forEach((score) => {
+          if (score > maxScore) {
+            maxScore = score;
+          }
+        });
+
+        if (statusEl) {
+          if (c.controllingName) {
+            statusEl.innerText = `${c.controllingName.toUpperCase()} CONTROLS`;
+            statusEl.style.color = '#ffd700';
+          } else {
+            statusEl.innerText = 'CAULDRON CONTESTED';
+            statusEl.style.color = '#ffffff';
+          }
+        }
+
+        const pct = Math.min(100, Math.round((maxScore / c.targetScore) * 100));
+        if (progressEl) progressEl.style.width = `${pct}%`;
+        if (scoreEl) scoreEl.innerText = `${Math.floor(maxScore)} / 100`;
+      } else {
+        cauldronHud.style.display = 'none';
+      }
+    }
+
     // 5. Game Over Screen check
     if (this.gameModeManager.isGameOver) {
       this.isPlaying = false;
@@ -2260,8 +2297,8 @@ export class Game {
   }
 
   private updateLeaderboard() {
+    if (!this.hudEl.leaderboardList) return;
     const list = this.hudEl.leaderboardList;
-    if (!list) return;
 
     // Sort casters based on current game mode rules
     const sorted = [...this.casters];
@@ -2311,6 +2348,10 @@ export class Game {
       
       // Sort players by kills/score
       sorted.sort((a, b) => b.score - a.score);
+    } else if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
+      // Sort by cauldron hold scores
+      const c = this.gameModeManager.cauldron;
+      sorted.sort((a, b) => (c?.holdScores.get(b.id) || 0) - (c?.holdScores.get(a.id) || 0));
     }
 
     // Render top 3 in landscape, top 5 in portrait/desktop
@@ -2322,6 +2363,9 @@ export class Game {
       let scoreStr = '';
       if (this.gameModeManager.type === GameModeType.GOLD_RUSH) {
         scoreStr = `${caster.coins} 🪙`;
+      } else if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
+        const pts = Math.floor(this.gameModeManager.cauldron?.holdScores.get(caster.id) || 0);
+        scoreStr = `${pts} pts`;
       } else {
         scoreStr = `${caster.score} Kills`;
       }
@@ -2338,7 +2382,7 @@ export class Game {
       `;
     });
 
-    if (this.gameModeManager.type === GameModeType.TEAM_BATTLE || this.gameModeManager.type === GameModeType.GOLD_RUSH) {
+    if (this.gameModeManager.type === GameModeType.TEAM_BATTLE || this.gameModeManager.type === GameModeType.GOLD_RUSH || this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
       list.innerHTML += itemsHtml;
     } else {
       list.innerHTML = itemsHtml;
@@ -2349,6 +2393,16 @@ export class Game {
     let won = false;
     if (this.gameModeManager.type === GameModeType.BATTLE_ROYALE) {
       won = !this.player.isDead;
+    } else if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
+      let bestId: string | null = null;
+      let maxScore = -1;
+      this.gameModeManager.cauldron?.holdScores.forEach((score, id) => {
+        if (score > maxScore) {
+          maxScore = score;
+          bestId = id;
+        }
+      });
+      won = bestId === 'player';
     } else {
       // Player is always on RED in team modes
       won = this.gameModeManager.redScore > this.gameModeManager.blueScore;
