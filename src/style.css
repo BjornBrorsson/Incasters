@@ -400,10 +400,24 @@ body {
   flex-grow: 1;
 }
 
+.player-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .player-name {
   font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.player-title {
+  font-size: 0.68rem;
   font-weight: 500;
-  color: rgba(255,255,255,0.7);
+  color: #ffd700;
+  text-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+  letter-spacing: 0.5px;
 }
 
 .hp-bar-container {

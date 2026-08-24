@@ -14,7 +14,7 @@ import { PALETTE, createSkyDome } from './Theme';
 import { Fx } from './Fx';
 import { DEFAULT_CONFIG, randomCharacterConfig, generateDistinctBotConfigs, BOT_ARCHETYPES } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
-import type { MatchResult } from '../game/Progression';
+import { progression, type MatchResult } from '../game/Progression';
 import { DIFFICULTY_PRESETS } from '../game/Difficulty';
 import type { DifficultyLevel, DifficultyConfig } from '../game/Difficulty';
 import { loadGraphicsQuality, getGraphicsConfig } from '../game/GraphicsSettings';
@@ -900,11 +900,27 @@ export class Game {
     this.spawnBlastParticles(x, y, stats.color, 5, 0.7);
   }
 
-  // Spark/trail particle system using high-performance object pooling
+  // Spark/trail particle system with custom burst style cosmetics
   spawnBlastParticles(x: number, y: number, color: number, count: number = 8, scaleMultiplier = 1) {
-    const mat = getCachedParticleMaterial(color);
+    const burstStyle = this.playerConfig?.burst || 'SPARKLE';
+    let burstCount = count;
+    let burstSpeedMultiplier = 1.0;
+    let burstColor = color;
 
-    for (let i = 0; i < count; i++) {
+    if (burstStyle === 'SUPERNOVA') {
+      burstCount = Math.round(count * 1.5);
+      burstSpeedMultiplier = 1.4;
+    } else if (burstStyle === 'PLASMA') {
+      burstSpeedMultiplier = 1.6;
+    } else if (burstStyle === 'FROST_BLAST') {
+      burstColor = 0x66eeff;
+    } else if (burstStyle === 'ARCANE_FLAME') {
+      burstColor = 0xff6622;
+    }
+
+    const mat = getCachedParticleMaterial(burstColor);
+
+    for (let i = 0; i < burstCount; i++) {
       let p: GameParticle;
       if (this.particlePool.length > 0) {
         p = this.particlePool.pop()!;
@@ -916,7 +932,7 @@ export class Game {
         p = {
           position: new THREE.Vector3(),
           velocity: new THREE.Vector3(),
-          color,
+          color: burstColor,
           size: 1.0,
           opacity: 0.85,
           lifetime: 0,
@@ -928,10 +944,11 @@ export class Game {
 
       p.position.set(x, 0.4, y);
       p.mesh.position.copy(p.position);
-      const angle = Math.random() * Math.PI * 2;
-      const speed = 2.0 + Math.random() * 4.0;
-      p.velocity.set(Math.cos(angle) * speed, 0.2 + Math.random() * 2.0, Math.sin(angle) * speed);
-      p.color = color;
+      const angle = (Math.PI * 2 * i) / burstCount + (Math.random() - 0.5) * 0.4;
+      const speed = (2.0 + Math.random() * 4.0) * burstSpeedMultiplier;
+      const vy = burstStyle === 'ARCANE_FLAME' ? 1.5 + Math.random() * 2.5 : 0.2 + Math.random() * 2.0;
+      p.velocity.set(Math.cos(angle) * speed, vy, Math.sin(angle) * speed);
+      p.color = burstColor;
       p.opacity = 0.85;
       p.lifetime = 0;
       p.maxLifetime = 0.25 + Math.random() * 0.2;
@@ -1805,7 +1822,15 @@ export class Game {
             if (caster.isDead) {
               const killer = this.casters.find((c) => c.id === proj.ownerId) || null;
               if (killer) killer.score++;
-              if (killer && killer.id === 'player') this.input.rumble(220, 0.6, 0.9);
+              if (killer && killer.id === 'player') {
+                this.input.rumble(220, 0.6, 0.9);
+                if (proj.isWallRunning || proj.bouncesRemaining < proj.stats.maxBounces) {
+                  progression.recordFeatProgress('wall_runner', 1);
+                }
+                if (proj.targetPoint !== null || proj.steerDirection !== 0) {
+                  progression.recordFeatProgress('trickshot_master', 1);
+                }
+              }
               
               this.gameModeManager.handleCasterDeath(this.scene, caster, killer, this.casters);
 
@@ -1908,8 +1933,37 @@ export class Game {
     // 1. Spawning bullet trails (throttled to every 0.04s to avoid excessive particle clutter)
     if (this.bulletTrailTimer >= 0.04) {
       this.bulletTrailTimer = 0;
+      const trailStyle = this.playerConfig?.trail || 'DEFAULT';
+
       this.projectiles.forEach((proj) => {
-        const mat = getCachedParticleMaterial(proj.trailColor);
+        let pColor = proj.trailColor;
+        let pLifetime = 0.22;
+        let pVx = (Math.random() - 0.5) * 0.4;
+        let pVy = 0;
+        let pVz = (Math.random() - 0.5) * 0.4;
+
+        if (proj.ownerId === 'player') {
+          if (trailStyle === 'CELESTIAL') {
+            pColor = Math.random() > 0.5 ? 0xffe277 : 0xa0e0ff;
+            pLifetime = 0.3;
+          } else if (trailStyle === 'PHOENIX') {
+            pColor = Math.random() > 0.5 ? 0xff4411 : 0xffaa00;
+            pVy = 0.8 + Math.random() * 0.6;
+          } else if (trailStyle === 'VOID') {
+            pColor = 0x8822ff;
+            pLifetime = 0.28;
+          } else if (trailStyle === 'GLITCH') {
+            pColor = Math.random() > 0.5 ? 0x00ffcc : 0xff0077;
+            pVx = (Math.round(Math.random() * 2) - 1) * 0.8;
+            pVz = (Math.round(Math.random() * 2) - 1) * 0.8;
+          } else if (trailStyle === 'LIGHTNING') {
+            pColor = 0x66ffff;
+            pVx = (Math.random() - 0.5) * 1.5;
+            pVz = (Math.random() - 0.5) * 1.5;
+          }
+        }
+
+        const mat = getCachedParticleMaterial(pColor);
         let p: GameParticle;
         if (this.particlePool.length > 0) {
           p = this.particlePool.pop()!;
@@ -1921,11 +1975,11 @@ export class Game {
           p = {
             position: new THREE.Vector3(),
             velocity: new THREE.Vector3(),
-            color: proj.trailColor,
+            color: pColor,
             size: 1.0,
             opacity: 0.7,
             lifetime: 0,
-            maxLifetime: 0.22,
+            maxLifetime: pLifetime,
             mesh
           };
           this.scene.add(mesh);
@@ -1933,11 +1987,11 @@ export class Game {
 
         p.position.set(proj.x, 0.4 + (Math.random() - 0.5) * 0.1, proj.y);
         p.mesh.position.copy(p.position);
-        p.velocity.set((Math.random() - 0.5) * 0.4, 0, (Math.random() - 0.5) * 0.4);
-        p.color = proj.trailColor;
+        p.velocity.set(pVx, pVy, pVz);
+        p.color = pColor;
         p.opacity = 0.7;
         p.lifetime = 0;
-        p.maxLifetime = 0.22;
+        p.maxLifetime = pLifetime;
 
         this.particles.push(p);
       });

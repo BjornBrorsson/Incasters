@@ -20,6 +20,8 @@ export type AccessoryStyle = 'NONE' | 'WINGS' | 'CAPE' | 'PACK' | 'BANNER' | 'SC
 export type HairStyle = 'NONE' | 'MOHAWK' | 'LONG' | 'BUZZ' | 'PONYTAIL';
 export type FaceGearStyle = 'NONE' | 'SHADES' | 'EYEPATCH' | 'BEARD' | 'MASK' | 'MONOCLE' | 'RUNE_MARK' | 'BLINDFOLD' | 'MUSTACHE';
 export type WeaponStyle = 'STAFF' | 'WAND' | 'SWORD' | 'SCYTHE' | 'GRIMOIRE_FOCUS' | 'ORB_SCEPTRE' | 'BOW' | 'BROOM';
+export type TrailStyle = 'DEFAULT' | 'CELESTIAL' | 'PHOENIX' | 'VOID' | 'GLITCH' | 'LIGHTNING';
+export type BurstStyle = 'SPARKLE' | 'SUPERNOVA' | 'PLASMA' | 'FROST_BLAST' | 'ARCANE_FLAME';
 
 export interface CharacterConfig {
   // 1. Body
@@ -37,8 +39,11 @@ export interface CharacterConfig {
   weapon: WeaponStyle;
   // 7. Backpack
   accessory: AccessoryStyle;
-  // Spell colour (affects projectile + weapon crystal + accessory tint)
+  // 8. Spell & Trail FX
   spellColor: number;
+  trail: TrailStyle;
+  burst: BurstStyle;
+  title?: string;
   // Rotation angle (radians) applied to head-gear for creative positioning
   hatRotation: number;
 }
@@ -100,6 +105,23 @@ export const WEAPON_STYLES: { id: WeaponStyle; label: string }[] = [
   { id: 'BROOM', label: 'Witch Broom' }
 ];
 
+export const TRAIL_STYLES: { id: TrailStyle; label: string }[] = [
+  { id: 'DEFAULT', label: 'Classic Sparks' },
+  { id: 'CELESTIAL', label: 'Celestial Stardust' },
+  { id: 'PHOENIX', label: 'Phoenix Embers' },
+  { id: 'VOID', label: 'Void Nebula' },
+  { id: 'GLITCH', label: 'Cyber Glitch' },
+  { id: 'LIGHTNING', label: 'Volt Arc' }
+];
+
+export const BURST_STYLES: { id: BurstStyle; label: string }[] = [
+  { id: 'SPARKLE', label: 'Sparkle Burst' },
+  { id: 'SUPERNOVA', label: 'Supernova' },
+  { id: 'PLASMA', label: 'Plasma Ring' },
+  { id: 'FROST_BLAST', label: 'Frost Shatter' },
+  { id: 'ARCANE_FLAME', label: 'Arcane Flare' }
+];
+
 export const EYE_COLORS = [0xfff000, 0xe0a020, 0xff3366, 0x58c040, 0xffffff, 0x00d2ff];
 
 export const HAIR_COLORS = [0x2b1b0e, 0x8b4513, 0xffd700, 0xff3366, 0x39ff14, 0xb026ff, 0xffffff, 0x1a1a1a];
@@ -107,6 +129,9 @@ export const HAIR_COLORS = [0x2b1b0e, 0x8b4513, 0xffd700, 0xff3366, 0x39ff14, 0x
 export const DEFAULT_CONFIG: CharacterConfig = {
   robeColor: 0x6b2fa0,
   spellColor: 0xe0a020,
+  trail: 'DEFAULT',
+  burst: 'SPARKLE',
+  title: 'Novice Caster',
   hat: 'WIZARD',
   accessory: 'NONE',
   eyeColor: 0xfff000,
@@ -155,6 +180,8 @@ export function randomCharacterConfig(robeColor: number, spellColor: number): Ch
   return {
     robeColor,
     spellColor,
+    trail: pick(TRAIL_STYLES).id,
+    burst: pick(BURST_STYLES).id,
     hat: pick(HAT_STYLES).id,
     accessory: pick(ACCESSORY_STYLES).id,
     eyeColor: pick(EYE_COLORS),
@@ -1056,6 +1083,8 @@ export function generateDistinctBotConfigs(count: number, playerConfig: Characte
     configs.push({
       robeColor: arch.robeColor,
       spellColor: arch.spellColor,
+      trail: 'DEFAULT',
+      burst: 'SPARKLE',
       hat: arch.hat,
       weapon: arch.weapon,
       accessory: arch.accessory,

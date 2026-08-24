@@ -413,6 +413,37 @@ async function run() {
     console.log("\n10. Testing Elemental Fusions & Power-Up Synergies...");
     console.log("  ✓ Power-Up combination fusions (Frost Shards, Permafrost, Forking Shards, Orbital Glide, Deflect Barrier) verified.");
 
+    // 11. Test Unlockable Spell Trails & Impact Visual Bursts (Issue #11)
+    console.log("\n11. Testing Spell Trails and Impact Visual Bursts...");
+    const cosmeticDomCheck = await page.evaluate(() => {
+      const trailPicker = document.getElementById('trail-picker');
+      const burstPicker = document.getElementById('burst-picker');
+      const playerTitle = document.getElementById('player-title');
+      return {
+        hasTrailPicker: !!trailPicker && trailPicker.children.length > 0,
+        hasBurstPicker: !!burstPicker && burstPicker.children.length > 0,
+        hasPlayerTitle: !!playerTitle
+      };
+    });
+    if (!cosmeticDomCheck.hasTrailPicker) throw new Error('Trail picker missing or empty');
+    if (!cosmeticDomCheck.hasBurstPicker) throw new Error('Burst picker missing or empty');
+    if (!cosmeticDomCheck.hasPlayerTitle) throw new Error('Player title HUD element missing');
+    console.log("  ✓ Trail pickers, burst pickers, and HUD player title rendered cleanly.");
+
+    // 12. Test Mastery Feats & Badges (Issue #12)
+    console.log("\n12. Testing Mastery Feats and Titles...");
+    const featCheck = await page.evaluate(() => {
+      const featsList = document.getElementById('feats-list');
+      const titlePicker = document.getElementById('title-picker');
+      return {
+        hasFeatsList: !!featsList && featsList.children.length > 0,
+        hasTitlePicker: !!titlePicker && titlePicker.children.length > 0
+      };
+    });
+    if (!featCheck.hasFeatsList) throw new Error('Feats list missing or empty');
+    if (!featCheck.hasTitlePicker) throw new Error('Title picker missing or empty');
+    console.log("  ✓ Mastery Feats list and Title customizer verified.");
+
     // Check for runtime errors
     if (errors.length > 0) {
       throw new Error(`Encountered ${errors.length} page errors during test run!`);

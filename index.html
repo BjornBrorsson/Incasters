@@ -303,6 +303,18 @@
                 <span class="customizer-label">Gear</span>
                 <div id="accessory-picker" class="part-picker"></div>
               </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Trail</span>
+                <div id="trail-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Burst</span>
+                <div id="burst-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Title</span>
+                <div id="title-picker" class="part-picker"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -310,6 +322,11 @@
         <div class="menu-section">
           <h3>CHALLENGES</h3>
           <div id="challenges-list" class="challenges-list glass-panel-nested"></div>
+        </div>
+
+        <div class="menu-section">
+          <h3>MASTERY FEATS &amp; TITLES</h3>
+          <div id="feats-list" class="challenges-list glass-panel-nested"></div>
         </div>
 
         <div class="instructions glass-panel-nested">
@@ -330,7 +347,10 @@
         <div class="hud-panel player-panel glass-panel-light">
           <div class="player-avatar">🧙</div>
           <div class="player-stats-text">
-            <span class="player-name">Caster (You)</span>
+            <div class="player-name-row">
+              <span class="player-name">Caster (You)</span>
+              <span id="player-title" class="player-title">Novice Caster</span>
+            </div>
             <div class="hp-bar-container">
               <div id="hp-progress" class="hp-progress-bar"></div>
               <span id="hp-text">100 / 100</span>

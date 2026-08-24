@@ -10,13 +10,17 @@ import {
   HAIR_STYLES,
   FACE_GEAR_STYLES,
   WEAPON_STYLES,
+  TRAIL_STYLES,
+  BURST_STYLES,
   EYE_COLORS,
   type CharacterConfig,
   type HatStyle,
   type AccessoryStyle,
   type HairStyle,
   type FaceGearStyle,
-  type WeaponStyle
+  type WeaponStyle,
+  type TrailStyle,
+  type BurstStyle
 } from './game/CharacterConfig';
 import { CharacterPreview } from './game/CharacterPreview';
 import { progression, type MatchResult, type MatchSummary } from './game/Progression';
@@ -270,9 +274,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const faceGearPicker = document.getElementById('facegear-picker');
   const weaponPicker = document.getElementById('weapon-picker');
   const accessoryPicker = document.getElementById('accessory-picker');
+  const trailPicker = document.getElementById('trail-picker');
+  const burstPicker = document.getElementById('burst-picker');
+  const titlePicker = document.getElementById('title-picker');
   const previewContainer = document.getElementById('char-preview');
   const progressBadge = document.getElementById('progress-badge');
   const challengesList = document.getElementById('challenges-list');
+  const featsList = document.getElementById('feats-list');
   const matchSummary = document.getElementById('match-summary');
   const optionsBtn = document.getElementById('btn-options') as HTMLButtonElement | null;
   const optionsPanel = document.getElementById('options-panel');
@@ -1353,9 +1361,59 @@ document.addEventListener('DOMContentLoaded', () => {
   setupPartPicker<HairStyle>(hairPicker, 'hair', HAIR_STYLES, characterConfig.hair, (id) => { characterConfig.hair = id; });
   setupPartPicker<FaceGearStyle>(faceGearPicker, 'face', FACE_GEAR_STYLES, characterConfig.faceGear, (id) => { characterConfig.faceGear = id; });
   setupPartPicker<WeaponStyle>(weaponPicker, 'weapon', WEAPON_STYLES, characterConfig.weapon, (id) => { characterConfig.weapon = id; });
+  setupPartPicker<TrailStyle>(trailPicker, 'trail', TRAIL_STYLES, characterConfig.trail || 'DEFAULT', (id) => { characterConfig.trail = id; });
+  setupPartPicker<BurstStyle>(burstPicker, 'burst', BURST_STYLES, characterConfig.burst || 'SPARKLE', (id) => { characterConfig.burst = id; });
+
+  const renderFeats = () => {
+    if (!featsList) return;
+    featsList.innerHTML = '';
+    const feats = progression.getFeats();
+    feats.forEach((f) => {
+      const card = document.createElement('div');
+      card.className = f.unlocked ? 'challenge-card done' : 'challenge-card';
+      card.innerHTML = `
+        <div class="ch-left">
+          <div class="ch-desc">🏆 <strong>${f.name}</strong>: ${f.desc}</div>
+          <div class="ch-bar-bg"><div class="ch-bar-fill" style="width:${Math.round((f.progress / f.goal) * 100)}%;"></div></div>
+        </div>
+        <div class="ch-reward" style="color: #ffd700;">${f.unlocked ? `Unlocked: "${f.titleReward}"` : `${f.progress}/${f.goal}`}</div>
+      `;
+      featsList.appendChild(card);
+    });
+  };
+
+  const renderTitlePicker = () => {
+    if (!titlePicker) return;
+    titlePicker.innerHTML = '';
+    const feats = progression.getFeats();
+    const unlockedTitles = ['Novice Caster', ...feats.filter((f) => f.unlocked).map((f) => f.titleReward)];
+    const currentTitle = characterConfig.title || progression.equippedTitle;
+
+    unlockedTitles.forEach((title) => {
+      const btn = document.createElement('button');
+      btn.className = 'part-btn';
+      btn.textContent = title;
+      if (title === currentTitle) btn.classList.add('active');
+      btn.addEventListener('click', () => {
+        titlePicker.querySelectorAll('.part-btn').forEach((b) => b.classList.remove('active'));
+        btn.classList.add('active');
+        characterConfig.title = title;
+        progression.setEquippedTitle(title);
+        saveCharacterConfig(characterConfig);
+        const titleEl = document.getElementById('player-title');
+        if (titleEl) titleEl.textContent = title;
+      });
+      titlePicker.appendChild(btn);
+    });
+
+    const titleEl = document.getElementById('player-title');
+    if (titleEl) titleEl.textContent = currentTitle;
+  };
 
   refreshBadge();
   renderChallenges();
+  renderFeats();
+  renderTitlePicker();
 
   // ── Elimination and Spectator Controls ──
   const elimOverlay = document.getElementById('elimination-overlay');

@@ -37,6 +37,8 @@ interface ProgressionState {
   challenges: Challenge[];
   challengeDate: string;
   challengeWeek: string;
+  equippedTitle?: string;
+  feats?: Record<string, number>;
 }
 
 // Cosmetic part unlock costs (in tokens). 0 = free / always available.
@@ -82,8 +84,37 @@ export const PART_COST: Record<string, number> = {
   'weapon:GRIMOIRE_FOCUS': 40,
   'weapon:ORB_SCEPTRE': 45,
   'weapon:BOW': 35,
-  'weapon:BROOM': 30
+  'weapon:BROOM': 30,
+  'trail:DEFAULT': 0,
+  'trail:CELESTIAL': 35,
+  'trail:PHOENIX': 40,
+  'trail:VOID': 45,
+  'trail:GLITCH': 50,
+  'trail:LIGHTNING': 50,
+  'burst:SPARKLE': 0,
+  'burst:SUPERNOVA': 35,
+  'burst:PLASMA': 40,
+  'burst:FROST_BLAST': 45,
+  'burst:ARCANE_FLAME': 50
 };
+
+export interface Feat {
+  id: string;
+  name: string;
+  desc: string;
+  titleReward: string;
+  progress: number;
+  goal: number;
+  unlocked: boolean;
+}
+
+export const FEAT_DEFINITIONS: { id: string; name: string; desc: string; titleReward: string; goal: number }[] = [
+  { id: 'first_win', name: 'First Victory', desc: 'Win your first battle in any arena', titleReward: 'Novice Caster', goal: 1 },
+  { id: 'trickshot_master', name: 'Trickshot Prodigy', desc: 'Score 25 curved shot eliminations', titleReward: 'Trickshot Prodigy', goal: 25 },
+  { id: 'wall_runner', name: 'Corner Magus', desc: 'Eliminate 15 casters with wall-glide or bounce shots', titleReward: 'Corner Magus', goal: 15 },
+  { id: 'undefeated', name: 'The Undefeated', desc: 'Win 5 matches without being eliminated', titleReward: 'The Undefeated', goal: 5 },
+  { id: 'grand_archmage', name: 'Grand Archmage', desc: 'Reach Level 10 and unlock 10 cosmetics', titleReward: 'Grand Archmage', goal: 10 }
+];
 
 type ChallengeTemplate = Omit<Challenge, 'progress' | 'done'>;
 
@@ -155,13 +186,27 @@ class Progression {
           unlocked: parsed.unlocked ?? [],
           challenges: parsed.challenges ?? [],
           challengeDate: parsed.challengeDate ?? '',
-          challengeWeek: parsed.challengeWeek ?? ''
+          challengeWeek: parsed.challengeWeek ?? '',
+          equippedTitle: parsed.equippedTitle ?? 'Novice Caster',
+          feats: parsed.feats ?? {}
         };
       }
     } catch {
       // ignore malformed storage
     }
-    return { xp: 0, tokens: 0, games: 0, wins: 0, kills: 0, unlocked: [], challenges: [], challengeDate: '', challengeWeek: '' };
+    return {
+      xp: 0,
+      tokens: 0,
+      games: 0,
+      wins: 0,
+      kills: 0,
+      unlocked: [],
+      challenges: [],
+      challengeDate: '',
+      challengeWeek: '',
+      equippedTitle: 'Novice Caster',
+      feats: {}
+    };
   }
 
   private save() {
@@ -304,6 +349,47 @@ class Progression {
       newLevel: afterLevel > beforeLevel ? afterLevel : null,
       completed
     };
+  }
+
+  get equippedTitle(): string {
+    return this.state.equippedTitle || 'Novice Caster';
+  }
+
+  setEquippedTitle(title: string) {
+    this.state.equippedTitle = title;
+    this.save();
+  }
+
+  getFeats(): Feat[] {
+    const featProgress = this.state.feats || {};
+    return FEAT_DEFINITIONS.map(def => {
+      const prog = featProgress[def.id] || 0;
+      return {
+        ...def,
+        progress: Math.min(prog, def.goal),
+        unlocked: prog >= def.goal
+      };
+    });
+  }
+
+  recordFeatProgress(featId: string, amount = 1): Feat | null {
+    if (!this.state.feats) this.state.feats = {};
+    const def = FEAT_DEFINITIONS.find(f => f.id === featId);
+    if (!def) return null;
+
+    const prev = this.state.feats[featId] || 0;
+    const next = prev + amount;
+    this.state.feats[featId] = next;
+    this.save();
+
+    if (prev < def.goal && next >= def.goal) {
+      return {
+        ...def,
+        progress: def.goal,
+        unlocked: true
+      };
+    }
+    return null;
   }
 }
 
