@@ -513,11 +513,19 @@ document.addEventListener('DOMContentLoaded', () => {
       showMatchSummary(result, summary);
       refreshBadge();
       renderChallenges();
+      renderFeats();
+      renderTitlePicker();
     };
 
     activeGame.onPlayerEliminated = (data) => {
       hideGlobalTouchControls();
-      const summary = progression.recordMatch({ won: false, kills: data.kills, mode: activeGame.gameModeManager.type });
+      const summary = progression.recordMatch({
+        won: false,
+        kills: data.kills,
+        mode: activeGame.gameModeManager.type,
+        difficulty: activeGame.difficulty,
+        died: true
+      });
       const elimOverlay = document.getElementById('elimination-overlay');
       const elimRank = document.getElementById('elimination-rank');
       const elimSummary = document.getElementById('elimination-summary');
@@ -537,6 +545,8 @@ document.addEventListener('DOMContentLoaded', () => {
       if (hud) hud.style.display = 'none';
       refreshBadge();
       renderChallenges();
+      renderFeats();
+      renderTitlePicker();
     };
 
     activeGame.onSpectateChange = (data) => {
@@ -1673,6 +1683,8 @@ document.addEventListener('DOMContentLoaded', () => {
       hideGlobalTouchControls();
       refreshBadge();
       renderChallenges();
+      renderFeats();
+      renderTitlePicker();
 
       if (trialResultModal) {
         trialResultModal.style.display = 'flex';

@@ -7,6 +7,10 @@ export interface MatchResult {
   won: boolean;
   kills: number;
   mode: string;
+  difficulty?: string;
+  died?: boolean;
+  coinsBanked?: number;
+  cauldronPoints?: number;
 }
 
 export interface Challenge {
@@ -113,7 +117,17 @@ export const FEAT_DEFINITIONS: { id: string; name: string; desc: string; titleRe
   { id: 'first_win', name: 'First Victory', desc: 'Win your first battle in any arena', titleReward: 'Novice Caster', goal: 1 },
   { id: 'trickshot_master', name: 'Trickshot Prodigy', desc: 'Score 25 curved shot eliminations', titleReward: 'Trickshot Prodigy', goal: 25 },
   { id: 'wall_runner', name: 'Corner Magus', desc: 'Eliminate 15 casters with wall-glide or bounce shots', titleReward: 'Corner Magus', goal: 15 },
+  { id: 'bounty_hunter', name: 'Bounty Hunter', desc: 'Land 50 total eliminations across any match mode', titleReward: 'Bounty Hunter', goal: 50 },
+  { id: 'sharp_shooter', name: 'Sharpshooter', desc: 'Land 100 total eliminations', titleReward: 'Sharpshooter', goal: 100 },
+  { id: 'speed_demon', name: 'Speed Demon', desc: 'Perform 30 dodge-dashes in combat', titleReward: 'Speed Demon', goal: 30 },
+  { id: 'elemental_lord', name: 'Elemental Master', desc: 'Land 20 eliminations while empowered by a power-up', titleReward: 'Elemental Master', goal: 20 },
+  { id: 'gold_hoarder', name: 'Gold Hoarder', desc: 'Bank 100 gold coins in Gold Rush', titleReward: 'Gold Hoarder', goal: 100 },
+  { id: 'cauldron_king', name: 'Cauldron Master', desc: 'Score 150 capture points in King of the Cauldron', titleReward: 'Cauldron Master', goal: 150 },
+  { id: 'trial_master', name: 'Trial Grandmaster', desc: 'Achieve 3 stars on 5 Trickshot Trial stages', titleReward: 'Trial Grandmaster', goal: 5 },
+  { id: 'insane_slayer', name: 'Insane Slayer', desc: 'Win 3 matches against Insane difficulty bots', titleReward: 'Insane Slayer', goal: 3 },
   { id: 'undefeated', name: 'The Undefeated', desc: 'Win 5 matches without being eliminated', titleReward: 'The Undefeated', goal: 5 },
+  { id: 'fashionista', name: 'Fashionista', desc: 'Unlock 8 cosmetic items in the shop', titleReward: 'Fashionista', goal: 8 },
+  { id: 'veteran', name: 'Seasoned Veteran', desc: 'Play 25 complete matches', titleReward: 'Seasoned Veteran', goal: 25 },
   { id: 'grand_archmage', name: 'Grand Archmage', desc: 'Reach Level 10 and unlock 10 cosmetics', titleReward: 'Grand Archmage', goal: 10 }
 ];
 
@@ -302,6 +316,7 @@ class Progression {
     this.state.tokens -= cost;
     this.state.unlocked.push(key);
     this.save();
+    this.checkCosmeticFeats();
     return true;
   }
 
@@ -310,6 +325,15 @@ class Progression {
     if (!this.isPartUnlocked(key)) {
       this.state.unlocked.push(key);
       this.save();
+      this.checkCosmeticFeats();
+    }
+  }
+
+  private checkCosmeticFeats() {
+    const unlockedCount = this.state.unlocked.length;
+    this.recordFeatProgress('fashionista', unlockedCount - (this.state.feats?.['fashionista'] || 0));
+    if (this.level >= 10 && unlockedCount >= 10) {
+      this.recordFeatProgress('grand_archmage', 10);
     }
   }
 
@@ -342,6 +366,30 @@ class Progression {
     this.state.tokens += challengeTokens;
 
     this.save();
+
+    // Track Feats from match results
+    if (result.won) {
+      this.recordFeatProgress('first_win', 1);
+      if (!result.died) {
+        this.recordFeatProgress('undefeated', 1);
+      }
+      if (result.difficulty === 'INSANE') {
+        this.recordFeatProgress('insane_slayer', 1);
+      }
+    }
+    this.recordFeatProgress('bounty_hunter', result.kills);
+    this.recordFeatProgress('sharp_shooter', result.kills);
+    this.recordFeatProgress('veteran', 1);
+
+    if (result.coinsBanked && result.coinsBanked > 0) {
+      this.recordFeatProgress('gold_hoarder', result.coinsBanked);
+    }
+    if (result.cauldronPoints && result.cauldronPoints > 0) {
+      this.recordFeatProgress('cauldron_king', result.cauldronPoints);
+    }
+    if (this.level >= 10 && this.state.unlocked.length >= 10) {
+      this.recordFeatProgress('grand_archmage', 10);
+    }
 
     const afterLevel = this.level;
     return {
@@ -425,6 +473,17 @@ class Progression {
     this.state.tokens += tokensEarned;
     this.state.xp += stars * 40;
     this.save();
+
+    // Count 3-star trials for trial_master feat
+    let threeStarCount = 0;
+    if (this.state.trials) {
+      Object.values(this.state.trials).forEach((t) => {
+        if (t.stars === 3) threeStarCount++;
+      });
+    }
+    if (threeStarCount > (this.state.feats?.['trial_master'] || 0)) {
+      this.recordFeatProgress('trial_master', threeStarCount - (this.state.feats?.['trial_master'] || 0));
+    }
 
     return {
       newStars: finalStars,

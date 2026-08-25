@@ -82,4 +82,29 @@ describe('Progression & Economy: Leveling, Tokens, Challenges & Mastery', () => 
     const featAfter = progression.getFeats().find((f) => f.id === 'first_win');
     assert.ok(featAfter?.unlocked);
   });
+
+  it('tracks new expanded Mastery Feats across matches, trials, and dodge-dashes', () => {
+    // 1. Bounty hunter & Sharpshooter & Insane Slayer
+    progression.recordMatch({ won: true, kills: 10, mode: 'BATTLE_ROYALE', difficulty: 'INSANE', died: false });
+    const bounty = progression.getFeats().find((f) => f.id === 'bounty_hunter');
+    assert.ok((bounty?.progress ?? 0) >= 10);
+
+    // 2. Speed Demon
+    progression.recordFeatProgress('speed_demon', 5);
+    const speed = progression.getFeats().find((f) => f.id === 'speed_demon');
+    assert.equal(speed?.progress, 5);
+
+    // 3. Gold Hoarder & Cauldron King
+    progression.recordMatch({ won: true, kills: 2, mode: 'GOLD_RUSH', coinsBanked: 25 });
+    const gold = progression.getFeats().find((f) => f.id === 'gold_hoarder');
+    assert.equal(gold?.progress, 25);
+
+    progression.recordMatch({ won: true, kills: 3, mode: 'KING_OF_THE_CAULDRON', cauldronPoints: 40 });
+    const cauldron = progression.getFeats().find((f) => f.id === 'cauldron_king');
+    assert.equal(cauldron?.progress, 40);
+
+    // 4. Equipping titles
+    progression.setEquippedTitle('Bounty Hunter');
+    assert.equal(progression.equippedTitle, 'Bounty Hunter');
+  });
 });

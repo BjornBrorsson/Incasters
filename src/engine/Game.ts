@@ -1684,6 +1684,7 @@ export class Game {
     const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
     this.player.dash(worldMoveX, worldMoveY);
     if (canDash) {
+      progression.recordFeatProgress('speed_demon', 1);
       this.input.rumble(90, 0.25, 0.5);
       if (this.netMode === 'host') this.onNetEvent?.({ kind: 'dash', data: { casterId: this.player.id } });
     }
@@ -2005,6 +2006,9 @@ export class Game {
                 }
                 if (proj.targetPoint !== null || proj.steerDirection !== 0) {
                   progression.recordFeatProgress('trickshot_master', 1);
+                }
+                if (killer.powerups.size > 0) {
+                  progression.recordFeatProgress('elemental_lord', 1);
                 }
               }
               
@@ -2658,7 +2662,21 @@ export class Game {
       // Player is always on RED in team modes
       won = this.gameModeManager.redScore > this.gameModeManager.blueScore;
     }
-    return { won, kills: this.player.score, mode: this.gameModeManager.type };
+
+    const coinsBanked = this.gameModeManager.type === GameModeType.GOLD_RUSH ? this.player.coins : 0;
+    const cauldronPoints = this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON
+      ? (this.gameModeManager.cauldron?.holdScores.get('player') || 0)
+      : 0;
+
+    return {
+      won,
+      kills: this.player.score,
+      mode: this.gameModeManager.type,
+      difficulty: this.difficulty,
+      died: this.player.isDead,
+      coinsBanked,
+      cauldronPoints
+    };
   }
 
   cleanup() {
