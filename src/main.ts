@@ -1715,6 +1715,35 @@ document.addEventListener('DOMContentLoaded', () => {
     if (trialsModal) trialsModal.style.display = 'none';
   });
 
+  // ── Main Menu sub-menu modals (Customize / Multiplayer / Challenges & Mastery) ──
+  // Extracted out of the Main Menu's single scrolling panel into their own dialogs
+  // so the menu itself stays short and focused on match setup (Issue #18).
+  const submenuModals: [string, string][] = [
+    ['btn-open-customize', 'customize-modal'],
+    ['btn-open-multiplayer', 'multiplayer-modal'],
+    ['btn-open-progress', 'progress-modal']
+  ];
+  submenuModals.forEach(([btnId, modalId]) => {
+    const btn = document.getElementById(btnId);
+    const modal = document.getElementById(modalId);
+    btn?.addEventListener('click', () => {
+      if (modal) modal.style.display = 'flex';
+    });
+    // Clicking the close button, or the dark backdrop itself, dismisses the dialog.
+    modal?.querySelector('.close-modal-btn')?.addEventListener('click', () => {
+      modal.style.display = 'none';
+    });
+    modal?.addEventListener('click', (e) => {
+      if (e.target === modal) modal.style.display = 'none';
+    });
+  });
+
+  // Clicking the XP/level badge is a shortcut into the Challenges & Mastery modal.
+  progressBadge?.addEventListener('click', () => {
+    const modal = document.getElementById('progress-modal');
+    if (modal) modal.style.display = 'flex';
+  });
+
   trialRetryBtn?.addEventListener('click', () => {
     launchTrial(currentTrialStageId);
   });

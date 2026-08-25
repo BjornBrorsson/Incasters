@@ -184,7 +184,103 @@
         </div>
 
         <div class="menu-section">
-          <h3>MULTIPLAYER</h3>
+          <h3>MORE</h3>
+          <div class="submenu-launcher-row">
+            <button id="btn-open-customize" class="submenu-btn" type="button">
+              <span class="submenu-icon">🧙</span>
+              <span class="submenu-label">Customize</span>
+            </button>
+            <button id="btn-open-multiplayer" class="submenu-btn" type="button">
+              <span class="submenu-icon">🌐</span>
+              <span class="submenu-label">Multiplayer</span>
+            </button>
+            <button id="btn-open-progress" class="submenu-btn" type="button">
+              <span class="submenu-icon">🏆</span>
+              <span class="submenu-label">Challenges</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="instructions glass-panel-nested">
+          <h4>CONTROLS</h4>
+          <p>🎮 <strong>Move:</strong> W, A, S, D / Arrow Keys</p>
+          <p>🎯 <strong>Aim:</strong> Move Mouse / Pointer</p>
+          <p>🔥 <strong>Cast Projectile:</strong> Left-Click (Hold click to bend/steer shot!)</p>
+          <p>⚡ <strong>Dodge Dash:</strong> Spacebar</p>
+        </div>
+
+        <div class="menu-action-row">
+          <button id="btn-play" class="play-btn">START BATTLE</button>
+          <button id="btn-open-trials" class="trials-btn">⭐ PRACTICE &amp; TRIALS</button>
+        </div>
+      </div>
+
+      <!-- CUSTOMIZE WIZARD MODAL -->
+      <div id="customize-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-modal-dialog glass-panel">
+          <div class="menu-modal-header">
+            <h2>CUSTOMIZE YOUR WIZARD</h2>
+            <button id="btn-close-customize" class="close-modal-btn" type="button">✕</button>
+          </div>
+          <div class="customizer-container glass-panel-nested">
+            <div id="char-preview" class="char-preview"></div>
+            <div class="customizer-controls">
+              <div class="customizer-row">
+                <span class="customizer-label">Robe</span>
+                <div id="robe-color-picker" class="color-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Spell</span>
+                <div id="spell-color-picker" class="color-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Eyes</span>
+                <div id="eye-color-picker" class="color-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Hair</span>
+                <div id="hair-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Hat</span>
+                <div id="hat-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Face</span>
+                <div id="facegear-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Weapon</span>
+                <div id="weapon-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Gear</span>
+                <div id="accessory-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Trail</span>
+                <div id="trail-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Burst</span>
+                <div id="burst-picker" class="part-picker"></div>
+              </div>
+              <div class="customizer-row">
+                <span class="customizer-label">Title</span>
+                <div id="title-picker" class="part-picker"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MULTIPLAYER MODAL -->
+      <div id="multiplayer-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-modal-dialog glass-panel">
+          <div class="menu-modal-header">
+            <h2>MULTIPLAYER</h2>
+            <button id="btn-close-multiplayer" class="close-modal-btn" type="button">✕</button>
+          </div>
           <div class="multiplayer-tabs">
             <button id="tab-online" class="multi-tab-btn active" type="button">🌐 Serverless Online (P2P)</button>
             <button id="tab-lan" class="multi-tab-btn" type="button">🏠 Local Network (LAN)</button>
@@ -269,81 +365,23 @@
             </div>
           </div>
         </div>
+      </div>
 
-        <div class="menu-section">
-          <h3>CUSTOMIZE YOUR WIZARD</h3>
-          <div class="customizer-container glass-panel-nested">
-            <div id="char-preview" class="char-preview"></div>
-            <div class="customizer-controls">
-              <div class="customizer-row">
-                <span class="customizer-label">Robe</span>
-                <div id="robe-color-picker" class="color-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Spell</span>
-                <div id="spell-color-picker" class="color-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Eyes</span>
-                <div id="eye-color-picker" class="color-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Hair</span>
-                <div id="hair-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Hat</span>
-                <div id="hat-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Face</span>
-                <div id="facegear-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Weapon</span>
-                <div id="weapon-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Gear</span>
-                <div id="accessory-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Trail</span>
-                <div id="trail-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Burst</span>
-                <div id="burst-picker" class="part-picker"></div>
-              </div>
-              <div class="customizer-row">
-                <span class="customizer-label">Title</span>
-                <div id="title-picker" class="part-picker"></div>
-              </div>
-            </div>
+      <!-- CHALLENGES & MASTERY FEATS MODAL -->
+      <div id="progress-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-modal-dialog glass-panel">
+          <div class="menu-modal-header">
+            <h2>CHALLENGES &amp; MASTERY</h2>
+            <button id="btn-close-progress" class="close-modal-btn" type="button">✕</button>
           </div>
-        </div>
-
-        <div class="menu-section">
-          <h3>CHALLENGES</h3>
-          <div id="challenges-list" class="challenges-list glass-panel-nested"></div>
-        </div>
-
-        <div class="menu-section">
-          <h3>MASTERY FEATS &amp; TITLES</h3>
-          <div id="feats-list" class="challenges-list glass-panel-nested"></div>
-        </div>
-
-        <div class="instructions glass-panel-nested">
-          <h4>CONTROLS</h4>
-          <p>🎮 <strong>Move:</strong> W, A, S, D / Arrow Keys</p>
-          <p>🎯 <strong>Aim:</strong> Move Mouse / Pointer</p>
-          <p>🔥 <strong>Cast Projectile:</strong> Left-Click (Hold click to bend/steer shot!)</p>
-          <p>⚡ <strong>Dodge Dash:</strong> Spacebar</p>
-        </div>
-
-        <div class="menu-action-row">
-          <button id="btn-play" class="play-btn">START BATTLE</button>
-          <button id="btn-open-trials" class="trials-btn">⭐ PRACTICE &amp; TRIALS</button>
+          <div class="menu-section">
+            <h3>CHALLENGES</h3>
+            <div id="challenges-list" class="challenges-list glass-panel-nested"></div>
+          </div>
+          <div class="menu-section">
+            <h3>MASTERY FEATS &amp; TITLES</h3>
+            <div id="feats-list" class="challenges-list glass-panel-nested"></div>
+          </div>
         </div>
       </div>
 

@@ -347,6 +347,8 @@ export class Arena {
   private bouncePadsMeshes: THREE.Mesh[] = [];
   private floatingCandles: { mesh: THREE.Group; baseY: number; phase: number }[] = [];
   private pulseTime: number = 0;
+  /** Tracks plain wall/bounce-pad visual groups built from `this.walls` so they can be torn down independently of the ambient floor/candles (used by Trickshot Trials to swap in custom layouts). */
+  private obstacleMeshes: THREE.Object3D[] = [];
 
   constructor(mapType: MapType = 'ARENA') {
     this.mapType = mapType;
@@ -981,107 +983,7 @@ export class Arena {
     this.arenaGroup.add(compass);
 
     // 2. Instantiate all physical walls with gothic copings, banners, and buttresses
-    const bannerColors = [PALETTE.scarlet, PALETTE.emerald, PALETTE.sapphire, PALETTE.octarine, PALETTE.amber];
-
-    this.walls.forEach((wall, idx) => {
-      const isDoor = this.doors.some(d => d.wallIndex === idx);
-      const isMoving = this.movingWalls.some(m => m.wallIndex === idx);
-      const isHazardBase = this.hazards.some(h => h.baseWallIndex === idx);
-      if (isDoor || isMoving || isHazardBase) return;
-
-      const w = wall.maxX - wall.minX;
-      const h = wall.maxY - wall.minY;
-      const cx = (wall.minX + wall.maxX) / 2;
-      const cy = (wall.minY + wall.maxY) / 2;
-
-      if (wall.isBouncePad) {
-        // ── Bubbling Potion Cauldron (Bounce Pad) ──
-        const cauldronGroup = new THREE.Group();
-        cauldronGroup.position.set(cx, 0, cy);
-
-        // Iron Cauldron Pot
-        const potGeo = new THREE.CylinderGeometry(w * 0.45, w * 0.35, 0.9, 20);
-        const pot = new THREE.Mesh(potGeo, this.cauldronMaterial);
-        pot.position.y = 0.45;
-        pot.castShadow = true;
-        pot.receiveShadow = true;
-        cauldronGroup.add(pot);
-
-        // Brass Rim
-        const rimGeo = new THREE.TorusGeometry(w * 0.46, 0.06, 8, 20);
-        const rimMat = new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.7, roughness: 0.3 });
-        const rim = new THREE.Mesh(rimGeo, rimMat);
-        rim.rotation.x = Math.PI / 2;
-        rim.position.y = 0.9;
-        cauldronGroup.add(rim);
-
-        // Bubbling Cauldron Brew
-        const brewGeo = new THREE.CircleGeometry(w * 0.42, 20);
-        const brew = new THREE.Mesh(brewGeo, this.cauldronBrewMaterial);
-        brew.rotation.x = -Math.PI / 2;
-        brew.position.y = 0.86;
-        cauldronGroup.add(brew);
-
-        this.arenaGroup.add(cauldronGroup);
-        this.bouncePadsMeshes.push(brew);
-
-      } else {
-        // ── Weathered Castle Ashlar Wall with Stone Coping ──
-        const wallGroup = new THREE.Group();
-        wallGroup.position.set(cx, 0, cy);
-
-        // Base Stone Wall
-        const geom = new THREE.BoxGeometry(w, 1.4, h);
-        const wallMesh = new THREE.Mesh(geom, this.wallMaterial);
-        wallMesh.position.y = 0.7;
-        wallMesh.castShadow = true;
-        wallMesh.receiveShadow = true;
-        wallGroup.add(wallMesh);
-
-        // Beveled Stone Coping Slab on Top
-        const capGeom = new THREE.BoxGeometry(w + 0.16, 0.18, h + 0.16);
-        const capMesh = new THREE.Mesh(capGeom, this.wallCopingMaterial);
-        capMesh.position.y = 1.45;
-        capMesh.castShadow = true;
-        capMesh.receiveShadow = true;
-        wallGroup.add(capMesh);
-
-        // Brass Corner Brackets
-        const bracketGeo = new THREE.BoxGeometry(0.12, 0.3, 0.12);
-        const bracketMat = new THREE.MeshStandardMaterial({ color: 0xc8960a, metalness: 0.8, roughness: 0.2 });
-        [-w / 2, w / 2].forEach(bx => {
-          [-h / 2, h / 2].forEach(bz => {
-            const bracket = new THREE.Mesh(bracketGeo, bracketMat);
-            bracket.position.set(bx, 1.35, bz);
-            wallGroup.add(bracket);
-          });
-        });
-
-        // Add Heraldic House Banner on select wide inner walls
-        if (w >= 3.0 && Math.abs(cx) < this.width / 2 - 2 && Math.abs(cy) < this.height / 2 - 2) {
-          const bannerColor = bannerColors[(idx + Math.floor(Math.abs(cx))) % bannerColors.length];
-          const bannerGeo = new THREE.PlaneGeometry(1.0, 1.2);
-          const bannerMat = new THREE.MeshStandardMaterial({
-            color: bannerColor,
-            roughness: 0.6,
-            side: THREE.DoubleSide
-          });
-          const banner = new THREE.Mesh(bannerGeo, bannerMat);
-          banner.position.set(0, 0.75, h / 2 + 0.02);
-          banner.castShadow = true;
-          wallGroup.add(banner);
-
-          // Golden banner pole
-          const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8);
-          const pole = new THREE.Mesh(poleGeo, bracketMat);
-          pole.rotation.z = Math.PI / 2;
-          pole.position.set(0, 1.35, h / 2 + 0.03);
-          wallGroup.add(pole);
-        }
-
-        this.arenaGroup.add(wallGroup);
-      }
-    });
+    this.buildWallMeshes();
 
     // 3. Render Gothic Iron Portcullis Gates (Doors)
     this.doors.forEach((door) => {
@@ -1260,6 +1162,161 @@ export class Arena {
     });
     const starfield = new THREE.Points(particlesGeo, particlesMat);
     this.arenaGroup.add(starfield);
+  }
+
+  /** Builds visual meshes (stone walls / bounce-pad cauldrons) for every entry in `this.walls` that isn't already represented by a door, moving wall, or hazard base. Tracked in `obstacleMeshes` so it can be torn down and rebuilt for custom layouts (e.g. Trickshot Trials). */
+  private buildWallMeshes() {
+    const bannerColors = [PALETTE.scarlet, PALETTE.emerald, PALETTE.sapphire, PALETTE.octarine, PALETTE.amber];
+
+    this.walls.forEach((wall, idx) => {
+      const isDoor = this.doors.some(d => d.wallIndex === idx);
+      const isMoving = this.movingWalls.some(m => m.wallIndex === idx);
+      const isHazardBase = this.hazards.some(h => h.baseWallIndex === idx);
+      if (isDoor || isMoving || isHazardBase) return;
+
+      const w = wall.maxX - wall.minX;
+      const h = wall.maxY - wall.minY;
+      const cx = (wall.minX + wall.maxX) / 2;
+      const cy = (wall.minY + wall.maxY) / 2;
+
+      if (wall.isBouncePad) {
+        // ── Bubbling Potion Cauldron (Bounce Pad) ──
+        const cauldronGroup = new THREE.Group();
+        cauldronGroup.position.set(cx, 0, cy);
+
+        // Iron Cauldron Pot
+        const potGeo = new THREE.CylinderGeometry(w * 0.45, w * 0.35, 0.9, 20);
+        const pot = new THREE.Mesh(potGeo, this.cauldronMaterial);
+        pot.position.y = 0.45;
+        pot.castShadow = true;
+        pot.receiveShadow = true;
+        cauldronGroup.add(pot);
+
+        // Brass Rim
+        const rimGeo = new THREE.TorusGeometry(w * 0.46, 0.06, 8, 20);
+        const rimMat = new THREE.MeshStandardMaterial({ color: 0xd4a020, metalness: 0.7, roughness: 0.3 });
+        const rim = new THREE.Mesh(rimGeo, rimMat);
+        rim.rotation.x = Math.PI / 2;
+        rim.position.y = 0.9;
+        cauldronGroup.add(rim);
+
+        // Bubbling Cauldron Brew
+        const brewGeo = new THREE.CircleGeometry(w * 0.42, 20);
+        const brew = new THREE.Mesh(brewGeo, this.cauldronBrewMaterial);
+        brew.rotation.x = -Math.PI / 2;
+        brew.position.y = 0.86;
+        cauldronGroup.add(brew);
+
+        this.arenaGroup.add(cauldronGroup);
+        this.obstacleMeshes.push(cauldronGroup);
+        this.bouncePadsMeshes.push(brew);
+
+      } else {
+        // ── Weathered Castle Ashlar Wall with Stone Coping ──
+        const wallGroup = new THREE.Group();
+        wallGroup.position.set(cx, 0, cy);
+
+        // Base Stone Wall
+        const geom = new THREE.BoxGeometry(w, 1.4, h);
+        const wallMesh = new THREE.Mesh(geom, this.wallMaterial);
+        wallMesh.position.y = 0.7;
+        wallMesh.castShadow = true;
+        wallMesh.receiveShadow = true;
+        wallGroup.add(wallMesh);
+
+        // Beveled Stone Coping Slab on Top
+        const capGeom = new THREE.BoxGeometry(w + 0.16, 0.18, h + 0.16);
+        const capMesh = new THREE.Mesh(capGeom, this.wallCopingMaterial);
+        capMesh.position.y = 1.45;
+        capMesh.castShadow = true;
+        capMesh.receiveShadow = true;
+        wallGroup.add(capMesh);
+
+        // Brass Corner Brackets
+        const bracketGeo = new THREE.BoxGeometry(0.12, 0.3, 0.12);
+        const bracketMat = new THREE.MeshStandardMaterial({ color: 0xc8960a, metalness: 0.8, roughness: 0.2 });
+        [-w / 2, w / 2].forEach(bx => {
+          [-h / 2, h / 2].forEach(bz => {
+            const bracket = new THREE.Mesh(bracketGeo, bracketMat);
+            bracket.position.set(bx, 1.35, bz);
+            wallGroup.add(bracket);
+          });
+        });
+
+        // Add Heraldic House Banner on select wide inner walls
+        if (w >= 3.0 && Math.abs(cx) < this.width / 2 - 2 && Math.abs(cy) < this.height / 2 - 2) {
+          const bannerColor = bannerColors[(idx + Math.floor(Math.abs(cx))) % bannerColors.length];
+          const bannerGeo = new THREE.PlaneGeometry(1.0, 1.2);
+          const bannerMat = new THREE.MeshStandardMaterial({
+            color: bannerColor,
+            roughness: 0.6,
+            side: THREE.DoubleSide
+          });
+          const banner = new THREE.Mesh(bannerGeo, bannerMat);
+          banner.position.set(0, 0.75, h / 2 + 0.02);
+          banner.castShadow = true;
+          wallGroup.add(banner);
+
+          // Golden banner pole
+          const poleGeo = new THREE.CylinderGeometry(0.04, 0.04, 1.2, 8);
+          const pole = new THREE.Mesh(poleGeo, bracketMat);
+          pole.rotation.z = Math.PI / 2;
+          pole.position.set(0, 1.35, h / 2 + 0.03);
+          wallGroup.add(pole);
+        }
+
+        this.arenaGroup.add(wallGroup);
+        this.obstacleMeshes.push(wallGroup);
+      }
+    });
+  }
+
+  /** Removes an object from its parent and disposes all geometries/materials in its subtree. */
+  private disposeObject3D(obj: THREE.Object3D) {
+    obj.parent?.remove(obj);
+    obj.traverse((child) => {
+      if (child instanceof THREE.Mesh) {
+        child.geometry.dispose();
+        if (Array.isArray(child.material)) child.material.forEach((m) => m.dispose());
+        else child.material.dispose();
+      }
+    });
+  }
+
+  /**
+   * Tears down every collision-linked obstacle (plain walls, bounce pads, doors, jump pads,
+   * hazards, moving walls, destructible props, portals, speed runes) and rebuilds simple wall
+   * geometry for a brand-new set of static AABBs, without touching the ambient floor/candles.
+   *
+   * Used by Trickshot Trials to swap the parent map's layout for a bespoke practice stage —
+   * previously the trial only replaced `this.walls` directly, leaving stale moving-wall/door/
+   * hazard entries pointing at wall indices that no longer existed, which crashed the physics
+   * update loop every frame (and, since that happens before the scene render call, produced a
+   * black screen).
+   */
+  resetForCustomLayout(walls: AABB[]) {
+    this.obstacleMeshes.forEach((m) => this.disposeObject3D(m));
+    this.obstacleMeshes = [];
+
+    this.doors.forEach((d) => { if (d.mesh) this.disposeObject3D(d.mesh); });
+    this.jumpPads.forEach((p) => { if (p.mesh) this.disposeObject3D(p.mesh); });
+    this.hazards.forEach((h) => { if (h.mesh) this.disposeObject3D(h.mesh); });
+    this.movingWalls.forEach((m) => { if (m.mesh) this.disposeObject3D(m.mesh); });
+    this.destructibleProps.forEach((d) => this.disposeObject3D(d.mesh));
+    this.portals.forEach((p) => this.disposeObject3D(p.mesh));
+    this.speedRunes.forEach((r) => this.disposeObject3D(r.mesh));
+
+    this.doors = [];
+    this.jumpPads = [];
+    this.hazards = [];
+    this.movingWalls = [];
+    this.destructibleProps = [];
+    this.portals = [];
+    this.speedRunes = [];
+    this.bouncePadsMeshes = [];
+
+    this.walls = walls.map((w) => ({ ...w }));
+    this.buildWallMeshes();
   }
 
   update(dt: number) {

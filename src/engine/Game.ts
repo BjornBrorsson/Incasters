@@ -523,6 +523,10 @@ export class Game {
     this.trialShotsFired = 0;
     this.isPlaying = true;
 
+    // Trials have no storm/scoring — tear down the Battle Royale mode's shrinking storm
+    // ring/wall/particles that were created by the initial gameModeManager.initMode() call.
+    this.gameModeManager.cleanup(this.scene);
+
     // Clear all existing non-player casters
     for (let i = this.casters.length - 1; i >= 0; i--) {
       const c = this.casters[i];
@@ -556,11 +560,11 @@ export class Game {
     this.player.reset();
     this.player.syncMeshPosition();
 
-    // Setup custom stage walls
-    this.physicsArena.walls = [...stage.walls];
-    this.physicsArena.destructibleProps = [];
-    this.physicsArena.portals = [];
-    this.physicsArena.speedRunes = [];
+    // Tear down the parent map's obstacles (pillars, doors, hazards, moving walls, etc.)
+    // and install the stage's bespoke wall layout. This also clears any leftover
+    // wall-indexed dynamic entries that would otherwise crash the physics update loop
+    // and blank the render (see Arena.resetForCustomLayout).
+    this.physicsArena.resetForCustomLayout(stage.walls);
 
     // Setup stage portals & speed runes
     if (stage.portals) {
@@ -1356,7 +1360,12 @@ export class Game {
     });
 
     // 4. Update Game Mode rules (shrinking storm, gold coin spawns)
-    this.gameModeManager.update(dt, this.scene, this.casters, this.physicsArena.spawnPoints);
+    // Skipped during Trickshot Trials — practice stages have no storm/scoring and only
+    // ever have one live caster, which would otherwise instantly trip the "last caster
+    // standing" win condition.
+    if (!this.trialStage) {
+      this.gameModeManager.update(dt, this.scene, this.casters, this.physicsArena.spawnPoints);
+    }
 
     // 5. Update Entity physics & animations
     this.casters.forEach((c) => c.update(dt));
@@ -2482,8 +2491,9 @@ export class Game {
       }
     }
 
-    // 5. Game Over Screen check
-    if (this.gameModeManager.isGameOver) {
+    // 5. Game Over Screen check (not applicable to Trickshot Trials, which use their own
+    // completeTrial()/onTrialCompleted flow instead of the standard match end screen)
+    if (!this.trialStage && this.gameModeManager.isGameOver) {
       this.isPlaying = false;
       if (this.hudEl.gameoverOverlay && this.hudEl.gameoverWinner) {
         this.hudEl.gameoverWinner.innerText = this.gameModeManager.winnerText;
@@ -2570,10 +2580,27 @@ export class Game {
       // Sort players by kills/score
       sorted.sort((a, b) => b.score - a.score);
     } else if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
-      // Sort by cauldron hold scores
+      // Sort by cauldron hold scores. Unlike Team Battle/Gold Rush (FFA has no team
+      // totals to show), so just clear any previous render before the per-player rows
+      // are appended below — otherwise the list re-appends every ~250ms tick and grows
+      // without bound (Issue #16).
       const c = this.gameModeManager.cauldron;
       sorted.sort((a, b) => (c?.holdScores.get(b.id) || 0) - (c?.holdScores.get(a.id) || 0));
+      list.innerHTML = '';
     }
+
+    // Crown whoever is currently leading (by the same metric used to sort above) with
+    // a gold floating nametag, so it's clear at a glance who's ahead (Issue #17).
+    const leader = sorted[0];
+    let leaderProgress = 0;
+    if (leader) {
+      if (this.gameModeManager.type === GameModeType.GOLD_RUSH) leaderProgress = leader.coins;
+      else if (this.gameModeManager.type === GameModeType.KING_OF_THE_CAULDRON) {
+        leaderProgress = this.gameModeManager.cauldron?.holdScores.get(leader.id) || 0;
+      } else leaderProgress = leader.score;
+    }
+    const leaderId = leader && !leader.isDead && leaderProgress > 0 ? leader.id : null;
+    this.casters.forEach((c) => c.nameTag.setLeader(c.id === leaderId));
 
     // Render top 3 in landscape, top 5 in portrait/desktop
     const limit = window.innerHeight <= 500 ? 3 : 5;

@@ -1128,7 +1128,7 @@ body {
   75% { transform: translateX(3px); }
 }
 
-/* Progression badge (menu header) */
+/* Progression badge (menu header) — also a shortcut into the Challenges & Mastery modal */
 .progress-badge {
   display: flex;
   align-items: center;
@@ -1137,6 +1137,12 @@ body {
   font-family: 'Outfit', sans-serif;
   font-size: 0.8rem;
   margin-bottom: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.progress-badge:hover {
+  opacity: 0.8;
 }
 .pb-level { color: #ffd23d; font-weight: 700; }
 .pb-xpbar {
@@ -1358,7 +1364,9 @@ body {
 /* Kill feed */
 #kill-feed {
   position: absolute;
-  top: 86px;
+  /* Cleared below the centered mode HUD panel (Cauldron zone status / Trial
+     objective) so kill notifications don't stack on top of it (Issue #16). */
+  top: 140px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -1772,6 +1780,40 @@ body {
   .leaderboard-panel hr {
     margin: 3px 0 !important;
   }
+
+  /* Trickshot Trials / Academy Menu on short landscape viewports */
+  .trials-dialog {
+    max-height: calc(100dvh - 20px);
+    padding: 14px 18px;
+  }
+  .trials-header {
+    margin-bottom: 8px;
+  }
+  .trials-header h2 {
+    font-size: 1.15rem;
+  }
+  .trials-subtitle {
+    display: none; /* Save vertical space on short screens */
+  }
+  .trial-hud-panel {
+    top: 8px;
+    padding: 4px 12px;
+  }
+  .trial-hud-header {
+    font-size: 0.68rem;
+  }
+  .trial-hud-stats {
+    font-size: 0.6rem;
+  }
+
+  /* King of the Cauldron zone status on short landscape viewports */
+  .cauldron-hud-panel {
+    top: 8px;
+    padding: 4px 12px;
+  }
+  .cauldron-status {
+    font-size: 0.62rem;
+  }
 }
 
 /* Portrait / narrow width mobile scaling */
@@ -1970,7 +2012,9 @@ body {
   }
 
   #kill-feed {
-    top: calc(max(8px, env(safe-area-inset-top)) + 166px);
+    /* Cleared below the mobile-repositioned Cauldron/Trial HUD panel (top: 172px)
+       so kill notifications don't overlap it (Issue #16). */
+    top: calc(max(8px, env(safe-area-inset-top)) + 220px);
     max-width: calc(100% - 24px);
   }
 
@@ -1983,6 +2027,105 @@ body {
   #announcer {
     top: 42%;
     width: calc(100% - 24px);
+  }
+
+  /* Trickshot Trials / Academy Menu */
+  .modal-overlay {
+    padding: 10px;
+  }
+
+  .trials-dialog,
+  .menu-modal-dialog {
+    width: 100%;
+    max-height: calc(100dvh - 20px);
+    padding: 16px 14px;
+    border-radius: 14px;
+  }
+
+  .menu-modal-header h2 {
+    font-size: 1.1rem;
+  }
+
+  .trials-header h2 {
+    font-size: 1.15rem;
+  }
+
+  .trials-subtitle {
+    font-size: 0.7rem;
+  }
+
+  .trials-stages-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .trial-card-desc {
+    font-size: 0.68rem;
+  }
+
+  .trial-result-dialog {
+    width: calc(100% - 20px);
+    padding: 24px 18px;
+  }
+
+  .trial-result-dialog h2 {
+    font-size: 1.25rem;
+  }
+
+  .trial-stats-row {
+    flex-wrap: wrap;
+    gap: 8px 14px;
+  }
+
+  .trial-result-actions {
+    flex-wrap: wrap;
+  }
+
+  .trial-result-actions button {
+    flex: 1 1 calc(50% - 5px);
+  }
+
+  /* Reposition below the stacked timer/leaderboard corner panels and shrink to fit
+     narrow screens so the trial title/objective text no longer overlaps the
+     leaderboard or overflows the viewport (Issue #15). */
+  .trial-hud-panel {
+    top: 172px;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    padding: 6px 12px;
+  }
+
+  .trial-hud-header {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 10px;
+    font-size: 0.7rem;
+    text-align: center;
+  }
+
+  .trial-hud-stats {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2px 10px;
+    font-size: 0.62rem;
+  }
+
+  /* King of the Cauldron zone status: same repositioning as the Trial HUD panel
+     above, so it clears the stacked timer/leaderboard corner panels (Issue #16). */
+  .cauldron-hud-panel {
+    top: 172px;
+    min-width: 0;
+    max-width: calc(100vw - 24px);
+    padding: 6px 12px;
+    gap: 8px;
+  }
+
+  .cauldron-status {
+    font-size: 0.66rem;
+  }
+
+  .cauldron-score {
+    font-size: 0.7rem;
   }
 }
 
@@ -2293,6 +2436,96 @@ body {
   color: #ffffff;
 }
 
+/* Generic full-screen modal backdrop (Trials list, Trial result, etc). Positioned
+   fixed + high z-index so it always renders above the Main Menu / HUD regardless of
+   whether the screen behind it was explicitly hidden, and so its dialog can never be
+   pushed off-screen by sibling content on narrow viewports. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: rgba(4, 6, 15, 0.78);
+  padding: 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  /* #ui-overlay defaults to pointer-events: none so clicks pass through to the canvas;
+     the modal backdrop needs to opt back in so it both blocks stray canvas clicks and
+     lets us dismiss the dialog by clicking outside of it. */
+  pointer-events: auto;
+}
+
+/* Generic sub-menu dialog shell shared by the Customize / Multiplayer / Challenges &
+   Mastery modals extracted out of the Main Menu to reduce clutter (Issue #18). */
+.menu-modal-dialog {
+  width: 90%;
+  max-width: 560px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 16px;
+  overflow-y: auto;
+  background: rgba(18, 12, 32, 0.95);
+  border: 1px solid rgba(180, 80, 255, 0.4);
+}
+
+.menu-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.menu-modal-header h2 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1.3rem;
+  color: #f5e0ff;
+  margin: 0;
+}
+
+/* "MORE" launcher row on the Main Menu that opens the sub-menu dialogs above */
+.submenu-launcher-row {
+  display: flex;
+  gap: 10px;
+}
+
+.submenu-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submenu-btn:hover {
+  background: rgba(180, 80, 255, 0.14);
+  border-color: rgba(200, 100, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.submenu-icon {
+  font-size: 1.4rem;
+}
+
+.submenu-label {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 700;
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+
 /* Trials Modal Dialog */
 .trials-dialog {
   width: 90%;
@@ -2311,6 +2544,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
@@ -2334,6 +2568,7 @@ body {
   font-size: 1.1rem;
   width: 32px;
   height: 32px;
+  flex-shrink: 0;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
@@ -2352,7 +2587,8 @@ body {
   gap: 12px;
   overflow-y: auto;
   padding-right: 6px;
-  flex-grow: 1;
+  flex: 1 1 0%;
+  min-height: 0;
 }
 
 .trial-stage-card {

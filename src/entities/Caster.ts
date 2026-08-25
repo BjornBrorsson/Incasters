@@ -5,6 +5,11 @@ import type { ProjectileStats } from './Projectile';
 import { sfx } from '../engine/Audio';
 import { buildHat, buildAccessory, buildHair, buildFaceGear, buildWeapon } from '../game/CharacterConfig';
 import type { CharacterConfig } from '../game/CharacterConfig';
+import { NameTag } from '../engine/NameTag';
+
+function teamColor(team: 'RED' | 'BLUE' | 'GOLD'): string {
+  return team === 'RED' ? '#ff3355' : team === 'BLUE' ? '#3388ff' : '#ffd700';
+}
 
 export interface PowerUpFusion {
   name: string;
@@ -83,6 +88,8 @@ export class Caster extends Entity {
   shieldMesh: THREE.Mesh | null = null;
   weaponCrystal: THREE.Object3D | null = null;
   weaponLight: THREE.Object3D | null = null;
+  /** Floating billboard nametag above the caster's head (Issue #17). */
+  nameTag: NameTag;
   leftEyeGroup: THREE.Group | null = null;
   rightEyeGroup: THREE.Group | null = null;
   clothingColor!: number;
@@ -278,6 +285,9 @@ export class Caster extends Entity {
     this.weaponCrystal = weapon.crystal;
     this.weaponLight = weapon.light;
     this.shieldMesh = shieldBubble;
+
+    this.nameTag = new NameTag(name, teamColor(team));
+    bodyGroup.add(this.nameTag.sprite);
   }
 
   getSpeed(): number {
@@ -405,6 +415,7 @@ export class Caster extends Entity {
       });
     }
     this.updateStaffVisuals();
+    this.nameTag.setColor(teamColor(this.team));
   }
 
   private updateStaffVisuals() {
@@ -462,6 +473,7 @@ export class Caster extends Entity {
     if (this.health <= 0) {
       this.isDead = true;
       this.deaths++;
+      this.nameTag.setVisible(false);
     }
     return true; // Damage dealt!
   }
@@ -655,6 +667,7 @@ export class Caster extends Entity {
   reset() {
     this.health = 100;
     this.isDead = false;
+    this.nameTag.setVisible(true);
     this.powerups.clear();
     this.powerupSlotsOrder = [];
     this.vx = 0;
@@ -671,5 +684,10 @@ export class Caster extends Entity {
     
     // Fully restore pristine clothing, hat, accessory and staff colors on respawn
     this.updateColors(this.clothingColor, this.spellColor);
+  }
+
+  destroy(scene: THREE.Scene) {
+    this.nameTag.dispose();
+    super.destroy(scene);
   }
 }
