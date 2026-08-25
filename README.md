@@ -6,7 +6,7 @@
 [![Three.js](https://img.shields.io/badge/Three.js-r160+-black.svg)](https://threejs.org/)
 [![Capacitor](https://img.shields.io/badge/Capacitor-7.x-119EFF.svg)](https://capacitorjs.com/)
 
-> **Incasters** is a fast-paced 3D isometric arena battler and curved-shot shooter blending the trick-shot combat of *Outcasters* with a whimsical art style inspired by **Discworld**, **Hogwarts**, and **Pokémon**. Battle against intelligent bots, local friends over LAN, or online players worldwide using serverless WebRTC room codes!
+> **Incasters** is a fast-paced isometric arena battler and curved-shot shooter inspired by the trick-shot combat of *Outcasters*. Battle against bots, local friends over LAN, or online players worldwide using serverless WebRTC room codes!
 
 ---
 
