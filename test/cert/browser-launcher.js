@@ -114,6 +114,10 @@ export async function launchTestBrowser() {
       '--use-angle=swiftshader',
       '--enable-webgl',
       '--ignore-gpu-blocklist',
+      '--disable-background-timer-throttling',
+      '--disable-backgrounding-occluded-windows',
+      '--disable-renderer-backgrounding',
+      '--disable-gpu-vsync',
       '--autoplay-policy=no-user-gesture-required'
     ]
   });
