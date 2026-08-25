@@ -328,6 +328,7 @@ export class ClientGameRenderer {
   private localAimAngle: number = 0;
   private lastLocalPlayerState: CasterNetState | null = null;
   private casterTargets = new Map<string, { x: number; y: number }>();
+  private contextLost = false;
 
   // Cached HUD DOM elements
   private hud = {
@@ -377,12 +378,14 @@ export class ClientGameRenderer {
     // WebGL Context Lost & Restored recovery
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
+      this.contextLost = true;
       console.warn('ClientGameRenderer: WebGL context lost.');
       if (this.rafId) cancelAnimationFrame(this.rafId);
     }, { signal });
 
     this.renderer.domElement.addEventListener('webglcontextrestored', () => {
       console.info('ClientGameRenderer: WebGL context restored. Resuming rendering...');
+      this.contextLost = false;
       this.renderer.setSize(this.container.clientWidth, this.container.clientHeight);
       this.animate();
     }, { signal });
@@ -719,6 +722,7 @@ export class ClientGameRenderer {
   }
 
   private animate = () => {
+    if (this.contextLost) return;
     this.rafId = requestAnimationFrame(this.animate);
 
     // 1. Smoothly interpolate casters toward their target positions

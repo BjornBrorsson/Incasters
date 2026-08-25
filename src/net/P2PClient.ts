@@ -1,4 +1,8 @@
-﻿import { Peer, type DataConnection } from 'peerjs';
+import * as PeerModule from 'peerjs';
+import type { DataConnection } from 'peerjs';
+
+const PeerClass = (PeerModule as any).Peer || (PeerModule as any).default || PeerModule;
+type PeerInstance = any;
 import type {
   PlayerInputState,
   NetPlayerInfo,
@@ -41,7 +45,7 @@ export class P2PClient {
   public roomInfo: RoomInfo | null = null;
   public connected: boolean = false;
 
-  private peer: Peer | null = null;
+  private peer: PeerInstance | null = null;
   private hostConnection: DataConnection | null = null;
   private clientConnections: Map<string, { conn: DataConnection; name: string; ready: boolean }> = new Map();
   private nextClientId: number = 1;
@@ -73,7 +77,7 @@ export class P2PClient {
       const fullPeerId = formatPeerId(this.roomCode);
 
       try {
-        this.peer = new Peer(fullPeerId, {
+        this.peer = new PeerClass(fullPeerId, {
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -111,7 +115,7 @@ export class P2PClient {
         resolve(this.roomCode);
       });
 
-      this.peer.on('connection', (conn) => {
+      this.peer.on('connection', (conn: DataConnection) => {
         this.handleIncomingClientConnection(conn);
       });
 
@@ -245,7 +249,7 @@ export class P2PClient {
 
     return new Promise((resolve, reject) => {
       try {
-        this.peer = new Peer({
+        this.peer = new PeerClass({
           config: {
             iceServers: [
               { urls: 'stun:stun.l.google.com:19302' },
@@ -328,14 +332,14 @@ export class P2PClient {
           this.emit('disconnect', {});
         });
 
-        conn.on('error', (err) => {
+        conn.on('error', (err: any) => {
           clearTimeout(timeout);
           this.emit('error', err);
           if (!this.connected) reject(err);
         });
       });
 
-      this.peer.on('error', (err) => {
+      this.peer.on('error', (err: any) => {
         clearTimeout(timeout);
         this.emit('error', err);
         if (!this.connected) reject(err);

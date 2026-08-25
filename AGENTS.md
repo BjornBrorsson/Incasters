@@ -25,34 +25,49 @@ npm run dev
 # 3. Compile TypeScript & build production assets
 npm run build
 
-# 4. Preview production build locally
-npm run preview
+# 4. Run full test suite (Unit tests + 10-module Publisher Certification Suite)
+npm test
 
-# 5. Start the LAN multiplayer WebSocket server (port 7070)
+# 5. Run only Node TS unit tests (Physics, Progression, AI Difficulty, Trials, Networking)
+npm run test:unit
+
+# 6. Run headless Publisher Certification & Performance Suite (Full 10 modules + 60fps benchmark)
+npm run test:cert
+
+# 7. Start the LAN multiplayer WebSocket server (port 7070)
 npm run lan-server
 ```
 
-## Running Automated Gametests
+## Automated Publisher Certification & Testing Architecture
 
-We have integrated an automated, headless end-to-end gametesting script (`test-game.js`) that uses `puppeteer-core` to verify the game loop, menus, customization shop, and active battles without needing local admin rights or a manual browser window.
+Incasters features a publisher-grade testing architecture composed of two complementary layers:
 
-```bash
-# Execute the automated gametest
-node test-game.js
-```
+### 1. Isolated Unit Test Suite (`test/unit/` - `npm run test:unit`)
+- Fast TypeScript/Node unit test runners verifying mathematical invariants, entity schemas, and core game logic in isolation without browser overhead:
+  - `physics.test.ts`: Screen-to-world isometric projections, circle-vs-circle and circle-vs-AABB intersections, bounce reflection angles.
+  - `difficulty.test.ts`: Bot AI scaling multipliers (Easy/Normal/Hard/Insane) and corrupted storage fallback.
+  - `progression.test.ts`: XP level curves, token reward economy, daily/weekly challenges, Trickshot star counts.
+  - `trials.test.ts`: Structural integrity of all 11 stages (Stages 0 to 10), par shot targets, obstacles, and moving target dummies.
+  - `character-config.test.ts`: Robes, hats, bursts, weapons catalog validation and local storage schema resilience.
+  - `networking.test.ts`: Room code generation, sanitization, and P2P peer descriptors.
 
-### What the test script verifies:
-1. Launches the system's Google Chrome headlessly.
-2. Navigates to `http://localhost:5173/`.
-3. Verifies Main Menu visibility and clicks to select a custom robe color and wizard hat style.
-4. Changes the game mode to **Team Battle** and the arena to **Neon Chamber**.
-5. Clicks "START BATTLE" to enter the match.
-6. Simulates active gameplay for 10 seconds (transmitting keyboard movement controls and dodge-dashes).
-7. Verifies the HUD and leaderboard render correctly and update player stats in real-time.
-8. Asserts that **zero uncaught exceptions or JavaScript errors** are thrown.
-9. Automatically captures and saves two high-quality PNG screenshots:
-   - `menu_screenshot.png`: Main Menu preview.
-   - `battle_screenshot.png`: In-game 3D combat preview.
+### 2. Publisher Certification & Compliance Suite (`test/cert/` - `npm run test:cert`)
+A 10-module headless certification runner (`test/cert/certification-suite.js`) using `puppeteer-core` with cross-platform Chrome/Chromium discovery (`test/cert/browser-launcher.js`) and software WebGL (SwiftShader):
+- **Module 1 - Cold Boot & Assets:** Measures cold start boot time, verifies Web Audio synth initialization, and guarantees 0 network 404s.
+- **Module 2 - UI & Modals:** Tests all sub-modal open/close cycles (Shop, Trials, Challenges, Multiplayer) and ensures mobile touch HUD controls are hidden in menus.
+- **Module 3 - Game Modes:** End-to-end simulation across Battle Royale (shrinking storm + spectator mode), Team Battle (4v4 scoring + respawns), Gold Rush (coin spawning & vault banking), King of the Cauldron (zone capture & hill points), and all 11 Trickshot Trial stages.
+- **Module 4 - Arenas & Hazards:** Renders and verifies all 5 arenas (Courtyard, Colosseum, Chamber, Observatory, Catacombs) with interactive hazard objects.
+- **Module 5 - Combat Physics & Fusions:** Simulates real-time curved projectile steering, dodge-dashes, and invulnerability cooldowns.
+- **Module 6 - Bot AI Matrix:** Validates live instantiation and parameter application for all 4 difficulty levels.
+- **Module 7 - Multiplayer:** Verifies LAN WebSocket panels and P2P WebRTC room code generation and lobby readiness.
+- **Module 8 - Options & WebGL Resilience:** Tests audio muting on focus/blur, HUD scale DOM persistence, and WebGL Context Lost / Restored resilience.
+- **Module 9 - Multi-Viewport Matrix:** Renders and validates 16:9, 21:9 Ultrawide, 4:3 Tablet, 19.5:9 Mobile Landscape, and 9:19.5 Mobile Portrait viewports.
+- **Module 10 - Performance & Leak Audit:** 60 FPS combat simulation benchmark, 99th percentile frame times, and 5 consecutive match cycle creation/disposal memory leak audit.
+
+Outputs structured reports to `certification-report.json`, `certification-report.md`, and visual proof screenshots in `screenshots/cert/`.
+
+### 3. GitHub Actions CI/CD Quality Gate
+Every push to `main`, pull request, or release tag runs `certification-quality-gate` on `ubuntu-latest` before any Android APK or Windows portable EXE builds are triggered. A failure in any unit test or certification module instantly halts the pipeline, preventing broken releases.
 
 ---
 

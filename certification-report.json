@@ -1,0 +1,58 @@
+{
+  "timestamp": "2026-08-25T13:15:38.041Z",
+  "platform": "win32",
+  "nodeVersion": "v24.19.0",
+  "modules": [
+    {
+      "module": "1_boot_assets",
+      "passed": true
+    },
+    {
+      "module": "2_ui_modals",
+      "passed": true
+    },
+    {
+      "module": "3_game_modes",
+      "passed": true
+    },
+    {
+      "module": "4_arenas_hazards",
+      "passed": true
+    },
+    {
+      "module": "5_combat_physics",
+      "passed": true
+    },
+    {
+      "module": "6_bot_difficulty",
+      "passed": true
+    },
+    {
+      "module": "7_multiplayer",
+      "passed": true
+    },
+    {
+      "module": "8_options_webgl",
+      "passed": true
+    },
+    {
+      "module": "9_viewports",
+      "passed": true
+    },
+    {
+      "module": "10_performance_memory",
+      "passed": true
+    }
+  ],
+  "performance": {
+    "coldBootTimeMs": 949,
+    "fpsAverage": 26,
+    "fpsMin": 13,
+    "frameTime99thPercentileMs": 75.2,
+    "memoryDeltaBytes": -10517228,
+    "totalMatchCycles": 5,
+    "leakedObjectsCount": 0
+  },
+  "passed": true,
+  "summary": ""
+}

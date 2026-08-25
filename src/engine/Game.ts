@@ -199,6 +199,7 @@ export class Game {
   onNetMatchEnd: ((result: any) => void) | null = null;
   /** Projectile net ID counter for state serialization. */
   private projectileNetId = 0;
+  private contextLost = false;
 
   constructor(
     container: HTMLDivElement,
@@ -344,12 +345,14 @@ export class Game {
     // WebGL Context Lost and Restored recovery handling
     this.renderer.domElement.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
+      this.contextLost = true;
       console.warn('Incasters: WebGL Context Lost. Pausing animation frame...');
       if (this.animationFrameId) cancelAnimationFrame(this.animationFrameId);
     }, { signal: this.eventAbortController.signal });
 
     this.renderer.domElement.addEventListener('webglcontextrestored', () => {
       console.info('Incasters: WebGL Context Restored. Rebuilding scene & resuming renderer...');
+      this.contextLost = false;
       this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.graphicsConfig.pixelRatioCap));
       this.renderer.setSize(window.innerWidth, window.innerHeight);
       if (this.isPlaying) {
@@ -1292,7 +1295,7 @@ export class Game {
 
   // Update loop
   tick() {
-    if (this.destroyed) return;
+    if (this.destroyed || this.contextLost) return;
     this.animationFrameId = requestAnimationFrame(this.tick.bind(this));
 
     if (!this.isPlaying) {
