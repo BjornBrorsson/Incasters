@@ -23,7 +23,30 @@
         <p class="game-subtitle">The Curved Shot Isometric Arena Battler</p>
         <div id="progress-badge" class="progress-badge"></div>
 
-        <button id="btn-options" class="options-toggle" type="button" aria-expanded="false" aria-controls="options-panel">OPTIONS</button>
+        <!-- MAIN SUB-MENU LAUNCHER BAR (Issue #18) -->
+        <div class="menu-nav-bar">
+          <button id="btn-open-customize" class="submenu-btn nav-tab-btn" type="button">
+            <span class="submenu-icon">🧙</span>
+            <span class="submenu-label">Wardrobe</span>
+          </button>
+          <button id="btn-open-trials" class="submenu-btn nav-tab-btn" type="button">
+            <span class="submenu-icon">⭐</span>
+            <span class="submenu-label">Trials</span>
+          </button>
+          <button id="btn-open-multiplayer" class="submenu-btn nav-tab-btn" type="button">
+            <span class="submenu-icon">🌐</span>
+            <span class="submenu-label">Multiplayer</span>
+          </button>
+          <button id="btn-open-progress" class="submenu-btn nav-tab-btn" type="button">
+            <span class="submenu-icon">🏆</span>
+            <span class="submenu-label">Feats</span>
+          </button>
+          <button id="btn-options" class="options-toggle submenu-btn nav-tab-btn" type="button" aria-expanded="false" aria-controls="options-panel">
+            <span class="submenu-icon">⚙️</span>
+            <span class="submenu-label">Options</span>
+          </button>
+        </div>
+
         <div id="options-panel" class="options-panel glass-panel-nested" hidden>
           <div class="audio-row">
             <label for="master-volume">Master</label>
@@ -111,93 +134,82 @@
           </div>
         </div>
 
-        <div class="menu-section">
-          <h3>SHOT CURVING STYLE</h3>
-          <div class="control-selector">
-            <button id="btn-ctrl-target" class="ctrl-btn active" data-ctrl="TARGET">
-              <span class="ctrl-title">Target Tracking</span>
-              <span class="ctrl-desc">Bullet actively curves towards your mouse cursor</span>
-            </button>
-            <button id="btn-ctrl-manual" class="ctrl-btn" data-ctrl="MANUAL">
-              <span class="ctrl-title">Manual Steering</span>
-              <span class="ctrl-desc">Fired bullet is manually steered left/right with [Q] / [E] keys</span>
-            </button>
-          </div>
-        </div>
+        <div class="menu-section match-settings-section">
+          <h3>MATCH SETTINGS</h3>
+          <div class="match-settings-container glass-panel-nested">
+            <div class="settings-group">
+              <span class="settings-group-label">Arena Map</span>
+              <div class="map-selector">
+                <button id="btn-map-arena" class="map-btn active" data-map="ARENA">
+                  <span class="map-title">Unseen Courtyard</span>
+                  <span class="map-desc">Medium size (36x36). Castle cobblestones, potion cauldrons & jump pads.</span>
+                </button>
+                <button id="btn-map-colosseum" class="map-btn" data-map="COLOSSEUM">
+                  <span class="map-title">Dueling Amphitheater</span>
+                  <span class="map-desc">Large size (48x48). Open ring, sliding portcullis gates & corner jump pads.</span>
+                </button>
+                <button id="btn-map-chamber" class="map-btn" data-map="CHAMBER">
+                  <span class="map-title">Forbidden Arcanum</span>
+                  <span class="map-desc">Small size (24x24). Tight library partitions, moving bookcase walls & power vaults.</span>
+                </button>
+                <button id="btn-map-observatory" class="map-btn" data-map="OBSERVATORY">
+                  <span class="map-title">Astral Observatory</span>
+                  <span class="map-desc">Spire (42x42). Starfield floor, rotating astrolabe prisms & instant warp gates.</span>
+                </button>
+                <button id="btn-map-catacombs" class="map-btn" data-map="CATACOMBS">
+                  <span class="map-title">Alchemist's Undercroft</span>
+                  <span class="map-desc">Dungeon (38x38). Mossy flagstones, volatile potion vats & ricochet corridors.</span>
+                </button>
+              </div>
+            </div>
 
-        <div class="menu-section">
-          <h3>SELECT ARENA MAP</h3>
-          <div class="map-selector">
-            <button id="btn-map-arena" class="map-btn active" data-map="ARENA">
-              <span class="map-title">Unseen Courtyard</span>
-              <span class="map-desc">Medium size (36x36). Castle cobblestones, potion cauldrons & jump pads.</span>
-            </button>
-            <button id="btn-map-colosseum" class="map-btn" data-map="COLOSSEUM">
-              <span class="map-title">Dueling Amphitheater</span>
-              <span class="map-desc">Large size (48x48). Open ring, sliding portcullis gates & corner jump pads.</span>
-            </button>
-            <button id="btn-map-chamber" class="map-btn" data-map="CHAMBER">
-              <span class="map-title">Forbidden Arcanum</span>
-              <span class="map-desc">Small size (24x24). Tight library partitions, moving bookcase walls & power vaults.</span>
-            </button>
-            <button id="btn-map-observatory" class="map-btn" data-map="OBSERVATORY">
-              <span class="map-title">Astral Observatory</span>
-              <span class="map-desc">Spire (42x42). Starfield floor, rotating astrolabe prisms & instant warp gates.</span>
-            </button>
-            <button id="btn-map-catacombs" class="map-btn" data-map="CATACOMBS">
-              <span class="map-title">Alchemist's Undercroft</span>
-              <span class="map-desc">Dungeon (38x38). Mossy flagstones, volatile potion vats & ricochet corridors.</span>
-            </button>
-          </div>
-        </div>
+            <div class="settings-group">
+              <span class="settings-group-label">Difficulty</span>
+              <div class="difficulty-selector">
+                <button id="btn-diff-easy" class="diff-btn" data-diff="EASY">
+                  <span class="diff-title">Easy</span>
+                  <span class="diff-desc">Slow bots, poor aim. For learning.</span>
+                </button>
+                <button id="btn-diff-normal" class="diff-btn active" data-diff="NORMAL">
+                  <span class="diff-title">Normal</span>
+                  <span class="diff-desc">Balanced challenge. Intended experience.</span>
+                </button>
+                <button id="btn-diff-hard" class="diff-btn" data-diff="HARD">
+                  <span class="diff-title">Hard</span>
+                  <span class="diff-desc">Fast, accurate, aggressive bots.</span>
+                </button>
+                <button id="btn-diff-insane" class="diff-btn" data-diff="INSANE">
+                  <span class="diff-title">Insane</span>
+                  <span class="diff-desc">Nightmare bots. Near-perfect aim.</span>
+                </button>
+              </div>
+            </div>
 
-        <div class="menu-section">
-          <h3>TOTAL PLAYERS</h3>
-          <div class="players-selector">
-            <button class="player-count-btn" data-count="2">2 Players</button>
-            <button class="player-count-btn" data-count="4">4 Players</button>
-            <button class="player-count-btn" data-count="6">6 Players</button>
-            <button class="player-count-btn active" data-count="8">8 Players</button>
-          </div>
-        </div>
+            <div class="settings-subrow">
+              <div class="settings-group subrow-group">
+                <span class="settings-group-label">Curving Style</span>
+                <div class="control-selector">
+                  <button id="btn-ctrl-target" class="ctrl-btn active" data-ctrl="TARGET">
+                    <span class="ctrl-title">Target Tracking</span>
+                    <span class="ctrl-desc">Bullet actively curves towards your mouse cursor</span>
+                  </button>
+                  <button id="btn-ctrl-manual" class="ctrl-btn" data-ctrl="MANUAL">
+                    <span class="ctrl-title">Manual Steering</span>
+                    <span class="ctrl-desc">Fired bullet is manually steered left/right with [Q] / [E] keys</span>
+                  </button>
+                </div>
+              </div>
 
-        <div class="menu-section">
-          <h3>DIFFICULTY</h3>
-          <div class="difficulty-selector">
-            <button id="btn-diff-easy" class="diff-btn" data-diff="EASY">
-              <span class="diff-title">Easy</span>
-              <span class="diff-desc">Slow bots, poor aim. For learning.</span>
-            </button>
-            <button id="btn-diff-normal" class="diff-btn active" data-diff="NORMAL">
-              <span class="diff-title">Normal</span>
-              <span class="diff-desc">Balanced challenge. Intended experience.</span>
-            </button>
-            <button id="btn-diff-hard" class="diff-btn" data-diff="HARD">
-              <span class="diff-title">Hard</span>
-              <span class="diff-desc">Fast, accurate, aggressive bots.</span>
-            </button>
-            <button id="btn-diff-insane" class="diff-btn" data-diff="INSANE">
-              <span class="diff-title">Insane</span>
-              <span class="diff-desc">Nightmare bots. Near-perfect aim.</span>
-            </button>
-          </div>
-        </div>
-
-        <div class="menu-section">
-          <h3>MORE</h3>
-          <div class="submenu-launcher-row">
-            <button id="btn-open-customize" class="submenu-btn" type="button">
-              <span class="submenu-icon">🧙</span>
-              <span class="submenu-label">Customize</span>
-            </button>
-            <button id="btn-open-multiplayer" class="submenu-btn" type="button">
-              <span class="submenu-icon">🌐</span>
-              <span class="submenu-label">Multiplayer</span>
-            </button>
-            <button id="btn-open-progress" class="submenu-btn" type="button">
-              <span class="submenu-icon">🏆</span>
-              <span class="submenu-label">Challenges</span>
-            </button>
+              <div class="settings-group subrow-group">
+                <span class="settings-group-label">Total Players</span>
+                <div class="players-selector">
+                  <button class="player-count-btn" data-count="2">2 Players</button>
+                  <button class="player-count-btn" data-count="4">4 Players</button>
+                  <button class="player-count-btn" data-count="6">6 Players</button>
+                  <button class="player-count-btn active" data-count="8">8 Players</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -211,7 +223,7 @@
 
         <div class="menu-action-row">
           <button id="btn-play" class="play-btn">START BATTLE</button>
-          <button id="btn-open-trials" class="trials-btn">⭐ PRACTICE &amp; TRIALS</button>
+          <button id="btn-open-trials-action" class="trials-btn">⭐ PRACTICE &amp; TRIALS</button>
         </div>
       </div>
 
@@ -417,9 +429,34 @@
         </div>
       </div>
 
+      <!-- IN-MATCH / PAUSE MENU MODAL (Issue #22) -->
+      <div id="match-menu-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-modal-dialog glass-panel pause-dialog">
+          <div class="modal-header">
+            <h2>⏸️ MATCH PAUSED</h2>
+            <button id="btn-close-match-menu" class="close-modal-btn" type="button">✕</button>
+          </div>
+          <div class="pause-menu-content">
+            <p id="match-menu-info" class="pause-mode-info">Battle Royale</p>
+            <div class="pause-action-list">
+              <button id="btn-match-resume" class="play-btn pause-btn" type="button">▶ RESUME BATTLE</button>
+              <button id="btn-match-restart" class="trials-btn pause-btn" style="display: none;" type="button">🔄 RESTART STAGE</button>
+              <button id="btn-match-options" class="submenu-btn pause-btn" type="button">⚙️ OPTIONS &amp; AUDIO</button>
+              <button id="btn-match-leave" class="lan-action-btn danger pause-btn" type="button">🚪 LEAVE TO MAIN MENU</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- IN-GAME HUD -->
       <div id="hud-container" style="display: none;">
         
+        <!-- Pause / Match Menu Button (Top Action) -->
+        <button id="btn-match-menu" class="hud-panel glass-panel-light match-menu-btn" title="Pause / Match Menu (Esc)" type="button">
+          <span class="match-menu-icon">⏸️</span>
+          <span class="match-menu-key-hint">ESC</span>
+        </button>
+
         <!-- Trial In-Game HUD -->
         <div id="trial-hud" class="hud-panel glass-panel-light trial-hud-panel" style="display: none;">
           <div class="trial-hud-header">

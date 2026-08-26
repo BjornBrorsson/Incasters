@@ -168,6 +168,8 @@ export class Game {
   isSpectating: boolean = false;
   private spectateTargetIndex: number = 0;
   private playerEliminationHandled: boolean = false;
+  playerDeathsInMatch: number = 0;
+  isPaused: boolean = false;
 
   // Match Customizer
   playerCount: number = 8;
@@ -507,7 +509,12 @@ export class Game {
     if (this.destroyed) return;
     this.resetTouchControls();
     this.isPlaying = true;
+    this.isPaused = false;
     this.clock.getDelta();
+    if (this.trialStage) {
+      this.trialElapsed = 0;
+      this.trialShotsFired = 0;
+    }
 
     // Show touch fire/dash buttons on touch devices
     if (
@@ -519,12 +526,30 @@ export class Game {
     }
   }
 
+  pauseMatch() {
+    this.isPaused = true;
+  }
+
+  resumeMatch() {
+    this.isPaused = false;
+    this.clock.getDelta();
+  }
+
+  togglePause(): boolean {
+    if (this.isPaused) {
+      this.resumeMatch();
+    } else {
+      this.pauseMatch();
+    }
+    return this.isPaused;
+  }
+
   loadTrial(stageId: number) {
     const stage = TRIAL_STAGES.find((s) => s.id === stageId) || TRIAL_STAGES[0];
     this.trialStage = stage;
     this.trialElapsed = 0;
     this.trialShotsFired = 0;
-    this.isPlaying = true;
+    this.isPlaying = false;
 
     // Trials have no storm/scoring — tear down the Battle Royale mode's shrinking storm
     // ring/wall/particles that were created by the initial gameModeManager.initMode() call.
@@ -1014,6 +1039,10 @@ export class Game {
       proj.targetPoint = { x: targetLoc.x, y: (targetLoc as any).z ?? (targetLoc as any).y };
     }
 
+    if (owner.id === 'player' && this.trialStage) {
+      this.trialShotsFired++;
+    }
+
     this.scene.add(proj.mesh);
     this.projectiles.push(proj);
 
@@ -1298,7 +1327,7 @@ export class Game {
     if (this.destroyed || this.contextLost) return;
     this.animationFrameId = requestAnimationFrame(this.tick.bind(this));
 
-    if (!this.isPlaying) {
+    if (!this.isPlaying || this.isPaused) {
       this.renderer.render(this.scene, this.camera);
       if (this.netMode === 'host' && this.onNetBroadcast) {
         this.netBroadcastTimer += 0.016;
@@ -1642,9 +1671,6 @@ export class Game {
       );
       this.playerGuidedProjectile = proj;
       this.player.shootTimer = this.player.getFireRateCooldown();
-      if (this.trialStage) {
-        this.trialShotsFired++;
-      }
     }
   }
 
@@ -1997,6 +2023,9 @@ export class Game {
 
             // Handle death logic
             if (caster.isDead) {
+              if (caster.id === 'player') {
+                this.playerDeathsInMatch++;
+              }
               const killer = this.casters.find((c) => c.id === proj.ownerId) || null;
               if (killer) killer.score++;
               if (killer && killer.id === 'player') {
@@ -2004,7 +2033,7 @@ export class Game {
                 if (proj.isWallRunning || proj.bouncesRemaining < proj.stats.maxBounces) {
                   progression.recordFeatProgress('wall_runner', 1);
                 }
-                if (proj.targetPoint !== null || proj.steerDirection !== 0) {
+                if (proj.hasCurved) {
                   progression.recordFeatProgress('trickshot_master', 1);
                 }
                 if (killer.powerups.size > 0) {
@@ -2673,7 +2702,7 @@ export class Game {
       kills: this.player.score,
       mode: this.gameModeManager.type,
       difficulty: this.difficulty,
-      died: this.player.isDead,
+      died: this.playerDeathsInMatch > 0 || this.player.isDead,
       coinsBanked,
       cauldronPoints
     };

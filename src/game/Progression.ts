@@ -331,7 +331,10 @@ class Progression {
 
   private checkCosmeticFeats() {
     const unlockedCount = this.state.unlocked.length;
-    this.recordFeatProgress('fashionista', unlockedCount - (this.state.feats?.['fashionista'] || 0));
+    const diff = unlockedCount - (this.state.feats?.['fashionista'] || 0);
+    if (diff > 0) {
+      this.recordFeatProgress('fashionista', diff);
+    }
     if (this.level >= 10 && unlockedCount >= 10) {
       this.recordFeatProgress('grand_archmage', 10);
     }

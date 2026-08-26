@@ -2752,3 +2752,185 @@ body {
   flex: 1;
 }
 
+/* ==========================================================================
+   MAIN MENU NAVIGATION & DASHBOARD (Issue #18)
+   ========================================================================== */
+
+.menu-nav-bar {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.nav-tab-btn {
+  flex: 1;
+  min-width: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.nav-tab-btn:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 215, 0, 0.5);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(255, 215, 0, 0.2);
+}
+
+.nav-tab-btn:active {
+  transform: translateY(0);
+}
+
+.nav-tab-btn .submenu-icon {
+  font-size: 1.2rem;
+}
+
+.nav-tab-btn .submenu-label {
+  letter-spacing: 0.5px;
+}
+
+.match-settings-section {
+  width: 100%;
+}
+
+.match-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(14, 10, 24, 0.6);
+}
+
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.settings-group-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: rgba(255, 215, 0, 0.9);
+}
+
+.settings-subrow {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
+
+.subrow-group {
+  flex: 1;
+}
+
+@media (max-width: 600px) {
+  .settings-subrow {
+    flex-direction: column;
+  }
+}
+
+/* ==========================================================================
+   IN-MATCH PAUSE & LEAVE MENU (Issue #22)
+   ========================================================================== */
+
+.match-menu-btn {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  background: rgba(20, 14, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: all 0.2s ease;
+}
+
+.match-menu-btn:hover {
+  background: rgba(255, 215, 0, 0.2);
+  border-color: rgba(255, 215, 0, 0.6);
+  transform: scale(1.05);
+}
+
+.match-menu-icon {
+  font-size: 1rem;
+}
+
+.match-menu-key-hint {
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  letter-spacing: 0.5px;
+}
+
+.pause-dialog {
+  width: 90%;
+  max-width: 440px;
+  padding: 28px;
+  border-radius: 20px;
+  background: rgba(14, 8, 28, 0.96);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 215, 0, 0.15);
+}
+
+.pause-menu-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.pause-mode-info {
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.5px;
+  margin: 0;
+}
+
+.pause-action-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+
+.pause-btn {
+  width: 100%;
+  padding: 12px 18px;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+

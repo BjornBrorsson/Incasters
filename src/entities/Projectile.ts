@@ -64,6 +64,9 @@ export class Projectile extends Entity {
   steerDirection: number = 0;
   targetPoint: { x: number; y: number } | null = null;
   curvingSpeed: number = 3.8; // Rad per second
+  initialAngle: number = 0;
+  totalTurnAngle: number = 0;
+  hasCurved: boolean = false;
 
   constructor(
     x: number,
@@ -99,6 +102,7 @@ export class Projectile extends Entity {
     this.splitLevel = stats.splitLevel;
     this.wallRunLevel = stats.wallRunLevel || 0;
     this.trailColor = color;
+    this.initialAngle = angle;
 
     // Set initial velocity
     this.vx = Math.cos(angle) * stats.speed;
@@ -140,14 +144,26 @@ export class Projectile extends Entity {
 
       // Limit turning rate
       const maxTurn = this.curvingSpeed * dt;
+      let turn = 0;
       if (Math.abs(angleDiff) > maxTurn) {
-        currentAngle += Math.sign(angleDiff) * maxTurn;
+        turn = Math.sign(angleDiff) * maxTurn;
+        currentAngle += turn;
       } else {
+        turn = angleDiff;
         currentAngle = targetAngle;
+      }
+      this.totalTurnAngle += Math.abs(turn);
+      if (this.totalTurnAngle >= 0.25) {
+        this.hasCurved = true;
       }
     } else if (this.steerDirection !== 0) {
       // Manual steering (rotate velocity vector left or right)
-      currentAngle += this.steerDirection * this.curvingSpeed * dt;
+      const turn = this.steerDirection * this.curvingSpeed * dt;
+      currentAngle += turn;
+      this.totalTurnAngle += Math.abs(turn);
+      if (this.totalTurnAngle >= 0.25) {
+        this.hasCurved = true;
+      }
     }
 
     // Apply updated angle to velocity

@@ -498,6 +498,21 @@ document.addEventListener('DOMContentLoaded', () => {
     if (joyRight) joyRight.style.display = 'none';
   };
 
+  const closeAllModals = () => {
+    const modalIds = [
+      'customize-modal',
+      'multiplayer-modal',
+      'progress-modal',
+      'trials-modal',
+      'trial-result-modal',
+      'match-menu-modal'
+    ];
+    modalIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  };
+
   // Ensure touch controls are hidden initially on menu load
   hideGlobalTouchControls();
 
@@ -1172,6 +1187,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startNetHostGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel) {
+    closeAllModals();
     if (menuScreen) menuScreen.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
 
@@ -1214,6 +1230,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType) {
+    closeAllModals();
     if (menuScreen) menuScreen.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (spectatorHud) spectatorHud.style.display = 'none';
@@ -1517,6 +1534,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Start Game callback
   playBtn?.addEventListener('click', () => {
+    closeAllModals();
     // Hide overlays & menu screen
     if (menuScreen) menuScreen.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
@@ -1653,6 +1671,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function launchTrial(stageId: number) {
+    closeAllModals();
     currentTrialStageId = stageId;
     if (trialsModal) trialsModal.style.display = 'none';
     if (trialResultModal) trialResultModal.style.display = 'none';
@@ -1723,8 +1742,117 @@ document.addEventListener('DOMContentLoaded', () => {
     if (trialsModal) trialsModal.style.display = 'flex';
   });
 
+  const openTrialsActionBtn = document.getElementById('btn-open-trials-action');
+  openTrialsActionBtn?.addEventListener('click', () => {
+    renderTrialsGrid();
+    if (trialsModal) trialsModal.style.display = 'flex';
+  });
+
   closeTrialsBtn?.addEventListener('click', () => {
     if (trialsModal) trialsModal.style.display = 'none';
+  });
+
+  // ── In-Match Pause & Leave Menu (Issue #22) ──
+  const matchMenuModal = document.getElementById('match-menu-modal');
+  const btnMatchMenu = document.getElementById('btn-match-menu');
+  const btnCloseMatchMenu = document.getElementById('btn-close-match-menu');
+  const btnMatchResume = document.getElementById('btn-match-resume');
+  const btnMatchRestart = document.getElementById('btn-match-restart');
+  const btnMatchOptions = document.getElementById('btn-match-options');
+  const btnMatchLeave = document.getElementById('btn-match-leave');
+  const matchMenuInfo = document.getElementById('match-menu-info');
+
+  const openMatchMenu = () => {
+    if (!game && !lanRenderer) return;
+    if (matchMenuModal) {
+      matchMenuModal.style.display = 'flex';
+      if (matchMenuInfo) {
+        if (game?.trialStage) {
+          matchMenuInfo.textContent = `Practice & Trials • ${game.trialStage.title}`;
+          if (btnMatchRestart) btnMatchRestart.style.display = 'block';
+        } else if (lanRenderer || game?.netMode !== 'offline') {
+          matchMenuInfo.textContent = `Multiplayer Match • ${selectedMode.replace(/_/g, ' ')}`;
+          if (btnMatchRestart) btnMatchRestart.style.display = 'none';
+        } else {
+          matchMenuInfo.textContent = `${selectedMode.replace(/_/g, ' ')} • ${selectedMap} (${selectedDifficulty})`;
+          if (btnMatchRestart) btnMatchRestart.style.display = 'block';
+        }
+      }
+    }
+    if (game && game.netMode === 'offline') {
+      game.pauseMatch();
+    }
+  };
+
+  const closeMatchMenu = () => {
+    if (matchMenuModal) matchMenuModal.style.display = 'none';
+    if (game && game.netMode === 'offline') {
+      game.resumeMatch();
+    }
+  };
+
+  const leaveMatchToMenu = () => {
+    cancelPregameCountdown();
+    hideGlobalTouchControls();
+    closeAllModals();
+
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+
+    if (lanRenderer) {
+      lanRenderer.destroy();
+      lanRenderer = null;
+    }
+    if (lanClient) {
+      lanClient.disconnect();
+      lanClient = null;
+    }
+    if (p2pClient) {
+      p2pClient.disconnect();
+      p2pClient = null;
+    }
+
+    if (game) {
+      game.cleanup();
+      game = null;
+      (window as any).game = null;
+    }
+
+    void music.playMenu();
+  };
+
+  btnMatchMenu?.addEventListener('click', openMatchMenu);
+  btnCloseMatchMenu?.addEventListener('click', closeMatchMenu);
+  btnMatchResume?.addEventListener('click', closeMatchMenu);
+  btnMatchRestart?.addEventListener('click', () => {
+    closeMatchMenu();
+    if (game?.trialStage) {
+      launchTrial(currentTrialStageId);
+    } else {
+      playBtn?.click();
+    }
+  });
+  btnMatchOptions?.addEventListener('click', () => {
+    const optPanel = document.getElementById('options-panel');
+    if (optPanel) {
+      optPanel.hidden = !optPanel.hidden;
+    }
+  });
+  btnMatchLeave?.addEventListener('click', leaveMatchToMenu);
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' || e.key === 'Esc') {
+      if (game || lanRenderer) {
+        if (matchMenuModal && matchMenuModal.style.display === 'flex') {
+          closeMatchMenu();
+        } else {
+          openMatchMenu();
+        }
+      }
+    }
   });
 
   // ── Main Menu sub-menu modals (Customize / Multiplayer / Challenges & Mastery) ──
