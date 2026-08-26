@@ -469,6 +469,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const showMatchSummary = (result: MatchResult, summary: MatchSummary) => {
     if (!matchSummary) return;
+    if (summary.newLevel) {
+      sfx.playLevelUp();
+    }
     let html =
       `<div class="ms-row"><span>Result</span><span>${result.won ? 'VICTORY' : 'DEFEAT'}</span></div>` +
       `<div class="ms-row"><span>Eliminations</span><span>${result.kills}</span></div>` +
@@ -1293,6 +1296,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       dot.addEventListener('click', () => {
+        sfx.playEquip(0.6);
         pickerEl.querySelectorAll('.color-dot').forEach((d) => {
           d.classList.remove('active');
           (d as HTMLElement).style.boxShadow = '';
@@ -1324,6 +1328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         dot.style.boxShadow = `0 0 10px ${css}`;
       }
       dot.addEventListener('click', () => {
+        sfx.playEquip(0.6);
         pickerEl.querySelectorAll('.color-dot').forEach((d) => {
           d.classList.remove('active');
           (d as HTMLElement).style.boxShadow = '';
@@ -1372,8 +1377,11 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => btn.classList.remove('denied'), 400);
             return;
           }
+          sfx.playPurchase();
           render();
           refreshBadge();
+        } else {
+          sfx.playEquip();
         }
         pickerEl.querySelectorAll('.part-btn').forEach((b) => b.classList.remove('active'));
         btn.classList.add('active');
@@ -1739,17 +1747,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
   openTrialsBtn?.addEventListener('click', () => {
     renderTrialsGrid();
-    if (trialsModal) trialsModal.style.display = 'flex';
+    if (trialsModal) {
+      trialsModal.style.display = 'flex';
+      sfx.playModalOpen();
+    }
   });
 
   const openTrialsActionBtn = document.getElementById('btn-open-trials-action');
   openTrialsActionBtn?.addEventListener('click', () => {
     renderTrialsGrid();
-    if (trialsModal) trialsModal.style.display = 'flex';
+    if (trialsModal) {
+      trialsModal.style.display = 'flex';
+      sfx.playModalOpen();
+    }
   });
 
   closeTrialsBtn?.addEventListener('click', () => {
-    if (trialsModal) trialsModal.style.display = 'none';
+    if (trialsModal) {
+      trialsModal.style.display = 'none';
+      sfx.playModalClose();
+    }
   });
 
   // ── In-Match Pause & Leave Menu (Issue #22) ──
@@ -1766,6 +1783,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!game && !lanRenderer) return;
     if (matchMenuModal) {
       matchMenuModal.style.display = 'flex';
+      sfx.playModalOpen();
       if (matchMenuInfo) {
         if (game?.trialStage) {
           matchMenuInfo.textContent = `Practice & Trials • ${game.trialStage.title}`;
@@ -1785,7 +1803,10 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const closeMatchMenu = () => {
-    if (matchMenuModal) matchMenuModal.style.display = 'none';
+    if (matchMenuModal) {
+      matchMenuModal.style.display = 'none';
+      sfx.playModalClose();
+    }
     if (game && game.netMode === 'offline') {
       game.resumeMatch();
     }
@@ -1867,21 +1888,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById(btnId);
     const modal = document.getElementById(modalId);
     btn?.addEventListener('click', () => {
-      if (modal) modal.style.display = 'flex';
+      if (modal) {
+        modal.style.display = 'flex';
+        sfx.playModalOpen();
+      }
     });
     // Clicking the close button, or the dark backdrop itself, dismisses the dialog.
     modal?.querySelector('.close-modal-btn')?.addEventListener('click', () => {
       modal.style.display = 'none';
+      sfx.playModalClose();
     });
     modal?.addEventListener('click', (e) => {
-      if (e.target === modal) modal.style.display = 'none';
+      if (e.target === modal) {
+        modal.style.display = 'none';
+        sfx.playModalClose();
+      }
     });
   });
 
   // Clicking the XP/level badge is a shortcut into the Challenges & Mastery modal.
   progressBadge?.addEventListener('click', () => {
     const modal = document.getElementById('progress-modal');
-    if (modal) modal.style.display = 'flex';
+    if (modal) {
+      modal.style.display = 'flex';
+      sfx.playModalOpen();
+    }
   });
 
   trialRetryBtn?.addEventListener('click', () => {
@@ -1908,6 +1939,21 @@ document.addEventListener('DOMContentLoaded', () => {
     renderTrialsGrid();
     if (trialsModal) trialsModal.style.display = 'flex';
   });
+
+  // Global subtle click and hover sound effects on interactive elements
+  document.addEventListener('pointerenter', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'BUTTON' || target.classList?.contains('mode-btn') || target.classList?.contains('map-btn') || target.classList?.contains('diff-btn') || target.classList?.contains('color-dot') || target.classList?.contains('part-btn') || target.classList?.contains('player-count-btn'))) {
+      sfx.playHover(0.3);
+    }
+  }, true);
+
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement | null;
+    if (target && (target.tagName === 'BUTTON' || target.closest('button') || target.classList?.contains('mode-btn') || target.classList?.contains('map-btn') || target.classList?.contains('diff-btn') || target.classList?.contains('player-count-btn'))) {
+      sfx.playClick(0.5);
+    }
+  }, true);
 
   // Enable keyboard + gamepad navigation of menu & game-over screens
   new MenuNavigator();

@@ -42,7 +42,83 @@ const audioSettings = loadAudioSettings();
 export type MusicMatchMode = 'BATTLE_ROYALE' | 'TEAM_BATTLE' | 'GOLD_RUSH' | 'KING_OF_THE_CAULDRON';
 type MusicCueId = 'menu' | 'battleRoyale' | 'teamBattle' | 'goldRush' | 'victory' | 'defeat';
 type StemRole = 'drums' | 'other' | 'vocals';
-type SfxAsset = 'conjure' | 'air' | 'fizzle' | 'wallHit' | 'wizardHit';
+
+export type SfxAsset =
+  // Combat
+  | 'spell_conjure'
+  | 'spell_air_whistle'
+  | 'spell_hit_wizard'
+  | 'spell_hit_wall'
+  | 'spell_fizzle'
+  | 'spell_clash'
+  | 'dodge_dash'
+  | 'wizard_defeated'
+  | 'heartbeat_low_health'
+  | 'critical_hit'
+  // Powerups
+  | 'powerup_spawn'
+  | 'powerup_collect'
+  | 'powerup_shield_on'
+  | 'powerup_shield_break'
+  | 'powerup_haste'
+  | 'powerup_freeze'
+  | 'powerup_bounce'
+  | 'powerup_split'
+  | 'powerup_pierce'
+  | 'powerup_wallrun'
+  // Game Modes
+  | 'coin_spawn'
+  | 'coin_pickup'
+  | 'vault_bank_deposit'
+  | 'cauldron_capturing'
+  | 'cauldron_captured'
+  | 'storm_warning_siren'
+  | 'storm_damage_zap'
+  // Hazards
+  | 'hazard_jumppad'
+  | 'hazard_portal_enter'
+  | 'hazard_portcullis_slam'
+  | 'hazard_urn_shatter'
+  | 'hazard_crystal_pulse'
+  // Trials
+  | 'dummy_target_hit'
+  | 'dummy_target_destroy'
+  | 'trial_3star_fanfare'
+  | 'trial_par_shot_bonus'
+  // UI & Lifecycle
+  | 'ui_hover'
+  | 'ui_click'
+  | 'ui_modal_open'
+  | 'ui_modal_close'
+  | 'ui_token_purchase'
+  | 'ui_equip_cosmetic'
+  | 'ui_xp_tally_tick'
+  | 'ui_level_up'
+  | 'ui_feat_unlocked'
+  | 'match_countdown_beep'
+  | 'match_start_cast'
+  | 'match_victory'
+  | 'match_game_over_sad'
+  // Killstreaks
+  | 'streak_double_kill'
+  | 'streak_triple_kill'
+  | 'streak_mega_kill'
+  | 'streak_rampage'
+  // Legacy aliases
+  | 'conjure'
+  | 'air'
+  | 'fizzle'
+  | 'wallHit'
+  | 'wizardHit';
+
+export const SfxPriority = {
+  LOW: 25,
+  MEDIUM: 50,
+  HIGH: 75,
+  CRITICAL: 100
+} as const;
+
+export type SfxPriority = typeof SfxPriority[keyof typeof SfxPriority];
 
 interface MusicCueDefinition {
   stems: Record<StemRole, string>;
@@ -107,12 +183,73 @@ const MUSIC_CUES: Record<MusicCueId, MusicCueDefinition> = {
   }
 };
 
-const SFX_ASSETS: Record<SfxAsset, string> = {
-  conjure: new URL('../assets/audio/sfx/conjure_Fireball_sfx.wav', import.meta.url).href,
-  air: new URL('../assets/audio/sfx/fireball_air.wav', import.meta.url).href,
-  fizzle: new URL('../assets/audio/sfx/fireball_fizzle_out.wav', import.meta.url).href,
-  wallHit: new URL('../assets/audio/sfx/fireball_wall_hit.wav', import.meta.url).href,
-  wizardHit: new URL('../assets/audio/sfx/fireball_wizard_hit.wav', import.meta.url).href
+const SFX_ASSETS: Record<string, string> = {
+  // Combat
+  spell_conjure: new URL('../assets/audio/sfx/spell_conjure.mp3', import.meta.url).href,
+  spell_air_whistle: new URL('../assets/audio/sfx/spell_air_whistle.mp3', import.meta.url).href,
+  spell_hit_wizard: new URL('../assets/audio/sfx/spell_hit_wizard.mp3', import.meta.url).href,
+  spell_hit_wall: new URL('../assets/audio/sfx/spell_hit_wall.mp3', import.meta.url).href,
+  spell_fizzle: new URL('../assets/audio/sfx/spell_fizzle.mp3', import.meta.url).href,
+  spell_clash: new URL('../assets/audio/sfx/spell_clash.mp3', import.meta.url).href,
+  dodge_dash: new URL('../assets/audio/sfx/dodge_dash.mp3', import.meta.url).href,
+  wizard_defeated: new URL('../assets/audio/sfx/wizard_defeated.mp3', import.meta.url).href,
+  heartbeat_low_health: new URL('../assets/audio/sfx/heartbeat_low_health.mp3', import.meta.url).href,
+  critical_hit: new URL('../assets/audio/sfx/critical_hit.mp3', import.meta.url).href,
+  // Powerups
+  powerup_spawn: new URL('../assets/audio/sfx/powerup_spawn.mp3', import.meta.url).href,
+  powerup_collect: new URL('../assets/audio/sfx/powerup_collect.mp3', import.meta.url).href,
+  powerup_shield_on: new URL('../assets/audio/sfx/powerup_shield_on.mp3', import.meta.url).href,
+  powerup_shield_break: new URL('../assets/audio/sfx/powerup_shield_break.mp3', import.meta.url).href,
+  powerup_haste: new URL('../assets/audio/sfx/powerup_haste.mp3', import.meta.url).href,
+  powerup_freeze: new URL('../assets/audio/sfx/powerup_freeze.mp3', import.meta.url).href,
+  powerup_bounce: new URL('../assets/audio/sfx/powerup_bounce.mp3', import.meta.url).href,
+  powerup_split: new URL('../assets/audio/sfx/powerup_split.mp3', import.meta.url).href,
+  powerup_pierce: new URL('../assets/audio/sfx/powerup_pierce.mp3', import.meta.url).href,
+  powerup_wallrun: new URL('../assets/audio/sfx/powerup_wallrun.mp3', import.meta.url).href,
+  // Game Modes
+  coin_spawn: new URL('../assets/audio/sfx/coin_spawn.mp3', import.meta.url).href,
+  coin_pickup: new URL('../assets/audio/sfx/coin_pickup.mp3', import.meta.url).href,
+  vault_bank_deposit: new URL('../assets/audio/sfx/vault_bank_deposit.mp3', import.meta.url).href,
+  cauldron_capturing: new URL('../assets/audio/sfx/cauldron_capturing.mp3', import.meta.url).href,
+  cauldron_captured: new URL('../assets/audio/sfx/cauldron_captured.mp3', import.meta.url).href,
+  storm_warning_siren: new URL('../assets/audio/sfx/storm_warning_siren.mp3', import.meta.url).href,
+  storm_damage_zap: new URL('../assets/audio/sfx/storm_damage_zap.mp3', import.meta.url).href,
+  // Hazards
+  hazard_jumppad: new URL('../assets/audio/sfx/hazard_jumppad.mp3', import.meta.url).href,
+  hazard_portal_enter: new URL('../assets/audio/sfx/hazard_portal_enter.mp3', import.meta.url).href,
+  hazard_portcullis_slam: new URL('../assets/audio/sfx/hazard_portcullis_slam.mp3', import.meta.url).href,
+  hazard_urn_shatter: new URL('../assets/audio/sfx/hazard_urn_shatter.mp3', import.meta.url).href,
+  hazard_crystal_pulse: new URL('../assets/audio/sfx/hazard_crystal_pulse.mp3', import.meta.url).href,
+  // Trials
+  dummy_target_hit: new URL('../assets/audio/sfx/dummy_target_hit.mp3', import.meta.url).href,
+  dummy_target_destroy: new URL('../assets/audio/sfx/dummy_target_destroy.mp3', import.meta.url).href,
+  trial_3star_fanfare: new URL('../assets/audio/sfx/trial_3star_fanfare.mp3', import.meta.url).href,
+  trial_par_shot_bonus: new URL('../assets/audio/sfx/trial_par_shot_bonus.mp3', import.meta.url).href,
+  // UI & Lifecycle
+  ui_hover: new URL('../assets/audio/sfx/ui_hover.mp3', import.meta.url).href,
+  ui_click: new URL('../assets/audio/sfx/ui_click.mp3', import.meta.url).href,
+  ui_modal_open: new URL('../assets/audio/sfx/ui_modal_open.mp3', import.meta.url).href,
+  ui_modal_close: new URL('../assets/audio/sfx/ui_modal_close.mp3', import.meta.url).href,
+  ui_token_purchase: new URL('../assets/audio/sfx/ui_token_purchase.mp3', import.meta.url).href,
+  ui_equip_cosmetic: new URL('../assets/audio/sfx/ui_equip_cosmetic.mp3', import.meta.url).href,
+  ui_xp_tally_tick: new URL('../assets/audio/sfx/ui_xp_tally_tick.mp3', import.meta.url).href,
+  ui_level_up: new URL('../assets/audio/sfx/ui_level_up.mp3', import.meta.url).href,
+  ui_feat_unlocked: new URL('../assets/audio/sfx/ui_feat_unlocked.mp3', import.meta.url).href,
+  match_countdown_beep: new URL('../assets/audio/sfx/match_countdown_beep.mp3', import.meta.url).href,
+  match_start_cast: new URL('../assets/audio/sfx/match_start_cast.mp3', import.meta.url).href,
+  match_victory: new URL('../assets/audio/sfx/match_victory.mp3', import.meta.url).href,
+  match_game_over_sad: new URL('../assets/audio/sfx/match_game_over_sad.mp3', import.meta.url).href,
+  // Killstreaks
+  streak_double_kill: new URL('../assets/audio/sfx/streak_double_kill.mp3', import.meta.url).href,
+  streak_triple_kill: new URL('../assets/audio/sfx/streak_triple_kill.mp3', import.meta.url).href,
+  streak_mega_kill: new URL('../assets/audio/sfx/streak_mega_kill.mp3', import.meta.url).href,
+  streak_rampage: new URL('../assets/audio/sfx/streak_rampage.mp3', import.meta.url).href,
+  // Backward-compatible aliases
+  conjure: new URL('../assets/audio/sfx/spell_conjure.mp3', import.meta.url).href,
+  air: new URL('../assets/audio/sfx/spell_air_whistle.mp3', import.meta.url).href,
+  fizzle: new URL('../assets/audio/sfx/spell_fizzle.mp3', import.meta.url).href,
+  wallHit: new URL('../assets/audio/sfx/spell_hit_wall.mp3', import.meta.url).href,
+  wizardHit: new URL('../assets/audio/sfx/spell_hit_wizard.mp3', import.meta.url).href
 };
 
 let sharedAudioContext: AudioContext | null = null;
@@ -126,18 +263,37 @@ function getAudioContext() {
   return sharedAudioContext;
 }
 
-class SoundSynthesizer {
+interface ActiveVoice {
+  id: string;
+  source: AudioBufferSourceNode;
+  gain: GainNode;
+  priority: SfxPriority;
+  startTime: number;
+}
+
+const MAX_ACTIVE_VOICES = 16;
+const ASSET_CONCURRENCY_LIMITS: Record<string, number> = {
+  spell_hit_wall: 3,
+  spell_hit_wizard: 3,
+  spell_conjure: 3,
+  spell_air_whistle: 2,
+  coin_pickup: 3,
+  ui_hover: 1,
+  heartbeat_low_health: 1
+};
+
+export class SoundSynthesizer {
   private ctx: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private masterVolume: number;
   private sfxVolume: number;
-  private bufferCache = new Map<SfxAsset, Promise<AudioBuffer>>();
-  private lastPlayed = new Map<SfxAsset, number>();
+  private bufferCache = new Map<string, Promise<AudioBuffer>>();
+  private lastPlayed = new Map<string, number>();
+  private activeVoices = new Set<ActiveVoice>();
 
   constructor(masterVolume: number, sfxVolume: number) {
     this.masterVolume = masterVolume;
     this.sfxVolume = sfxVolume;
-    // AudioContext will be initialized on first user interaction to bypass browser policies
   }
 
   private init() {
@@ -161,17 +317,19 @@ class SoundSynthesizer {
 
   preload() {
     this.init();
-    (Object.keys(SFX_ASSETS) as SfxAsset[]).forEach((asset) => {
+    Object.keys(SFX_ASSETS).forEach((asset) => {
       void this.loadAsset(asset).catch(() => {});
     });
   }
 
-  private loadAsset(asset: SfxAsset) {
+  private loadAsset(asset: string): Promise<AudioBuffer> {
     let pending = this.bufferCache.get(asset);
     if (!pending) {
       const context = getAudioContext();
       if (!context) return Promise.reject(new Error('Web Audio unavailable'));
-      pending = fetch(SFX_ASSETS[asset])
+      const url = SFX_ASSETS[asset];
+      if (!url) return Promise.reject(new Error(`Unknown SFX asset: ${asset}`));
+      pending = fetch(url)
         .then((response) => {
           if (!response.ok) throw new Error(`Unable to load ${asset}`);
           return response.arrayBuffer();
@@ -182,318 +340,379 @@ class SoundSynthesizer {
     return pending;
   }
 
-  private playAsset(asset: SfxAsset, volume: number, cooldownMs: number, rateVariance = 0) {
+  /**
+   * Core Audio Concurrency & Voice Limiter
+   */
+  private playAsset(
+    asset: SfxAsset,
+    volume = 1,
+    cooldownMs = 40,
+    rateVariance = 0.03,
+    priority: SfxPriority = SfxPriority.MEDIUM
+  ) {
     this.init();
     if (!this.ctx || !this.masterGain) return;
+
     const now = performance.now();
-    if (now - (this.lastPlayed.get(asset) ?? -Infinity) < cooldownMs) return;
+    const last = this.lastPlayed.get(asset) ?? -Infinity;
+    if (now - last < cooldownMs) return;
+
+    // Concurrency limit per specific asset
+    const assetLimit = ASSET_CONCURRENCY_LIMITS[asset] ?? 4;
+    let currentOfAsset = 0;
+    for (const v of this.activeVoices) {
+      if (v.id === asset) currentOfAsset++;
+    }
+    if (currentOfAsset >= assetLimit && priority < SfxPriority.CRITICAL) {
+      return;
+    }
+
+    // Voice stealing if total active voices exceeds MAX_ACTIVE_VOICES
+    if (this.activeVoices.size >= MAX_ACTIVE_VOICES) {
+      let lowestVoice: ActiveVoice | null = null;
+      for (const v of this.activeVoices) {
+        if (!lowestVoice || v.priority < lowestVoice.priority || (v.priority === lowestVoice.priority && v.startTime < lowestVoice.startTime)) {
+          lowestVoice = v;
+        }
+      }
+      if (lowestVoice && (lowestVoice.priority < priority || priority === SfxPriority.CRITICAL)) {
+        try {
+          lowestVoice.gain.gain.setValueAtTime(lowestVoice.gain.gain.value, this.ctx.currentTime);
+          lowestVoice.gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.01);
+          lowestVoice.source.stop(this.ctx.currentTime + 0.015);
+        } catch {}
+        this.activeVoices.delete(lowestVoice);
+      } else if (priority < SfxPriority.HIGH) {
+        return; // Drop voice
+      }
+    }
+
     this.lastPlayed.set(asset, now);
+
     void this.loadAsset(asset).then((buffer) => {
       if (!this.ctx || !this.masterGain) return;
       const source = this.ctx.createBufferSource();
       const gain = this.ctx.createGain();
+
       source.buffer = buffer;
       source.playbackRate.value = 1 + (Math.random() * 2 - 1) * rateVariance;
       gain.gain.value = clampVolume(volume);
+
       source.connect(gain);
       gain.connect(this.masterGain);
+
+      const voice: ActiveVoice = {
+        id: asset,
+        source,
+        gain,
+        priority,
+        startTime: now
+      };
+      this.activeVoices.add(voice);
+
       source.onended = () => {
+        this.activeVoices.delete(voice);
         source.disconnect();
         gain.disconnect();
       };
       source.start();
-    }).catch(() => {});
+    }).catch(() => {
+      // Graceful fallback to synthetic audio if sample load failed
+      this.fallbackSynth(asset, volume);
+    });
   }
 
-  playShoot(volume = 1) {
-    this.playAsset('conjure', volume * 0.62, 45, 0.025);
-    this.playAsset('air', volume * 0.24, 45, 0.035);
+  /**
+   * Spatial Audio with Distance Culling & Attenuation
+   */
+  playSpatial(
+    asset: SfxAsset,
+    sourceX: number,
+    sourceY: number,
+    listenerX: number,
+    listenerY: number,
+    maxDistance = 40,
+    baseVolume = 1,
+    priority: SfxPriority = SfxPriority.MEDIUM
+  ) {
+    const dx = sourceX - listenerX;
+    const dy = sourceY - listenerY;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxDistance) return; // Distance culling
+
+    const attenuation = 1 / (1 + (dist / 12) ** 1.4);
+    const volume = baseVolume * attenuation;
+    if (volume < 0.02) return;
+
+    this.playAsset(asset, volume, 45, 0.04, priority);
   }
 
-  playWizardHit(volume = 1) {
-    this.playAsset('wizardHit', volume * 0.72, 70, 0.025);
+  // ── COMBAT SOUNDS ──
+
+  playShoot(volume = 1, isLocal = true) {
+    this.playAsset('spell_conjure', volume * (isLocal ? 0.7 : 0.3), isLocal ? 40 : 80, 0.04, SfxPriority.LOW);
+    if (isLocal) {
+      this.playAsset('spell_air_whistle', volume * 0.2, 60, 0.05, SfxPriority.LOW);
+    }
   }
 
-  playWallHit(volume = 1) {
-    this.playAsset('wallHit', volume * 0.72, 45, 0.04);
+  playSpellWhistle(volume = 0.5) {
+    this.playAsset('spell_air_whistle', volume * 0.35, 120, 0.05, SfxPriority.LOW);
+  }
+
+  playWizardHit(volume = 1, isLocal = true) {
+    this.playAsset('spell_hit_wizard', volume * (isLocal ? 0.85 : 0.4), 60, 0.03, SfxPriority.MEDIUM);
+  }
+
+  playWallHit(volume = 1, isLocal = true) {
+    this.playAsset('spell_hit_wall', volume * (isLocal ? 0.75 : 0.3), 40, 0.05, SfxPriority.LOW);
   }
 
   playFizzle(volume = 1) {
-    this.playAsset('fizzle', volume * 0.45, 100, 0.035);
+    this.playAsset('spell_fizzle', volume * 0.5, 90, 0.04, SfxPriority.LOW);
   }
 
   playSpellClash(volume = 1) {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-
-    // Resonant crystal sparkle + impact burst
-    const osc1 = this.ctx.createOscillator();
-    const osc2 = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc1.type = 'triangle';
-    osc1.frequency.setValueAtTime(880, time);
-    osc1.frequency.exponentialRampToValueAtTime(1760, time + 0.06);
-    osc1.frequency.exponentialRampToValueAtTime(440, time + 0.18);
-
-    osc2.type = 'sine';
-    osc2.frequency.setValueAtTime(1320, time);
-    osc2.frequency.exponentialRampToValueAtTime(2200, time + 0.04);
-    osc2.frequency.exponentialRampToValueAtTime(660, time + 0.18);
-
-    gain.gain.setValueAtTime(0.18 * volume, time);
-    gain.gain.exponentialRampToValueAtTime(0.005, time + 0.18);
-
-    osc1.connect(gain);
-    osc2.connect(gain);
-    gain.connect(this.masterGain!);
-
-    osc1.start(time);
-    osc2.start(time);
-    osc1.stop(time + 0.18);
-    osc2.stop(time + 0.18);
+    this.playAsset('spell_clash', volume * 0.8, 80, 0.03, SfxPriority.HIGH);
   }
 
-  playHeartbeat() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-
-    // Low sub-bass thud pulse (lub-dub)
-    const playThud = (offset: number, freq: number, dur: number) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(freq, time + offset);
-      osc.frequency.exponentialRampToValueAtTime(35, time + offset + dur);
-      gain.gain.setValueAtTime(0.22, time + offset);
-      gain.gain.exponentialRampToValueAtTime(0.01, time + offset + dur);
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
-      osc.start(time + offset);
-      osc.stop(time + offset + dur);
-    };
-
-    playThud(0, 75, 0.1);
-    playThud(0.13, 65, 0.12);
+  playDash(volume = 1) {
+    this.playAsset('dodge_dash', volume * 0.8, 150, 0.04, SfxPriority.HIGH);
   }
 
-  playKillStreak(streakCount: number) {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-
-    const chords: number[][] = [
-      [523.25, 659.25],          // 2x: C5 + E5
-      [523.25, 659.25, 783.99],  // 3x: C5 + E5 + G5
-      [659.25, 783.99, 1046.50], // 4x: E5 + G5 + C6
-      [783.99, 987.77, 1318.51]  // 5x+: G5 + B5 + E6 Rampage!
-    ];
-    const notes = chords[Math.min(streakCount - 2, chords.length - 1)] || chords[0];
-
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(freq, time + idx * 0.04);
-
-      const filter = this.ctx!.createBiquadFilter();
-      filter.type = 'lowpass';
-      filter.frequency.setValueAtTime(2000, time);
-      filter.frequency.exponentialRampToValueAtTime(500, time + 0.3);
-
-      gain.gain.setValueAtTime(0.12, time + idx * 0.04);
-      gain.gain.exponentialRampToValueAtTime(0.005, time + idx * 0.04 + 0.28);
-
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(this.masterGain!);
-
-      osc.start(time + idx * 0.04);
-      osc.stop(time + idx * 0.04 + 0.28);
-    });
+  playWizardDefeated(volume = 1) {
+    this.playAsset('wizard_defeated', volume * 0.9, 100, 0.02, SfxPriority.HIGH);
   }
 
-  playHit() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-
-    // Create noise buffer
-    const bufferSize = this.ctx.sampleRate * 0.1; // 0.1 seconds
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = 400;
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.2, time);
-    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.1);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain!);
-
-    noise.start(time);
-    noise.stop(time + 0.1);
+  playHeartbeat(volume = 1) {
+    this.playAsset('heartbeat_low_health', volume * 0.6, 650, 0, SfxPriority.HIGH);
   }
 
-  playBounce() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(600, time);
-    osc.frequency.setValueAtTime(900, time + 0.04);
-
-    gain.gain.setValueAtTime(0.1, time);
-    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain!);
-
-    osc.start(time);
-    osc.stop(time + 0.08);
+  playCriticalHit(volume = 1) {
+    this.playAsset('critical_hit', volume * 0.9, 80, 0.02, SfxPriority.HIGH);
   }
 
-  playDash() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
+  // ── POWER-UPS ──
 
-    const bufferSize = this.ctx.sampleRate * 0.15;
-    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = Math.random() * 2 - 1;
-    }
-
-    const noise = this.ctx.createBufferSource();
-    noise.buffer = buffer;
-
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(800, time);
-    filter.frequency.exponentialRampToValueAtTime(200, time + 0.15);
-
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0.25, time);
-    gain.gain.exponentialRampToValueAtTime(0.01, time + 0.15);
-
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.masterGain!);
-
-    noise.start(time);
-    noise.stop(time + 0.15);
+  playPowerupSpawn(volume = 1) {
+    this.playAsset('powerup_spawn', volume * 0.6, 120, 0.02, SfxPriority.MEDIUM);
   }
 
-  playPowerup() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
+  playPowerup(volume = 1) {
+    this.playPowerupCollect(volume);
+  }
 
-    const notes = [261.63, 329.63, 392.00, 523.25]; // C4, E4, G4, C5
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
+  playPowerupCollect(volume = 1) {
+    this.playAsset('powerup_collect', volume * 0.8, 60, 0.02, SfxPriority.MEDIUM);
+  }
 
-      osc.type = 'sine';
-      osc.frequency.value = freq;
+  playShieldOn(volume = 1) {
+    this.playAsset('powerup_shield_on', volume * 0.8, 100, 0.02, SfxPriority.MEDIUM);
+  }
 
-      const noteTime = time + idx * 0.06;
-      gain.gain.setValueAtTime(0.0, time);
-      gain.gain.setValueAtTime(0.08, noteTime);
-      gain.gain.exponentialRampToValueAtTime(0.005, noteTime + 0.15);
+  playShieldBreak(volume = 1) {
+    this.playAsset('powerup_shield_break', volume * 0.85, 100, 0.02, SfxPriority.HIGH);
+  }
 
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
+  playHaste(volume = 1) {
+    this.playAsset('powerup_haste', volume * 0.7, 100, 0.03, SfxPriority.MEDIUM);
+  }
 
-      osc.start(noteTime);
-      osc.stop(noteTime + 0.15);
-    });
+  playFreeze(volume = 1) {
+    this.playAsset('powerup_freeze', volume * 0.8, 100, 0.02, SfxPriority.MEDIUM);
+  }
+
+  playBounce(volume = 1) {
+    this.playAsset('powerup_bounce', volume * 0.65, 45, 0.04, SfxPriority.LOW);
+  }
+
+  playSplit(volume = 1) {
+    this.playAsset('powerup_split', volume * 0.7, 60, 0.03, SfxPriority.MEDIUM);
+  }
+
+  playPierce(volume = 1) {
+    this.playAsset('powerup_pierce', volume * 0.75, 60, 0.03, SfxPriority.MEDIUM);
+  }
+
+  playWallRun(volume = 1) {
+    this.playAsset('powerup_wallrun', volume * 0.65, 80, 0.03, SfxPriority.MEDIUM);
+  }
+
+  // ── GAME MODES ──
+
+  playCoinSpawn(volume = 1) {
+    this.playAsset('coin_spawn', volume * 0.5, 80, 0.05, SfxPriority.LOW);
+  }
+
+  playCoinPickup(volume = 1) {
+    this.playAsset('coin_pickup', volume * 0.75, 40, 0.06, SfxPriority.MEDIUM);
+  }
+
+  playVaultDeposit(volume = 1) {
+    this.playAsset('vault_bank_deposit', volume * 0.9, 150, 0.02, SfxPriority.HIGH);
+  }
+
+  playCauldronCapturing(volume = 1) {
+    this.playAsset('cauldron_capturing', volume * 0.6, 300, 0.02, SfxPriority.MEDIUM);
+  }
+
+  playCauldronCaptured(volume = 1) {
+    this.playAsset('cauldron_captured', volume * 0.95, 400, 0, SfxPriority.HIGH);
+  }
+
+  playStormSiren(volume = 1) {
+    this.playAsset('storm_warning_siren', volume * 0.8, 1000, 0, SfxPriority.HIGH);
+  }
+
+  playStormDamage(volume = 1) {
+    this.playAsset('storm_damage_zap', volume * 0.7, 180, 0.04, SfxPriority.MEDIUM);
+  }
+
+  // ── HAZARDS ──
+
+  playJumpPad(volume = 1) {
+    this.playAsset('hazard_jumppad', volume * 0.8, 120, 0.03, SfxPriority.MEDIUM);
+  }
+
+  playPortal(volume = 1) {
+    this.playAsset('hazard_portal_enter', volume * 0.85, 120, 0.02, SfxPriority.MEDIUM);
+  }
+
+  playPortcullis(volume = 1) {
+    this.playAsset('hazard_portcullis_slam', volume * 0.85, 200, 0.02, SfxPriority.MEDIUM);
+  }
+
+  playUrnShatter(volume = 1) {
+    this.playAsset('hazard_urn_shatter', volume * 0.75, 60, 0.04, SfxPriority.MEDIUM);
+  }
+
+  playCrystalPulse(volume = 1) {
+    this.playAsset('hazard_crystal_pulse', volume * 0.75, 200, 0.02, SfxPriority.MEDIUM);
+  }
+
+  // ── TRICKSHOT TRIALS ──
+
+  playDummyHit(volume = 1) {
+    this.playAsset('dummy_target_hit', volume * 0.75, 50, 0.03, SfxPriority.MEDIUM);
+  }
+
+  playDummyDestroy(volume = 1) {
+    this.playAsset('dummy_target_destroy', volume * 0.85, 100, 0.02, SfxPriority.HIGH);
+  }
+
+  playTrial3StarFanfare(volume = 1) {
+    this.playAsset('trial_3star_fanfare', volume * 0.95, 500, 0, SfxPriority.CRITICAL);
+  }
+
+  playParBonus(volume = 1) {
+    this.playAsset('trial_par_shot_bonus', volume * 0.8, 200, 0, SfxPriority.HIGH);
+  }
+
+  // ── UI & METAGAME ──
+
+  playHover(volume = 1) {
+    this.playAsset('ui_hover', volume * 0.35, 60, 0.02, SfxPriority.LOW);
+  }
+
+  playClick(volume = 1) {
+    this.playAsset('ui_click', volume * 0.6, 50, 0.02, SfxPriority.LOW);
+  }
+
+  playModalOpen(volume = 1) {
+    this.playAsset('ui_modal_open', volume * 0.6, 100, 0, SfxPriority.LOW);
+  }
+
+  playModalClose(volume = 1) {
+    this.playAsset('ui_modal_close', volume * 0.5, 100, 0, SfxPriority.LOW);
+  }
+
+  playPurchase(volume = 1) {
+    this.playAsset('ui_token_purchase', volume * 0.85, 150, 0, SfxPriority.MEDIUM);
+  }
+
+  playEquip(volume = 1) {
+    this.playAsset('ui_equip_cosmetic', volume * 0.65, 80, 0.02, SfxPriority.LOW);
+  }
+
+  playXpTick(volume = 1) {
+    this.playAsset('ui_xp_tally_tick', volume * 0.45, 30, 0.05, SfxPriority.LOW);
+  }
+
+  playLevelUp(volume = 1) {
+    this.playAsset('ui_level_up', volume * 0.95, 500, 0, SfxPriority.CRITICAL);
+  }
+
+  playFeatUnlocked(volume = 1) {
+    this.playAsset('ui_feat_unlocked', volume * 0.9, 400, 0, SfxPriority.CRITICAL);
   }
 
   playCountdown(cast = false) {
     if (cast) {
       this.playStart();
-      return;
+    } else {
+      this.playAsset('match_countdown_beep', 0.65, 150, 0, SfxPriority.HIGH);
     }
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
-    const osc = this.ctx.createOscillator();
-    const gain = this.ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(440, time);
-    osc.frequency.exponentialRampToValueAtTime(620, time + 0.12);
-    gain.gain.setValueAtTime(0.1, time);
-    gain.gain.exponentialRampToValueAtTime(0.005, time + 0.16);
-    osc.connect(gain);
-    gain.connect(this.masterGain!);
-    osc.start(time);
-    osc.stop(time + 0.16);
   }
 
   playStart() {
-    this.init();
-    if (!this.ctx) return;
-    const time = this.ctx.currentTime;
+    this.playAsset('match_start_cast', 0.9, 300, 0, SfxPriority.CRITICAL);
+  }
 
-    const notes = [329.63, 392.00, 523.25, 659.25]; // E4, G4, C5, E5
-    notes.forEach((freq, idx) => {
-      const osc = this.ctx!.createOscillator();
-      const gain = this.ctx!.createGain();
-
-      osc.type = 'triangle';
-      osc.frequency.value = freq;
-
-      const noteTime = time + idx * 0.08;
-      gain.gain.setValueAtTime(0.0, time);
-      gain.gain.setValueAtTime(0.1, noteTime);
-      gain.gain.exponentialRampToValueAtTime(0.005, noteTime + 0.25);
-
-      osc.connect(gain);
-      gain.connect(this.masterGain!);
-
-      osc.start(noteTime);
-      osc.stop(noteTime + 0.25);
-    });
+  playVictory() {
+    this.playAsset('match_victory', 1.0, 500, 0, SfxPriority.CRITICAL);
   }
 
   playSadGameOver() {
+    this.playAsset('match_game_over_sad', 0.85, 400, 0, SfxPriority.CRITICAL);
+  }
+
+  playKillStreak(streakCount: number) {
+    if (streakCount === 2) {
+      this.playAsset('streak_double_kill', 0.85, 200, 0, SfxPriority.HIGH);
+    } else if (streakCount === 3) {
+      this.playAsset('streak_triple_kill', 0.9, 200, 0, SfxPriority.HIGH);
+    } else if (streakCount === 4) {
+      this.playAsset('streak_mega_kill', 0.95, 200, 0, SfxPriority.CRITICAL);
+    } else {
+      this.playAsset('streak_rampage', 1.0, 200, 0, SfxPriority.CRITICAL);
+    }
+  }
+
+  playHit() {
+    this.playWizardHit(0.7);
+  }
+
+  // ── Procedural Web Audio Synth Fallback (Robustness Guarantee) ──
+
+  private fallbackSynth(asset: string, volume: number) {
     this.init();
-    if (!this.ctx) return;
+    if (!this.ctx || !this.masterGain) return;
     const time = this.ctx.currentTime;
 
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
 
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(220, time);
-    osc.frequency.linearRampToValueAtTime(110, time + 0.5);
-
-    gain.gain.setValueAtTime(0.12, time);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.5);
-
-    osc.connect(gain);
-    gain.connect(this.masterGain!);
-
-    osc.start(time);
-    osc.stop(time + 0.5);
+    if (asset.includes('hit') || asset.includes('wall')) {
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(200, time);
+      osc.frequency.exponentialRampToValueAtTime(40, time + 0.08);
+      gain.gain.setValueAtTime(0.2 * volume, time);
+      gain.gain.exponentialRampToValueAtTime(0.005, time + 0.08);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(time);
+      osc.stop(time + 0.08);
+    } else {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, time);
+      osc.frequency.exponentialRampToValueAtTime(880, time + 0.1);
+      gain.gain.setValueAtTime(0.15 * volume, time);
+      gain.gain.exponentialRampToValueAtTime(0.005, time + 0.1);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(time);
+      osc.stop(time + 0.1);
+    }
   }
 }
 
@@ -515,7 +734,7 @@ interface CuePlayback {
 
 const STEM_ROLES: StemRole[] = ['drums', 'other', 'vocals'];
 
-class DynamicMusicPlayer {
+export class DynamicMusicPlayer {
   private context: AudioContext | null = null;
   private masterGain: GainNode | null = null;
   private current: CuePlayback | null = null;
@@ -598,155 +817,134 @@ class DynamicMusicPlayer {
 
     const critical = clampVolume((0.5 - this.healthRatio) / 0.5);
     const definition = MUSIC_CUES[cue.id];
-    const drums = this.dead ? 0.04 : Math.min(1.05, definition.gains.drums * (1 + critical * 0.22 + this.danger * 0.16));
-    const other = definition.gains.other * (this.dead ? 0.65 : 1 - critical * 0.16 - this.danger * 0.08);
-    const vocals = definition.gains.vocals * (this.dead ? 0.28 : 1 - critical * 0.32 - this.danger * 0.12);
-    this.setStemTarget(cue.stems.drums, drums, this.dead ? 0.16 : 0.35);
-    this.setStemTarget(cue.stems.other, other, this.dead ? 0.5 : 0.8);
-    this.setStemTarget(cue.stems.vocals, vocals, this.dead ? 0.7 : 1.1);
-    cue.filter.frequency.setTargetAtTime(this.dead ? 1150 : 18000, this.context.currentTime, this.dead ? 0.22 : 0.8);
-    cue.bus.gain.setTargetAtTime(this.dead ? 0.72 : 1, this.context.currentTime, this.dead ? 0.25 : 0.7);
+
+    let targetDrums = definition.gains.drums;
+    let targetOther = definition.gains.other;
+    let targetVocals = definition.gains.vocals;
+
+    if (this.dead) {
+      targetDrums *= 0.12;
+      targetOther *= 0.7;
+      targetVocals *= 0.2;
+    } else {
+      targetDrums *= 1 + this.danger * 0.25;
+      targetVocals *= 1 + critical * 0.35;
+    }
+
+    this.setStemTarget(cue.stems.drums, targetDrums, 0.12);
+    this.setStemTarget(cue.stems.other, targetOther, 0.12);
+    this.setStemTarget(cue.stems.vocals, targetVocals, 0.12);
     this.synchronizeStems(cue);
   }
 
-  private ensureOutput() {
-    if (!this.context) this.context = getAudioContext();
-    if (this.context && !this.masterGain) {
-      this.masterGain = this.context.createGain();
-      this.masterGain.gain.value = this.enabled ? this.outputLevel() : 0;
-      this.masterGain.connect(this.context.destination);
-    }
-    return this.context;
+  private outputLevel() {
+    return this.enabled ? this.masterVolume * this.musicVolume : 0;
   }
 
-  private outputLevel() {
-    return clampVolume(this.masterVolume * this.musicVolume);
+  private ensureOutput() {
+    if (!this.context) {
+      this.context = getAudioContext();
+      if (this.context) {
+        this.masterGain = this.context.createGain();
+        this.masterGain.gain.value = this.outputLevel();
+        this.masterGain.connect(this.context.destination);
+      }
+    }
   }
 
   private async transitionTo(id: MusicCueId) {
     this.desiredCue = id;
     if (!this.enabled) return;
-    const context = this.ensureOutput();
-    if (!context || !this.masterGain) return;
-    if (this.current?.id === id) {
+    this.ensureOutput();
+    if (!this.context || !this.masterGain) return;
+
+    const transitionId = ++this.transitionId;
+    if (this.current && this.current.id === id) {
       this.resumeCue(this.current);
-      this.masterGain.gain.setTargetAtTime(this.outputLevel(), context.currentTime, 0.1);
       return;
     }
 
-    const transitionId = ++this.transitionId;
-    const next = await this.createCue(id, transitionId);
-    if (!next || transitionId !== this.transitionId || !this.enabled) {
-      if (next) this.disposeCue(next);
+    const nextCue = await this.createCuePlayback(id);
+    if (transitionId !== this.transitionId) {
+      this.disposeCue(nextCue);
       return;
     }
 
     const previous = this.current;
-    this.current = next;
-    const now = context.currentTime;
-    let latestAttack = 0;
-    STEM_ROLES.forEach((role) => {
-      const timing = this.attackTiming(id, role);
-      const stem = next.stems[role];
-      latestAttack = Math.max(latestAttack, timing.delay + timing.duration);
-      this.ramp(stem.gain.gain, stem.baseGain, timing.delay, timing.duration);
-    });
-    next.mixReadyAt = now + latestAttack;
-
     if (previous) {
       this.retiring.add(previous);
-      STEM_ROLES.forEach((role) => {
-        const duration = role === 'drums' ? 1.35 : role === 'other' ? 3.1 : 4.2;
-        this.ramp(previous.stems[role].gain.gain, 0, 0, duration);
-      });
+      const fadeOut = this.getFadeOutParams(previous.id, id);
+      this.ramp(previous.bus.gain, 0.0001, fadeOut.delay, fadeOut.duration);
       window.setTimeout(() => {
         this.retiring.delete(previous);
         this.disposeCue(previous);
-      }, 4400);
+      }, (fadeOut.delay + fadeOut.duration + 0.1) * 1000);
     }
+
+    this.current = nextCue;
+    const fadeIn = this.getFadeInParams(id);
+    this.ramp(nextCue.bus.gain, 1, fadeIn.delay, fadeIn.duration);
+    nextCue.mixReadyAt = this.context.currentTime + fadeIn.delay + fadeIn.duration;
   }
 
-  private async createCue(id: MusicCueId, transitionId: number) {
-    const context = this.ensureOutput();
-    if (!context || !this.masterGain) return null;
-    const definition = MUSIC_CUES[id];
-    const filter = context.createBiquadFilter();
+  private async createCuePlayback(id: MusicCueId): Promise<CuePlayback> {
+    this.ensureOutput();
+    const context = this.context!;
     const bus = context.createGain();
-    const stems = {} as Record<StemRole, StemPlayback>;
-    filter.type = 'lowpass';
-    filter.frequency.value = 18000;
-    bus.gain.value = 1;
-    filter.connect(bus);
-    bus.connect(this.masterGain);
+    bus.gain.value = 0.0001;
 
-    const ready: Promise<void>[] = [];
-    STEM_ROLES.forEach((role) => {
-      const audio = new Audio(definition.stems[role]);
-      audio.preload = 'auto';
+    const filter = context.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = 22000;
+    bus.connect(filter);
+    filter.connect(this.masterGain!);
+
+    const definition = MUSIC_CUES[id];
+    const stems = {} as Record<StemRole, StemPlayback>;
+
+    for (const role of STEM_ROLES) {
+      const audio = new Audio();
+      audio.src = definition.stems[role];
       audio.loop = definition.loop;
-      audio.currentTime = 0;
+      audio.crossOrigin = 'anonymous';
+      audio.preload = 'auto';
+
       const source = context.createMediaElementSource(audio);
       const gain = context.createGain();
-      gain.gain.value = 0;
-      source.connect(gain);
-      gain.connect(filter);
-      stems[role] = { role, audio, source, gain, baseGain: definition.gains[role] };
-      ready.push(this.waitUntilPlayable(audio));
-      void audio.play().catch(() => {});
-    });
+      gain.gain.value = definition.gains[role];
 
-    await Promise.all(ready);
-    if (transitionId !== this.transitionId || !this.enabled) {
-      const abandoned = { id, stems, filter, bus, mixReadyAt: 0 };
-      this.disposeCue(abandoned);
-      return null;
+      source.connect(gain);
+      gain.connect(bus);
+
+      stems[role] = {
+        role,
+        audio,
+        source,
+        gain,
+        baseGain: definition.gains[role]
+      };
     }
 
     STEM_ROLES.forEach((role) => {
-      const audio = stems[role].audio;
-      audio.pause();
-      audio.currentTime = 0;
+      void stems[role].audio.play().catch(() => {});
     });
-    await Promise.all(STEM_ROLES.map((role) => stems[role].audio.play().catch(() => {})));
-    return { id, stems, filter, bus, mixReadyAt: 0 };
+
+    return {
+      id,
+      stems,
+      filter,
+      bus,
+      mixReadyAt: 0
+    };
   }
 
-  private waitUntilPlayable(audio: HTMLAudioElement) {
-    if (audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) return Promise.resolve();
-    return new Promise<void>((resolve) => {
-      let settled = false;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        audio.removeEventListener('canplay', finish);
-        audio.removeEventListener('error', finish);
-        resolve();
-      };
-      audio.addEventListener('canplay', finish, { once: true });
-      audio.addEventListener('error', finish, { once: true });
-      window.setTimeout(finish, 8000);
-      audio.load();
-    });
+  private getFadeInParams(id: MusicCueId) {
+    if (id === 'victory' || id === 'defeat') return { delay: 0, duration: 0.2 };
+    return { delay: 0.1, duration: 1.2 };
   }
 
-  private attackTiming(id: MusicCueId, role: StemRole) {
-    if (id === 'defeat') {
-      if (role === 'drums') return { delay: 1.8, duration: 3.8 };
-      if (role === 'other') return { delay: 0, duration: 2.2 };
-      return { delay: 0.5, duration: 4.2 };
-    }
-    if (id === 'victory') {
-      if (role === 'drums') return { delay: 0, duration: 1.0 };
-      if (role === 'other') return { delay: 0, duration: 1.8 };
-      return { delay: 0.35, duration: 3.2 };
-    }
-    if (id === 'menu') {
-      if (role === 'drums') return { delay: 0.6, duration: 2.4 };
-      if (role === 'other') return { delay: 0, duration: 2.0 };
-      return { delay: 0.8, duration: 4.5 };
-    }
-    if (role === 'drums') return { delay: 1.25, duration: 1.15 };
-    if (role === 'other') return { delay: 0, duration: 2.8 };
+  private getFadeOutParams(_from: MusicCueId, to: MusicCueId) {
+    if (to === 'victory' || to === 'defeat') return { delay: 0, duration: 0.3 };
     return { delay: 0.4, duration: 4.8 };
   }
 

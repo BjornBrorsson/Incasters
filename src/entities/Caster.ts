@@ -372,7 +372,14 @@ export class Caster extends Entity {
   }
 
   collectPowerUp(type: PowerUpType) {
-    sfx.playPowerup();
+    if (type === PowerUpType.SHIELD) sfx.playShieldOn();
+    else if (type === PowerUpType.HASTE) sfx.playHaste();
+    else if (type === PowerUpType.FREEZE) sfx.playFreeze();
+    else if (type === PowerUpType.BOUNCE) sfx.playBounce();
+    else if (type === PowerUpType.SPLIT) sfx.playSplit();
+    else if (type === PowerUpType.PIERCE) sfx.playPierce();
+    else if (type === PowerUpType.WALLRUN) sfx.playWallRun();
+    else sfx.playPowerupCollect();
 
     if (this.powerups.has(type)) {
       // Increment existing powerup stack (max 3)
@@ -448,10 +455,11 @@ export class Caster extends Entity {
       if (newLevel <= 0) {
         this.powerups.delete(PowerUpType.SHIELD);
         this.powerupSlotsOrder = this.powerupSlotsOrder.filter(t => t !== PowerUpType.SHIELD);
+        sfx.playShieldBreak(this.id === 'player' ? 1.0 : 0.4);
       } else {
         this.powerups.set(PowerUpType.SHIELD, newLevel);
+        sfx.playShieldOn(this.id === 'player' ? 0.8 : 0.3);
       }
-      sfx.playBounce(); // deflect sound
 
       // Trigger a shield bubble hit flash
       if (this.shieldMesh && this.shieldMesh.material instanceof THREE.MeshBasicMaterial) {

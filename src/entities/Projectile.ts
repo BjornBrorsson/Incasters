@@ -198,7 +198,9 @@ export class Projectile extends Entity {
       this.targetPoint = null;
       this.steerDirection = 0;
       this.isWallRunning = true;
-      if (firstWallContact) sfx.playWallHit(this.ownerId === 'player' ? 0.85 : 0.3);
+      if (firstWallContact) {
+        sfx.playWallRun(this.ownerId === 'player' ? 0.9 : 0.4);
+      }
       return;
     }
 
@@ -208,7 +210,7 @@ export class Projectile extends Entity {
       this.vx = reflected.x;
       this.vy = reflected.y;
       this.bouncesRemaining--;
-      sfx.playWallHit(this.ownerId === 'player' ? 0.85 : 0.3);
+      sfx.playBounce(this.ownerId === 'player' ? 0.9 : 0.4);
     } else {
       // Explode
       this.isDead = true;
@@ -226,6 +228,7 @@ export class Projectile extends Entity {
     
     if (this.piercesRemaining > 0) {
       this.piercesRemaining--;
+      sfx.playPierce(this.ownerId === 'player' ? 0.9 : 0.4);
     } else {
       this.isDead = true;
       this.playFizzleOnDestroy = true;

@@ -304,7 +304,10 @@ export class GameModeManager {
         if (dist > this.safeRadius) {
           // 12 damage per second, increasing as the ring shrinks
           const shrinkFactor = 1 + (1 - this.safeRadius / this.maxSafeRadius) * 0.5;
-          c.takeDamage(12 * shrinkFactor * dt);
+          const damaged = c.takeDamage(12 * shrinkFactor * dt);
+          if (damaged && c.id === 'player') {
+            sfx.playStormDamage(0.7);
+          }
           if (c.isDead) {
             this.handleCasterDeath(scene, c, null, casters);
             this.onCasterDied?.(null, c);
@@ -317,6 +320,7 @@ export class GameModeManager {
       if (!this.announcedFinalDuel && aliveCasters.length === 2) {
         this.announcedFinalDuel = true;
         this.onAnnounce?.('FINAL DUEL!', '#ff5555');
+        sfx.playStormSiren(0.85);
       }
       if (aliveCasters.length <= 1) {
         this.endGame(casters);
@@ -377,7 +381,7 @@ export class GameModeManager {
             scene.remove(coin.mesh);
             coin.mesh.geometry.dispose();
             this.coins.splice(i, 1);
-            sfx.playBounce(); // Simple ding sound
+            sfx.playCoinPickup(caster.id === 'player' ? 1.0 : 0.4);
             break;
           }
         }
@@ -748,21 +752,22 @@ export class GameModeManager {
     this.onAnnounce?.('THE CAULDRON RELOCATED!', '#d288ff');
   }
 
-  private updateCauldronVisual(dt: number) {
+  private updateCauldronVisual(_dt: number) {
     if (!this.cauldron) return;
-    const ring = this.cauldron.mesh.children[0] as THREE.Mesh;
-    const fill = this.cauldron.mesh.children[1] as THREE.Mesh;
+    const ring = this.cauldron.mesh.getObjectByName('cauldron_ring');
+    const fill = this.cauldron.mesh.getObjectByName('cauldron_fill');
+    let color = 0x9933ff;
+    if (this.cauldron.controllingCasterId === 'player') color = 0x00dfff;
+    else if (this.cauldron.controllingCasterId) color = 0xff5a6e;
 
-    const color = this.cauldron.controllingColor;
-    if (ring && ring.material instanceof THREE.MeshBasicMaterial) {
+    if (ring instanceof THREE.Mesh && ring.material instanceof THREE.MeshBasicMaterial) {
       ring.material.color.setHex(color);
-      ring.material.opacity = 0.75 + Math.sin(this.cauldron.pulseTime) * 0.2;
+      ring.material.opacity = (this.cauldron.controllingCasterId ? 0.9 : 0.5) + Math.sin(this.cauldron.pulseTime) * 0.1;
     }
-    if (fill && fill.material instanceof THREE.MeshBasicMaterial) {
+    if (fill instanceof THREE.Mesh && fill.material instanceof THREE.MeshBasicMaterial) {
       fill.material.color.setHex(color);
       fill.material.opacity = (this.cauldron.controllingCasterId ? 0.25 : 0.12) + Math.sin(this.cauldron.pulseTime) * 0.04;
     }
-    this.cauldron.mesh.rotation.y += dt * 0.4;
   }
 
   public endGame(casters: Caster[]) {
@@ -772,7 +777,7 @@ export class GameModeManager {
       const survivor = casters.find((c) => !c.isDead);
       if (survivor) {
         this.winnerText = `${survivor.name} WINS Last Caster Standing!`;
-        if (survivor.id === 'player') sfx.playStart();
+        if (survivor.id === 'player') sfx.playVictory();
         else sfx.playSadGameOver();
       } else {
         this.winnerText = 'NO SURVIVORS. Tie Game!';
@@ -782,7 +787,7 @@ export class GameModeManager {
     } else if (this.type === GameModeType.TEAM_BATTLE) {
       if (this.redScore > this.blueScore) {
         this.winnerText = 'RED TEAM WINS!';
-        sfx.playStart();
+        sfx.playVictory();
       } else if (this.blueScore > this.redScore) {
         this.winnerText = 'BLUE TEAM WINS!';
         sfx.playSadGameOver();
@@ -795,7 +800,7 @@ export class GameModeManager {
       // Highest banked team total wins
       if (this.redScore > this.blueScore) {
         this.winnerText = `RED TEAM WINS Gold Rush ${this.redScore} - ${this.blueScore}!`;
-        sfx.playStart();
+        sfx.playVictory();
       } else if (this.blueScore > this.redScore) {
         this.winnerText = `BLUE TEAM WINS Gold Rush ${this.blueScore} - ${this.redScore}!`;
         sfx.playSadGameOver();
@@ -816,7 +821,7 @@ export class GameModeManager {
       const winner = casters.find((c) => c.id === bestId);
       if (winner) {
         this.winnerText = `${winner.name.toUpperCase()} IS KING OF THE CAULDRON (${Math.floor(maxScore)} pts)!`;
-        if (winner.id === 'player') sfx.playStart();
+        if (winner.id === 'player') sfx.playVictory();
         else sfx.playSadGameOver();
       } else {
         this.winnerText = 'TIME UP! No Cauldron Master!';

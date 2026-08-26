@@ -668,7 +668,11 @@ export class Game {
     }
 
     const { tokensEarned } = progression.recordTrialClear(stage.id, stars, time);
-    sfx.playStart();
+    if (stars === 3) {
+      sfx.playTrial3StarFanfare();
+    } else {
+      sfx.playVictory();
+    }
 
     this.onTrialCompleted?.({
       stageId: stage.id,
@@ -1170,7 +1174,7 @@ export class Game {
       this.projectiles.push(splitProj);
     }
 
-    sfx.playBounce();
+    sfx.playSplit();
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -1791,9 +1795,12 @@ export class Game {
     } else if (this.playerCombo === 3) {
       this.fx.announce('TRIPLE KILL!', '#ff5fa2');
       sfx.playKillStreak(3);
-    } else if (this.playerCombo >= 4) {
-      this.fx.announce('RAMPAGE!', '#ffd23d', true);
+    } else if (this.playerCombo === 4) {
+      this.fx.announce('MEGA KILL!', '#e055ff');
       sfx.playKillStreak(4);
+    } else if (this.playerCombo >= 5) {
+      this.fx.announce('RAMPAGE!', '#ffd23d', true);
+      sfx.playKillStreak(5);
     }
   }
 
@@ -1818,6 +1825,8 @@ export class Game {
 
     const playerInvolved = (killer !== null && killer.id === 'player') || victim.id === 'player';
     if (playerInvolved) this.hitStopTimer = 0.07;
+
+    sfx.playWizardDefeated(victim.id === 'player' ? 1.0 : killer?.id === 'player' ? 0.85 : 0.4);
 
     if (killer && killer.id === 'player') {
       this.registerPlayerKill();
@@ -1900,7 +1909,7 @@ export class Game {
           caster.leapVy = pad.launchVy;
           caster.isDashing = false; // Cancel active dash
 
-          sfx.playDash(); // play launch sweep
+          sfx.playJumpPad(caster.id === 'player' ? 1.0 : 0.4);
           this.spawnBlastParticles(pad.x, pad.y, 0x39ff14, 15, 1.2);
         }
       });
@@ -2084,7 +2093,11 @@ export class Game {
             }
 
             this.spawnBlastParticles(prop.x, prop.y, sparkColor, 20, 1.4);
-            sfx.playBounce();
+            if (prop.type === 'MANA_CRYSTAL') {
+              sfx.playCrystalPulse(0.85);
+            } else {
+              sfx.playUrnShatter(0.85);
+            }
 
             // Spawn powerup / coins
             if (prop.dropsPowerup) {
@@ -2093,6 +2106,7 @@ export class Game {
               const pu = new PowerUp(prop.x, prop.y, pType);
               this.scene.add(pu.mesh);
               this.powerups.push(pu);
+              sfx.playPowerupSpawn(0.7);
             }
           }
         }
@@ -2116,14 +2130,14 @@ export class Game {
             proj.playFizzleOnDestroy = true;
 
             this.spawnBlastParticles(dummy.x, dummy.y, 0xff3355, 12, 1.0);
-            sfx.playWallHit(1.0);
+            sfx.playDummyHit(1.0);
             this.input.rumble(150, 0.4, 0.7);
 
             if (dummy.health <= 0) {
               dummy.isDead = true;
               dummy.mesh.visible = false;
               this.spawnBlastParticles(dummy.x, dummy.y, 0xffd700, 24, 1.8);
-              sfx.playStart();
+              sfx.playDummyDestroy(1.0);
 
               // Check if all dummies destroyed
               const allDead = this.trialDummies.every((d) => d.isDead);
@@ -2208,6 +2222,7 @@ export class Game {
           const pu = new PowerUp(spawn.x, spawn.y, randomType);
           this.scene.add(pu.mesh);
           this.powerups.push(pu);
+          sfx.playPowerupSpawn(0.6);
         }
       } else {
         this.powerupSpawnCooldowns[i] = 0;
@@ -2241,7 +2256,7 @@ export class Game {
           this.casterPortalCooldowns.set(caster.id, 1.8);
           this.spawnBlastParticles(portal.x, portal.y, 0x9933ff, 14, 1.2);
           this.spawnBlastParticles(portal.targetX, portal.targetY, 0xdd88ff, 14, 1.2);
-          sfx.playPowerup();
+          sfx.playPortal(caster.id === 'player' ? 1.0 : 0.4);
         }
       });
     });

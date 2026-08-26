@@ -37,7 +37,7 @@ release/
 
 # Sound effects generation prompts (ElevenLabs)
 sfx_prompts.*
-sfx/
+/sfx/
 
 # Firebase CLI cache
 .firebase/
