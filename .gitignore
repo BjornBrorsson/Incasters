@@ -35,13 +35,29 @@ android/app/build/
 # Windows release output
 release/
 
-# Asset generation prompts (SFX, VFX, Images)
+# Asset generation prompts & generator scripts
 sfx_prompts.*
 vfx_prompts.*
 image_prompts.*
 /sfx/
 /vfx/
 /assets_gen/
+Suggested Assets/
+suggested_assets/
+scripts/generate*
+scripts/generate_assets_headless.js
+scripts/generate-keystore.cjs
+test/capture_live_demo.js
+scratch/
+
+# Secrets, keys, and credentials
+.env
+.env.*
+*.pem
+*.key
+*.keystore
+android/app/*.keystore
+android/app/*.jks
 
 # Firebase CLI cache
 .firebase/

@@ -33,16 +33,81 @@ export interface GameParticle {
   mesh: THREE.Mesh;
 }
 
+export interface GameDecal {
+  mesh: THREE.Mesh;
+  lifetime: number;
+  maxLifetime: number;
+  startScale: number;
+  endScale: number;
+  initialOpacity: number;
+}
+
+export const VFX_SPARK_FLARE_URL = new URL('../assets/vfx/vfx_spark_flare.jpg', import.meta.url).href;
+export const VFX_RUNE_RING_URL = new URL('../assets/vfx/vfx_arcane_rune_ring.jpg', import.meta.url).href;
+export const VFX_SHOCKWAVE_URL = new URL('../assets/vfx/vfx_shockwave_ring.jpg', import.meta.url).href;
+export const VFX_FROST_URL = new URL('../assets/vfx/vfx_frost_snowflake.jpg', import.meta.url).href;
+export const VFX_LIGHTNING_URL = new URL('../assets/vfx/vfx_lightning_arc.jpg', import.meta.url).href;
+export const VFX_SMOKE_URL = new URL('../assets/vfx/vfx_smoke_wisp.jpg', import.meta.url).href;
+
+const vfxTextureLoader = new THREE.TextureLoader();
+const VFX_TEX_CACHE = new Map<string, THREE.Texture>();
+
+function getVfxTexture(url: string): THREE.Texture {
+  let tex = VFX_TEX_CACHE.get(url);
+  if (!tex) {
+    tex = vfxTextureLoader.load(url);
+    VFX_TEX_CACHE.set(url, tex);
+  }
+  return tex;
+}
+
 // Static shared particle geometries and material cache to avoid GC/WebGL buffer disposal thrashing
 const SHARED_SPHERE_GEO = new THREE.SphereGeometry(0.08, 4, 4);
 const SHARED_BOX_GEO = new THREE.BoxGeometry(0.12, 0.12, 0.12);
+const SHARED_PLANE_GEO = new THREE.PlaneGeometry(1, 1);
 const PARTICLE_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+const RUNE_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
+const SHOCK_MAT_CACHE = new Map<number, THREE.MeshBasicMaterial>();
 
 function getCachedParticleMaterial(color: number): THREE.MeshBasicMaterial {
   let mat = PARTICLE_MAT_CACHE.get(color);
   if (!mat) {
     mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85 });
     PARTICLE_MAT_CACHE.set(color, mat);
+  }
+  return mat;
+}
+
+function getCachedRuneMaterial(color: number): THREE.MeshBasicMaterial {
+  let mat = RUNE_MAT_CACHE.get(color);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      map: getVfxTexture(VFX_RUNE_RING_URL),
+      color,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      opacity: 0.9,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    RUNE_MAT_CACHE.set(color, mat);
+  }
+  return mat;
+}
+
+function getCachedShockMaterial(color: number): THREE.MeshBasicMaterial {
+  let mat = SHOCK_MAT_CACHE.get(color);
+  if (!mat) {
+    mat = new THREE.MeshBasicMaterial({
+      map: getVfxTexture(VFX_SHOCKWAVE_URL),
+      color,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      opacity: 1.0,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    SHOCK_MAT_CACHE.set(color, mat);
   }
   return mat;
 }
@@ -111,6 +176,8 @@ export class Game {
   powerups: PowerUp[] = [];
   particles: GameParticle[] = [];
   private particlePool: GameParticle[] = [];
+  decals: GameDecal[] = [];
+  private decalPool: GameDecal[] = [];
 
   // Managers
   gameModeManager: GameModeManager;
@@ -1418,8 +1485,9 @@ export class Game {
     // 8. Spawning power-ups in arena spawners
     this.updatePowerUpSpawning(dt);
 
-    // 5. Update Particle Systems
+    // 5. Update Particle Systems & Visual Decals
     this.updateParticles(dt);
+    this.updateDecals(dt);
 
     // 5b. Update Trial Mode state & moving target dummies
     if (this.trialStage) {
@@ -1714,6 +1782,8 @@ export class Game {
     const canDash = this.player.dashCooldownTimer <= 0 && !this.player.isDashing && !this.player.isDead;
     this.player.dash(worldMoveX, worldMoveY);
     if (canDash) {
+      this.spawnGroundRuneDecal(this.player.x, this.player.y, this.playerRobeColor, 0.55, 2.2);
+      this.spawnBlastParticles(this.player.x, this.player.y, this.playerSpellColor, 8, 0.8);
       progression.recordFeatProgress('speed_demon', 1);
       this.input.rumble(90, 0.25, 0.5);
       if (this.netMode === 'host') this.onNetEvent?.({ kind: 'dash', data: { casterId: this.player.id } });
@@ -1969,6 +2039,8 @@ export class Game {
           this.spawnBlastParticles(clashX, clashY, 0xffea78, 16, 1.4);
           this.spawnBlastParticles(clashX, clashY, p1.trailColor, 8, 1.0);
           this.spawnBlastParticles(clashX, clashY, p2.trailColor, 8, 1.0);
+          this.spawnShockwave(clashX, clashY, 0xffea78, 0.4, 3.0);
+          this.spawnGroundRuneDecal(clashX, clashY, 0xffaa00, 0.5, 2.0);
 
           if (p1.ownerId === 'player' || p2.ownerId === 'player') {
             this.input.rumble(80, 0.45, 0.7);
@@ -2371,6 +2443,88 @@ export class Game {
     }
   }
 
+  // ── Decal & Shockwave VFX Helpers ──
+  spawnGroundRuneDecal(x: number, y: number, color: number = 0xffd23d, duration = 0.55, maxScale = 2.2) {
+    if (this.decals.length > 20) return;
+    const mat = getCachedRuneMaterial(color);
+    let d: GameDecal;
+    if (this.decalPool.length > 0) {
+      d = this.decalPool.pop()!;
+      d.mesh.material = mat;
+      d.mesh.visible = true;
+    } else {
+      const mesh = new THREE.Mesh(SHARED_PLANE_GEO, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      this.scene.add(mesh);
+      d = {
+        mesh,
+        lifetime: 0,
+        maxLifetime: duration,
+        startScale: 0.4,
+        endScale: maxScale,
+        initialOpacity: 0.9
+      };
+    }
+    d.mesh.position.set(x, 0.04, y);
+    d.mesh.scale.set(0.4, 0.4, 1);
+    d.lifetime = 0;
+    d.maxLifetime = duration;
+    d.startScale = 0.4;
+    d.endScale = maxScale;
+    d.initialOpacity = 0.9;
+    this.decals.push(d);
+  }
+
+  spawnShockwave(x: number, y: number, color: number = 0x66ddff, duration = 0.4, maxScale = 3.0) {
+    if (this.decals.length > 20) return;
+    const mat = getCachedShockMaterial(color);
+    let d: GameDecal;
+    if (this.decalPool.length > 0) {
+      d = this.decalPool.pop()!;
+      d.mesh.material = mat;
+      d.mesh.visible = true;
+    } else {
+      const mesh = new THREE.Mesh(SHARED_PLANE_GEO, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      this.scene.add(mesh);
+      d = {
+        mesh,
+        lifetime: 0,
+        maxLifetime: duration,
+        startScale: 0.5,
+        endScale: maxScale,
+        initialOpacity: 1.0
+      };
+    }
+    d.mesh.position.set(x, 0.05, y);
+    d.mesh.scale.set(0.5, 0.5, 1);
+    d.lifetime = 0;
+    d.maxLifetime = duration;
+    d.startScale = 0.5;
+    d.endScale = maxScale;
+    d.initialOpacity = 1.0;
+    this.decals.push(d);
+  }
+
+  private updateDecals(dt: number) {
+    for (let i = this.decals.length - 1; i >= 0; i--) {
+      const d = this.decals[i];
+      d.lifetime += dt;
+      if (d.lifetime >= d.maxLifetime) {
+        d.mesh.visible = false;
+        this.decalPool.push(d);
+        this.decals.splice(i, 1);
+      } else {
+        const progress = d.lifetime / d.maxLifetime;
+        const currentScale = d.startScale + (d.endScale - d.startScale) * Math.sin(progress * Math.PI * 0.5);
+        d.mesh.scale.set(currentScale, currentScale, 1);
+        if (d.mesh.material instanceof THREE.MeshBasicMaterial) {
+          d.mesh.material.opacity = d.initialOpacity * (1 - progress);
+        }
+      }
+    }
+  }
+
   private updateHUD() {
     // 1. Health Bar
     const hpRounded = Math.round(this.player.health);
@@ -2739,6 +2893,10 @@ export class Game {
     this.particlePool.forEach((p) => this.scene.remove(p.mesh));
     this.particles = [];
     this.particlePool = [];
+    this.decals.forEach((d) => this.scene.remove(d.mesh));
+    this.decalPool.forEach((d) => this.scene.remove(d.mesh));
+    this.decals = [];
+    this.decalPool = [];
     if (this.aimVisualizer) this.aimVisualizer.destroy(this.scene);
     this.gameModeManager.cleanup(this.scene);
     

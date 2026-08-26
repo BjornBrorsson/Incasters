@@ -96,93 +96,28 @@ export interface SpeedRune {
   mesh: THREE.Group;
 }
 
-let CACHED_COBBLESTONE_TEX: THREE.CanvasTexture | null = null;
-let CACHED_PARQUET_TEX: THREE.CanvasTexture | null = null;
 let CACHED_STONEWALL_TEX: THREE.CanvasTexture | null = null;
-let CACHED_OBSERVATORY_TEX: THREE.CanvasTexture | null = null;
-let CACHED_CATACOMBS_TEX: THREE.CanvasTexture | null = null;
+const TEX_COURTYARD_URL = new URL('../assets/textures/tex_floor_courtyard.jpg', import.meta.url).href;
+const TEX_COLOSSEUM_URL = new URL('../assets/textures/tex_floor_colosseum.jpg', import.meta.url).href;
+const TEX_CHAMBER_URL = new URL('../assets/textures/tex_floor_chamber.jpg', import.meta.url).href;
+const TEX_OBSERVATORY_URL = new URL('../assets/textures/tex_floor_observatory.jpg', import.meta.url).href;
+const TEX_CATACOMBS_URL = new URL('../assets/textures/tex_floor_catacombs.jpg', import.meta.url).href;
+const VFX_RUNE_RING_URL = new URL('../assets/vfx/vfx_arcane_rune_ring.jpg', import.meta.url).href;
+const VFX_PORTAL_VORTEX_URL = new URL('../assets/vfx/vfx_sheet_portal_vortex.jpg', import.meta.url).href;
 
-// Procedural Texture Generators for Discworld / Hogwarts / Pokemon aesthetic
-function getCobblestoneTexture(): THREE.CanvasTexture {
-  if (CACHED_COBBLESTONE_TEX) return CACHED_COBBLESTONE_TEX;
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
+const arenaTextureLoader = new THREE.TextureLoader();
+const TEXTURE_CACHE = new Map<string, THREE.Texture>();
 
-  ctx.fillStyle = '#2b2520';
-  ctx.fillRect(0, 0, 512, 512);
-
-  const cols = 8;
-  const rows = 8;
-  const cellW = 512 / cols;
-  const cellH = 512 / rows;
-
-  for (let r = 0; r < rows; r++) {
-    const xOffset = (r % 2) * (cellW * 0.5);
-    for (let c = -1; c <= cols; c++) {
-      const x = c * cellW + xOffset + 3;
-      const y = r * cellH + 3;
-      const w = cellW - 6;
-      const h = cellH - 6;
-
-      const seed = Math.sin(r * 12.9898 + c * 78.233) * 43758.5453;
-      const noise = seed - Math.floor(seed);
-      const baseVal = 58 + Math.floor(noise * 24);
-
-      ctx.fillStyle = `rgb(${baseVal + 12}, ${baseVal + 6}, ${baseVal})`;
-      ctx.beginPath();
-      ctx.roundRect(x, y, w, h, 6);
-      ctx.fill();
-
-      // Top-left stone bevel highlight
-      ctx.strokeStyle = 'rgba(255, 230, 190, 0.15)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
+function loadStylizedTexture(url: string, repeatX = 4, repeatY = 4): THREE.Texture {
+  const cacheKey = `${url}_${repeatX}_${repeatY}`;
+  let tex = TEXTURE_CACHE.get(cacheKey);
+  if (!tex) {
+    tex = arenaTextureLoader.load(url);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeatX, repeatY);
+    TEXTURE_CACHE.set(cacheKey, tex);
   }
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
-  CACHED_COBBLESTONE_TEX = tex;
-  return tex;
-}
-
-function getParquetTexture(): THREE.CanvasTexture {
-  if (CACHED_PARQUET_TEX) return CACHED_PARQUET_TEX;
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-
-  ctx.fillStyle = '#1c1008';
-  ctx.fillRect(0, 0, 512, 512);
-
-  const tiles = 8;
-  const size = 512 / tiles;
-
-  for (let r = 0; r < tiles; r++) {
-    for (let c = 0; c < tiles; c++) {
-      const isAlt = (r + c) % 2 === 0;
-      ctx.fillStyle = isAlt ? '#3a2214' : '#4a2c1a';
-      ctx.fillRect(c * size + 2, r * size + 2, size - 4, size - 4);
-
-      // Gold inlay lines
-      ctx.strokeStyle = 'rgba(212, 160, 32, 0.28)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(c * size + 5, r * size + 5, size - 10, size - 10);
-    }
-  }
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
-  CACHED_PARQUET_TEX = tex;
   return tex;
 }
 
@@ -228,94 +163,6 @@ function getStoneWallTexture(): THREE.CanvasTexture {
   tex.wrapS = THREE.RepeatWrapping;
   tex.wrapT = THREE.RepeatWrapping;
   CACHED_STONEWALL_TEX = tex;
-  return tex;
-}
-
-function getObservatoryFloorTexture(): THREE.CanvasTexture {
-  if (CACHED_OBSERVATORY_TEX) return CACHED_OBSERVATORY_TEX;
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-
-  // Dark obsidian starfield background
-  ctx.fillStyle = '#0a0d18';
-  ctx.fillRect(0, 0, 512, 512);
-
-  // Celestial gold concentric rings
-  ctx.strokeStyle = 'rgba(212, 160, 32, 0.28)';
-  ctx.lineWidth = 3;
-  [80, 160, 240].forEach(r => {
-    ctx.beginPath();
-    ctx.arc(256, 256, r, 0, Math.PI * 2);
-    ctx.stroke();
-  });
-
-  // Astrolabe radiating lines
-  for (let i = 0; i < 12; i++) {
-    const a = (i * Math.PI) / 6;
-    ctx.beginPath();
-    ctx.moveTo(256, 256);
-    ctx.lineTo(256 + Math.cos(a) * 250, 256 + Math.sin(a) * 250);
-    ctx.stroke();
-  }
-
-  // Constellation stars
-  ctx.fillStyle = '#ffffff';
-  for (let s = 0; s < 45; s++) {
-    const sx = (Math.sin(s * 73.1) * 0.5 + 0.5) * 512;
-    const sy = (Math.cos(s * 91.7) * 0.5 + 0.5) * 512;
-    const sr = (s % 3 === 0) ? 2.5 : 1.5;
-    ctx.beginPath();
-    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(3, 3);
-  CACHED_OBSERVATORY_TEX = tex;
-  return tex;
-}
-
-function getCatacombsFloorTexture(): THREE.CanvasTexture {
-  if (CACHED_CATACOMBS_TEX) return CACHED_CATACOMBS_TEX;
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 512;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return new THREE.CanvasTexture(canvas);
-
-  // Weathered damp mossy dungeon flagstones
-  ctx.fillStyle = '#161a15';
-  ctx.fillRect(0, 0, 512, 512);
-
-  const tileSize = 64;
-  for (let y = 0; y < 512; y += tileSize) {
-    for (let x = 0; x < 512; x += tileSize) {
-      const seed = Math.sin(x * 12.3 + y * 45.6) * 1000;
-      const n = seed - Math.floor(seed);
-      const val = 30 + Math.floor(n * 22);
-
-      // Flagstone color with subtle moss tint
-      ctx.fillStyle = `rgb(${val - 5}, ${val + 12}, ${val})`;
-      ctx.fillRect(x + 2, y + 2, tileSize - 4, tileSize - 4);
-
-      // Emerald moss patches in corners
-      if (n > 0.6) {
-        ctx.fillStyle = 'rgba(30, 140, 60, 0.25)';
-        ctx.fillRect(x + 4, y + 4, 18, 18);
-      }
-    }
-  }
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(4, 4);
-  CACHED_CATACOMBS_TEX = tex;
   return tex;
 }
 
@@ -369,30 +216,37 @@ export class Arena {
       metalness: 0.1
     });
 
-    // Map-specific floor material
+    // Map-specific stylized hand-painted floor material
     if (mapType === 'CHAMBER') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: getParquetTexture(),
-        roughness: 0.45,
-        metalness: 0.1
+        map: loadStylizedTexture(TEX_CHAMBER_URL, 4, 4),
+        roughness: 0.65,
+        metalness: 0.15
       });
     } else if (mapType === 'OBSERVATORY') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: getObservatoryFloorTexture(),
+        map: loadStylizedTexture(TEX_OBSERVATORY_URL, 3, 3),
         roughness: 0.35,
-        metalness: 0.2
+        metalness: 0.25
+      });
+    } else if (mapType === 'COLOSSEUM') {
+      this.floorMaterial = new THREE.MeshStandardMaterial({
+        map: loadStylizedTexture(TEX_COLOSSEUM_URL, 5, 5),
+        roughness: 0.45,
+        metalness: 0.35
       });
     } else if (mapType === 'CATACOMBS') {
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: getCatacombsFloorTexture(),
-        roughness: 0.85,
-        metalness: 0.05
+        map: loadStylizedTexture(TEX_CATACOMBS_URL, 4, 4),
+        roughness: 0.55,
+        metalness: 0.2
       });
     } else {
+      // Unseen Courtyard (ARENA)
       this.floorMaterial = new THREE.MeshStandardMaterial({
-        map: getCobblestoneTexture(),
-        roughness: 0.8,
-        metalness: 0.05
+        map: loadStylizedTexture(TEX_COURTYARD_URL, 5, 5),
+        roughness: 0.75,
+        metalness: 0.1
       });
     }
 
@@ -910,26 +764,34 @@ export class Arena {
     const group = new THREE.Group();
     group.position.set(x, 0.03, y);
 
-    const ringGeo = new THREE.RingGeometry(0.55, 1.05, 24);
+    const vortexTex = loadStylizedTexture(VFX_PORTAL_VORTEX_URL, 1, 1);
+    const ringTex = loadStylizedTexture(VFX_RUNE_RING_URL, 1, 1);
+
+    const ringGeo = new THREE.PlaneGeometry(2.2, 2.2);
     const ringMat = new THREE.MeshBasicMaterial({
+      map: ringTex,
       color: 0x9933ff,
       side: THREE.DoubleSide,
       transparent: true,
+      blending: THREE.AdditiveBlending,
       opacity: 0.85
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
     ring.rotation.x = -Math.PI / 2;
     group.add(ring);
 
-    const innerGeo = new THREE.CircleGeometry(0.5, 16);
+    const innerGeo = new THREE.PlaneGeometry(1.4, 1.4);
     const innerMat = new THREE.MeshBasicMaterial({
+      map: vortexTex,
       color: 0xdd88ff,
       side: THREE.DoubleSide,
       transparent: true,
-      opacity: 0.7
+      blending: THREE.AdditiveBlending,
+      opacity: 0.9
     });
     const inner = new THREE.Mesh(innerGeo, innerMat);
     inner.rotation.x = -Math.PI / 2;
+    inner.name = 'portal_inner_disc';
     group.add(inner);
 
     this.arenaGroup.add(group);
@@ -1023,13 +885,16 @@ export class Arena {
       base.position.y = 0.04;
       padGroup.add(base);
 
-      // Glowing Runic Dial
-      const padGeo = new THREE.RingGeometry(pad.radius * 0.45, pad.radius * 0.9, 32);
+      // Glowing Runic Dial with Arcane Sigil Decal
+      const runeTex = loadStylizedTexture(VFX_RUNE_RING_URL, 1, 1);
+      const padGeo = new THREE.PlaneGeometry(pad.radius * 2, pad.radius * 2);
       const padMat = new THREE.MeshBasicMaterial({
+        map: runeTex,
         color: PALETTE.jumpPad,
         side: THREE.DoubleSide,
         transparent: true,
-        opacity: 0.8
+        blending: THREE.AdditiveBlending,
+        opacity: 0.95
       });
       const padMesh = new THREE.Mesh(padGeo, padMat);
       padMesh.rotation.x = -Math.PI / 2;
