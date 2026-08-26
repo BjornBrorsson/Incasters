@@ -25,22 +25,22 @@ npm run dev
 # 3. Compile TypeScript & build production assets
 npm run build
 
-# 4. Run full test suite (Unit tests + 10-module Publisher Certification Suite)
+# 4. Run full test suite (Unit tests + 10-module Automated Quality Assurance Suite)
 npm test
 
 # 5. Run only Node TS unit tests (Physics, Progression, AI Difficulty, Trials, Networking)
 npm run test:unit
 
-# 6. Run headless Publisher Certification & Performance Suite (Full 10 modules + 60fps benchmark)
+# 6. Run headless Automated Quality Assurance Suite (Full 10 modules + 60fps benchmark)
 npm run test:cert
 
 # 7. Start the LAN multiplayer WebSocket server (port 7070)
 npm run lan-server
 ```
 
-## Automated Publisher Certification & Testing Architecture
+## Automated Quality Assurance & Testing Architecture
 
-Incasters features a publisher-grade testing architecture composed of two complementary layers:
+Incasters features a comprehensive testing architecture composed of two complementary layers:
 
 ### 1. Isolated Unit Test Suite (`test/unit/` - `npm run test:unit`)
 - Fast TypeScript/Node unit test runners verifying mathematical invariants, entity schemas, and core game logic in isolation without browser overhead:
@@ -51,8 +51,8 @@ Incasters features a publisher-grade testing architecture composed of two comple
   - `character-config.test.ts`: Robes, hats, bursts, weapons catalog validation and local storage schema resilience.
   - `networking.test.ts`: Room code generation, sanitization, and P2P peer descriptors.
 
-### 2. Publisher Certification & Compliance Suite (`test/cert/` - `npm run test:cert`)
-A 10-module headless certification runner (`test/cert/certification-suite.js`) using `puppeteer-core` with cross-platform Chrome/Chromium discovery (`test/cert/browser-launcher.js`) and software WebGL (SwiftShader):
+### 2. Automated Quality Assurance Suite (`test/cert/` - `npm run test:cert`)
+A 10-module headless quality assurance runner (`test/cert/certification-suite.js`) using `puppeteer-core` with cross-platform Chrome/Chromium discovery (`test/cert/browser-launcher.js`) and software WebGL (SwiftShader):
 - **Module 1 - Cold Boot & Assets:** Measures cold start boot time, verifies Web Audio synth initialization, and guarantees 0 network 404s.
 - **Module 2 - UI & Modals:** Tests all sub-modal open/close cycles (Shop, Trials, Challenges, Multiplayer) and ensures mobile touch HUD controls are hidden in menus.
 - **Module 3 - Game Modes:** End-to-end simulation across Battle Royale (shrinking storm + spectator mode), Team Battle (4v4 scoring + respawns), Gold Rush (coin spawning & vault banking), King of the Cauldron (zone capture & hill points), and all 11 Trickshot Trial stages.

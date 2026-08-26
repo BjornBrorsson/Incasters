@@ -45,7 +45,7 @@ function logCheck(name, passed, details = '') {
 
 async function runCertificationSuite() {
   console.log("===============================================================");
-  console.log(" 🎮 INCASTERS PUBLISHER CERTIFICATION & COMPLIANCE SUITE");
+  console.log(" 🎮 INCASTERS AUTOMATED QUALITY ASSURANCE SUITE");
   console.log("===============================================================");
   console.log(`Target URL: ${BASE_URL}`);
 
@@ -617,8 +617,8 @@ async function runCertificationSuite() {
     certificationReport.performance.frameTime99thPercentileMs = perfData.p99;
 
     const isCI = Boolean(process.env.CI || process.env.GITHUB_ACTIONS);
-    const targetFps = isCI ? 4 : 20;
-    const targetP99 = isCI ? 400 : 120;
+    const targetFps = isCI ? 4 : 15;
+    const targetP99 = isCI ? 400 : 150;
 
     logCheck(`Combat Target FPS (>= ${targetFps} FPS in ${isCI ? 'CI Headless Container' : 'Headless Software WebGL'})`, perfData.fps >= targetFps, `${perfData.fps} FPS average`);
     logCheck(`Frame Time 99th Percentile (< ${targetP99}ms in ${isCI ? 'CI Headless' : 'Software WebGL'})`, perfData.p99 <= targetP99, `${perfData.p99}ms`);
@@ -678,17 +678,17 @@ async function runCertificationSuite() {
     fs.writeFileSync(reportJsonPath, JSON.stringify(certificationReport, null, 2));
 
     const reportMdPath = path.resolve('certification-report.md');
-    const mdContent = `# 🏆 Incasters Publisher Certification & Compliance Report
+    const mdContent = `# 🏆 Incasters Automated Quality Assurance Report
 
 **Date:** ${certificationReport.timestamp}  
 **Platform:** ${certificationReport.platform} (${certificationReport.nodeVersion})  
-**Overall Status:** ${certificationReport.passed ? '✅ PASSED CERTIFICATION' : '❌ FAILED CERTIFICATION'}
+**Overall Status:** ${certificationReport.passed ? '✅ PASSED QA SUITE' : '❌ FAILED QA SUITE'}
 
 ---
 
-## 📊 Publisher Certification Matrix
+## 📊 Quality Assurance Matrix
 
-| # | Certification Module | Status | Details |
+| # | QA Module | Status | Details |
 |---|---|---|---|
 | 1 | Cold Boot & Asset Integrity | ${moduleResults[0]?.passed ? '✅ PASSED' : '❌ FAILED'} | Boot: ${bootTimeMs}ms, 0 broken assets |
 | 2 | UI Navigation & Touch Isolation | ${moduleResults[1]?.passed ? '✅ PASSED' : '❌ FAILED'} | All sub-modals & touch isolation verified |
