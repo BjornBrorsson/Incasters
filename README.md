@@ -1,7 +1,5 @@
 # 🧙‍♂️ Incasters
 
-[![Play in Browser](https://img.shields.io/badge/🎮%20Play%20in%20Browser-incasters.web.app-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white)](https://incasters.web.app)
-
 [![Build & Release Android + Windows + Firebase](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
 [![Firebase Hosting](https://img.shields.io/badge/Firebase%20Hosting-Live-orange.svg?logo=firebase&logoColor=white)](https://incasters.web.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -11,7 +9,8 @@
 
 > **Incasters** is a fast-paced isometric arena battler and curved-shot shooter inspired by the trick-shot combat of *Outcasters*. Battle against bots, local friends over LAN, or online players worldwide using serverless WebRTC room codes!
 >
-> 🚀 **Instant Play:** Jump straight into the action in your browser at **[https://incasters.web.app](https://incasters.web.app)** with full touch, gamepad, and mouse+keyboard support!
+> [![Play Now in Browser](https://img.shields.io/badge/🎮%20PLAY%20NOW%20IN%20BROWSER-incasters.web.app-00E676?style=for-the-badge&logo=googlechrome&logoColor=white&labelColor=111827)](https://incasters.web.app)  
+> *Instant play with full touch, gamepad, and mouse+keyboard support — Try it out! Or download a local build, for Windows or Android from the Github Releases*
 
 ---
 
