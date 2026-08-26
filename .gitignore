@@ -34,3 +34,10 @@ android/app/build/
 
 # Windows release output
 release/
+
+# Sound effects generation prompts (ElevenLabs)
+sfx_prompts.*
+sfx/
+
+# Firebase CLI cache
+.firebase/
