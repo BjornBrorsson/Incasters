@@ -15,7 +15,9 @@
     "test": "npm run test:unit && npm run test:cert",
     "test:unit": "tsx --test test/unit/*.test.ts",
     "test:cert": "npm run build && node test/cert/certification-suite.js",
-    "test:perf": "npm run build && node test/cert/certification-suite.js --perf-only"
+    "test:perf": "npm run build && node test/cert/certification-suite.js --perf-only",
+    "deploy:hosting": "npm run build && npx -y firebase-tools@latest deploy --only hosting",
+    "serve:hosting": "npm run build && npx -y firebase-tools@latest emulators:start --only hosting"
   },
   "devDependencies": {
     "@types/three": "^0.184.1",
