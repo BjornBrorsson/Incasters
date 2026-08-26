@@ -67,7 +67,7 @@ A 10-module headless quality assurance runner (`test/cert/certification-suite.js
 Outputs structured reports to `certification-report.json`, `certification-report.md`, and visual proof screenshots in `screenshots/cert/`.
 
 ### 3. GitHub Actions CI/CD Quality Gate
-Every push to `main`, pull request, or release tag runs `certification-quality-gate` on `ubuntu-latest` before any Android APK or Windows portable EXE builds are triggered. A failure in any unit test or certification module instantly halts the pipeline, preventing broken releases.
+Every push to `main`, pull request, or release tag runs `certification-quality-gate` on `ubuntu-latest` before any Android APK, Windows portable EXE, or Firebase Web builds are triggered. A failure in any unit test or certification module instantly halts the pipeline, preventing broken releases.
 
 ---
 
@@ -85,7 +85,7 @@ Every push to `main`, pull request, or release tag runs `certification-quality-g
 - `src/game/Difficulty.ts`: Four difficulty presets (Easy/Normal/Hard/Insane) that tune bot AI parameters. Persisted to `localStorage`.
 - `src/net/LanClient.ts`: WebSocket client and lightweight state renderer for LAN multiplayer. Includes `ClientGameRenderer` for client-side rendering without local simulation.
 - `server/lan-server.js`: Standalone WebSocket server for LAN multiplayer matchmaking and message routing.
-- `.github/workflows/build-apk.yml`: Automated CI/CD GitHub Actions workflow building and publishing Android APKs on push to main or release tags.
+- `.github/workflows/build-apk.yml`: Automated CI/CD GitHub Actions workflow running tests/certification and building/releasing Android APK, Windows EXE, and Firebase Web Hosting builds on push to main or release tags.
 
 ## Security & Game-Feel Notes
 - **Isometric Aiming & Movement Parity:** Screen-space touch joysticks, keyboard WASD, and gamepad sticks are transformed into isometric simulation coordinates via `screenToWorldIso()`, eliminating the 45° rotation offset and making controls directly track what players see on their screens.

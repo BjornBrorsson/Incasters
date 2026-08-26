@@ -2,7 +2,7 @@
 
 [![Play in Browser](https://img.shields.io/badge/🎮%20Play%20in%20Browser-incasters.web.app-brightgreen?style=for-the-badge&logo=googlechrome&logoColor=white)](https://incasters.web.app)
 
-[![Build & Release Android + Windows](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
+[![Build & Release Android + Windows + Firebase](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
 [![Firebase Hosting](https://img.shields.io/badge/Firebase%20Hosting-Live-orange.svg?logo=firebase&logoColor=white)](https://incasters.web.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
@@ -112,7 +112,7 @@ Four difficulty presets that tune aim error, prediction, dodging reflexes, and p
 - **Mobile Shell:** [Capacitor](https://capacitorjs.com/) for native Android packaging.
 - **Desktop Shell:** [Electron](https://www.electronjs.org/) for the portable Windows build.
 - **Automated Testing:** Headless E2E gametest suite using [Puppeteer Core](https://pptr.dev/).
-- **CI/CD:** Parallel GitHub Actions builds publish the Windows EXE and Android APK to the same release post.
+- **CI/CD & Hosting:** Parallel GitHub Actions builds publish the Windows EXE, Android APK, and offline Web bundle to the GitHub Release, and automatically deploy the web client live to [Firebase Hosting](https://incasters.web.app).
 
 ---
 
@@ -135,10 +135,14 @@ npm run dev
 ```
 Open your browser at `http://localhost:5173/` to start playing immediately.
 
-### 3. Production Web Build
+### 3. Production Web Build & Firebase Deploy
 ```bash
+# Build production web bundle to dist/
 npm run build
 npm run preview
+
+# Deploy manually to Firebase Hosting
+npm run deploy:hosting
 ```
 
 ### 4. Run the LAN Multiplayer Server
@@ -155,9 +159,9 @@ node test-game.js
 
 ---
 
-## � Android & Windows Release Builds
+## 📦 Android, Windows & Firebase Release Builds
 
-The repository includes an automated GitHub Actions CI/CD workflow that compiles and publishes both the **Android APK** and the **Windows portable EXE** to the same GitHub Release on every push to `main` or tag creation.
+The repository includes an automated GitHub Actions CI/CD workflow that compiles and publishes the **Android APK**, the **Windows portable EXE**, and the **Web Distribution ZIP** to the same GitHub Release on every push to `main` or tag creation, while automatically deploying the live web build to **Firebase Hosting**.
 
 ### Download Prebuilt Binaries
 
@@ -166,6 +170,8 @@ The repository includes an automated GitHub Actions CI/CD workflow that compiles
 3. Download the assets you need:
    - `Incasters-Android.apk` — install on any Android device.
    - `Incasters-Windows-x64.exe` — portable Windows x64 executable; no installation required.
+   - `Incasters-Web.zip` — static web bundle for offline play or custom web hosting.
+   - Or play directly online at [https://incasters.web.app](https://incasters.web.app).
 
 > **Windows SmartScreen note:** The Windows build is currently unsigned, so Windows Defender / SmartScreen may show a warning the first time you run it. Choose **More info → Run anyway** to start the game.
 
