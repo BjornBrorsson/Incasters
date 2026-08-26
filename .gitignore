@@ -35,9 +35,13 @@ android/app/build/
 # Windows release output
 release/
 
-# Sound effects generation prompts (ElevenLabs)
+# Asset generation prompts (SFX, VFX, Images)
 sfx_prompts.*
+vfx_prompts.*
+image_prompts.*
 /sfx/
+/vfx/
+/assets_gen/
 
 # Firebase CLI cache
 .firebase/
