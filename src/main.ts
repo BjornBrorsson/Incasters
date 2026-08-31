@@ -29,6 +29,23 @@ import { loadGraphicsQuality, saveGraphicsQuality, type GraphicsQuality } from '
 import { LanClient, ClientGameRenderer, type GameStateSnapshot, type NetPlayerInfo, type PlayerInputState } from './net/LanClient';
 import { P2PClient, cleanRoomCode } from './net/P2PClient';
 import { TRIAL_STAGES } from './game/Trials';
+import { ChallengeEditor, type EditorTool } from './editor/ChallengeEditor';
+import {
+  type CustomMapData,
+  CustomMapStorage,
+  MAP_TEMPLATES,
+  sanitizeCustomMap,
+  validateCustomMap,
+  createPerimeterWalls
+} from './game/CustomMap';
+import {
+  decodeStateShare,
+  generateShareUrl,
+  generateShareCode,
+  parseStateShareFromUrl,
+  shareCustomMap,
+  resolveShareCode
+} from './game/StateShare';
 import {
   getAudioSettings,
   music,
@@ -508,7 +525,11 @@ document.addEventListener('DOMContentLoaded', () => {
       'progress-modal',
       'trials-modal',
       'trial-result-modal',
-      'match-menu-modal'
+      'match-menu-modal',
+      'editor-overlay',
+      'state-share-modal',
+      'clear-check-result-modal',
+      'custom-maps-modal'
     ];
     modalIds.forEach((id) => {
       const el = document.getElementById(id);
@@ -1145,11 +1166,12 @@ document.addEventListener('DOMContentLoaded', () => {
       const matchMap = (config.map || selectedMap) as MapType;
       const matchPlayerCount = config.playerCount || selectedPlayerCount;
       const matchDifficulty = (config.difficulty || selectedDifficulty) as DifficultyLevel;
+      const customMap = config.customMap as CustomMapData | undefined;
 
       if (client.isHost) {
-        startNetHostGame(client, matchMode, matchMap, matchPlayerCount, matchDifficulty);
+        startNetHostGame(client, matchMode, matchMap, matchPlayerCount, matchDifficulty, customMap);
       } else {
-        startNetClientGame(client, matchMode, matchMap);
+        startNetClientGame(client, matchMode, matchMap, customMap);
       }
     });
 
@@ -1189,7 +1211,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function startNetHostGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel) {
+  function startNetHostGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType, playerCount: number, difficulty: DifficultyLevel, customMap?: CustomMapData) {
     closeAllModals();
     if (menuScreen) menuScreen.style.display = 'none';
     if (hudContainer) hudContainer.style.display = 'block';
@@ -1206,6 +1228,10 @@ document.addEventListener('DOMContentLoaded', () => {
     );
     game.netMode = 'host';
     wireGameCallbacks(game);
+
+    if (customMap) {
+      game.loadCustomMap(customMap, false);
+    }
 
     const playersList = client instanceof P2PClient ? p2pPlayers : lanPlayers;
     playersList.forEach((p) => {
@@ -1232,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType) {
+  function startNetClientGame(client: LanClient | P2PClient, mode: GameModeType, map: MapType, customMap?: CustomMapData) {
     closeAllModals();
     if (menuScreen) menuScreen.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
@@ -1245,7 +1271,7 @@ document.addEventListener('DOMContentLoaded', () => {
       lanRenderer = null;
     }
 
-    lanRenderer = new ClientGameRenderer(gameContainer, map, mode);
+    lanRenderer = new ClientGameRenderer(gameContainer, map, mode, customMap);
     lanRenderer.setLocalPlayerId(client.playerId);
     lanRenderer.onSendInput = (input: PlayerInputState) => {
       client.sendInput(input);
@@ -1676,6 +1702,37 @@ document.addEventListener('DOMContentLoaded', () => {
 
       trialsStagesList.appendChild(card);
     });
+
+    // Custom Maps & State Share section inside Trials
+    const customMaps = CustomMapStorage.getAll();
+    if (customMaps.length > 0) {
+      customMaps.forEach((map) => {
+        const card = document.createElement('div');
+        card.className = 'trial-stage-card unlocked custom-trial-card';
+        card.style.borderColor = 'rgba(0, 245, 160, 0.4)';
+
+        card.innerHTML = `
+          <div class="trial-card-top">
+            <span class="trial-card-title">🛠️ ${map.title}</span>
+            <span class="trial-card-stars">${map.clearCheck?.completed ? '✅ Verified' : '🔒 Unverified'}</span>
+          </div>
+          <div class="trial-card-desc">by ${map.author} • Par: ${map.parTime}s / ${map.maxShots} max shots</div>
+          <div class="trial-card-footer">
+            <span class="trial-card-best">${map.theme} • ${map.mode}</span>
+            <button class="trial-launch-btn custom-play-btn">Play</button>
+          </div>
+        `;
+
+        const playBtn = card.querySelector('.custom-play-btn');
+        playBtn?.addEventListener('click', (e) => {
+          e.stopPropagation();
+          launchCustomMap(map, false);
+        });
+
+        card.addEventListener('click', () => launchCustomMap(map, false));
+        trialsStagesList.appendChild(card);
+      });
+    }
   }
 
   function launchTrial(stageId: number) {
@@ -1744,6 +1801,451 @@ document.addEventListener('DOMContentLoaded', () => {
       if (game === activeGame) activeGame.startGame();
     });
   }
+
+  // ── CHALLENGE EDITOR & STATE SHARE SYSTEM ──
+  let activeEditor: ChallengeEditor | null = null;
+  let activeCustomMap: CustomMapData | null = null;
+
+  function openChallengeEditor(customMapToEdit?: CustomMapData) {
+    closeAllModals();
+    cancelPregameCountdown();
+    hideGlobalTouchControls();
+
+    if (hudContainer) hudContainer.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+
+    const editorOverlay = document.getElementById('editor-overlay');
+    if (editorOverlay) editorOverlay.style.display = 'flex';
+
+    const mapToLoad = customMapToEdit ? sanitizeCustomMap(customMapToEdit) : MAP_TEMPLATES.BLANK_COURTYARD();
+    activeCustomMap = mapToLoad;
+
+    if (activeEditor) {
+      activeEditor.destroy();
+      activeEditor = null;
+    }
+
+    const titleInput = document.getElementById('editor-map-title') as HTMLInputElement | null;
+    const authorInput = document.getElementById('editor-map-author') as HTMLInputElement | null;
+    const themeSelect = document.getElementById('editor-map-theme') as HTMLSelectElement | null;
+    const modeSelect = document.getElementById('editor-map-mode') as HTMLSelectElement | null;
+    const parTimeInput = document.getElementById('editor-par-time') as HTMLInputElement | null;
+    const parShotsInput = document.getElementById('editor-par-shots') as HTMLInputElement | null;
+    const verificationBadge = document.getElementById('editor-verification-badge');
+    const verificationText = document.getElementById('editor-verification-text');
+
+    if (titleInput) titleInput.value = mapToLoad.title;
+    if (authorInput) authorInput.value = mapToLoad.author;
+    if (themeSelect) themeSelect.value = mapToLoad.theme;
+    if (modeSelect) modeSelect.value = mapToLoad.mode;
+    if (parTimeInput) parTimeInput.value = String(mapToLoad.parTime || 12);
+    if (parShotsInput) parShotsInput.value = String(mapToLoad.maxShots || 3);
+
+    const updateVerificationUI = (isVerified: boolean, time = 0, shots = 0) => {
+      if (verificationBadge && verificationText) {
+        if (isVerified) {
+          verificationBadge.className = 'editor-verification-badge verified';
+          verificationText.innerText = `Verified (${time.toFixed(1)}s, ${shots} shots)`;
+        } else {
+          verificationBadge.className = 'editor-verification-badge unverified';
+          verificationText.innerText = 'Clear Check Required to Share';
+        }
+      }
+    };
+
+    updateVerificationUI(
+      Boolean(mapToLoad.clearCheck?.completed),
+      mapToLoad.clearCheck?.clearTime,
+      mapToLoad.clearCheck?.clearShots
+    );
+
+    activeEditor = new ChallengeEditor(gameContainer, mapToLoad, {
+      onMapModified: (updated) => {
+        activeCustomMap = updated;
+        if (activeCustomMap.clearCheck?.completed) {
+          activeCustomMap.clearCheck = undefined;
+          updateVerificationUI(false);
+        }
+      }
+    });
+
+    // Top inputs
+    titleInput?.addEventListener('input', () => {
+      if (activeCustomMap) activeCustomMap.title = titleInput.value;
+    });
+    authorInput?.addEventListener('input', () => {
+      if (activeCustomMap) activeCustomMap.author = authorInput.value;
+    });
+    themeSelect?.addEventListener('change', () => {
+      if (activeEditor && activeCustomMap) {
+        activeEditor.setTheme(themeSelect.value as MapType);
+      }
+    });
+    modeSelect?.addEventListener('change', () => {
+      if (activeCustomMap) activeCustomMap.mode = modeSelect.value as any;
+    });
+    parTimeInput?.addEventListener('input', () => {
+      if (activeCustomMap) activeCustomMap.parTime = parseFloat(parTimeInput.value) || 12;
+    });
+    parShotsInput?.addEventListener('input', () => {
+      if (activeCustomMap) activeCustomMap.maxShots = parseInt(parShotsInput.value) || 3;
+    });
+  }
+
+  function launchCustomMap(mapData: CustomMapData, isClearCheck: boolean = false) {
+    closeAllModals();
+    cancelPregameCountdown();
+
+    if (trialsModal) trialsModal.style.display = 'none';
+    if (trialResultModal) trialResultModal.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'none';
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'block';
+
+    if (activeEditor) {
+      activeEditor.destroy();
+      activeEditor = null;
+    }
+
+    if (game) {
+      game.cleanup();
+    }
+
+    const mode = mapData.mode === 'TRIAL' ? 'BATTLE_ROYALE' : (mapData.mode as GameModeType);
+    game = new Game(
+      gameContainer,
+      mode,
+      characterConfig.robeColor,
+      characterConfig.spellColor,
+      mapData.theme,
+      1,
+      { ...characterConfig },
+      selectedDifficulty
+    );
+    (window as any).game = game;
+    game.controlMode = selectedControl;
+
+    const trialHud = document.getElementById('trial-hud');
+    const trialHudTitle = document.getElementById('trial-hud-title');
+    const trialHudTargets = document.getElementById('trial-hud-targets');
+    const trialHudPar = document.getElementById('trial-hud-par');
+    const trialHudParShots = document.getElementById('trial-hud-par-shots');
+
+    if (mapData.mode === 'TRIAL') {
+      if (trialHud) trialHud.style.display = 'block';
+      if (trialHudTitle) trialHudTitle.innerText = mapData.title;
+      if (trialHudTargets) trialHudTargets.innerText = `🎯 ${mapData.dummies?.length || 1} Targets`;
+      if (trialHudPar) trialHudPar.innerText = `${mapData.parTime.toFixed(1)}s`;
+      if (trialHudParShots) trialHudParShots.innerText = `${mapData.maxShots} max`;
+    } else {
+      if (trialHud) trialHud.style.display = 'none';
+    }
+
+    game.onClearCheckCompleted = (record) => {
+      hideGlobalTouchControls();
+      mapData.clearCheck = record;
+      CustomMapStorage.save(mapData);
+
+      const clearModal = document.getElementById('clear-check-result-modal');
+      const timeVal = document.getElementById('clear-time-val');
+      const shotsVal = document.getElementById('clear-shots-val');
+      const codeVal = document.getElementById('clear-share-code');
+      const shareUrlBtn = document.getElementById('btn-copy-share-url');
+      const webShareBtn = document.getElementById('btn-web-share');
+      const toast = document.getElementById('share-copy-toast');
+
+      const shortCode = generateShareCode(mapData);
+
+      if (clearModal) {
+        clearModal.style.display = 'flex';
+        sfx.playTrial3StarFanfare();
+        if (timeVal) timeVal.innerText = `${record.clearTime.toFixed(1)}s`;
+        if (shotsVal) shotsVal.innerText = `${record.clearShots}`;
+        if (codeVal) codeVal.innerText = shortCode;
+
+        if (shareUrlBtn) {
+          shareUrlBtn.onclick = async () => {
+            const res = await shareCustomMap(mapData);
+            if (toast) {
+              toast.innerText = res.message;
+              toast.style.display = 'block';
+              setTimeout(() => { toast.style.display = 'none'; }, 3500);
+            }
+          };
+        }
+
+        if (webShareBtn) {
+          webShareBtn.onclick = async () => {
+            const res = await shareCustomMap(mapData);
+            if (toast && res.method !== 'web-share') {
+              toast.innerText = res.message;
+              toast.style.display = 'block';
+              setTimeout(() => { toast.style.display = 'none'; }, 3500);
+            }
+          };
+        }
+      }
+    };
+
+    game.onCustomMapCompleted = (res) => {
+      if (isClearCheck) return;
+
+      hideGlobalTouchControls();
+      refreshBadge();
+      renderChallenges();
+      renderFeats();
+
+      const trialResultModal = document.getElementById('trial-result-modal');
+      if (trialResultModal) {
+        trialResultModal.style.display = 'flex';
+        const titleEl = document.getElementById('trial-result-title');
+        const starsEl = document.getElementById('trial-result-stars');
+        const timeEl = document.getElementById('trial-result-time');
+        const shotsEl = document.getElementById('trial-result-shots');
+        const tokensEl = document.getElementById('trial-result-tokens');
+        const nextBtn = document.getElementById('btn-trial-next');
+
+        if (titleEl) titleEl.innerText = res.stars === 3 ? '⭐ PERFECT TRICKSHOT! ⭐' : 'CHALLENGE COMPLETE!';
+        if (starsEl) starsEl.innerText = res.stars === 3 ? '⭐⭐⭐' : res.stars === 2 ? '⭐⭐☆' : '⭐☆☆';
+        if (timeEl) timeEl.innerText = `${res.time.toFixed(1)}s`;
+        if (shotsEl) shotsEl.innerText = `${res.shots}`;
+        if (tokensEl) tokensEl.innerText = `+25 🪙`;
+        if (nextBtn) nextBtn.style.display = 'none';
+      }
+    };
+
+    game.loadCustomMap(mapData, isClearCheck);
+    const activeGame = game;
+    activeGame.tick();
+    void music.startMatch('BATTLE_ROYALE');
+    startPregameCountdown(() => {
+      if (game === activeGame) activeGame.startGame();
+    });
+  }
+
+  function openStateShareModal(mapData: CustomMapData) {
+    const modal = document.getElementById('state-share-modal');
+    if (!modal) return;
+
+    closeAllModals();
+    modal.style.display = 'flex';
+    sfx.playModalOpen();
+
+    const titleEl = document.getElementById('share-modal-title');
+    const authorEl = document.getElementById('share-modal-author');
+    const descEl = document.getElementById('share-modal-desc');
+    const tipEl = document.getElementById('share-modal-tip');
+    const modeTag = document.getElementById('share-tag-mode');
+    const themeTag = document.getElementById('share-tag-theme');
+    const verifiedTag = document.getElementById('share-tag-verified');
+    const timeEl = document.getElementById('share-stat-time');
+    const shotsEl = document.getElementById('share-stat-shots');
+    const recordEl = document.getElementById('share-stat-record');
+
+    if (titleEl) titleEl.innerText = mapData.title;
+    if (authorEl) authorEl.innerText = `Created by ${mapData.author}`;
+    if (descEl) descEl.innerText = mapData.description || 'Custom Incasters trickshot challenge.';
+    if (tipEl) tipEl.innerText = `💡 Tip: ${mapData.tip || 'Curve your shots with precision.'}`;
+    if (modeTag) modeTag.innerText = mapData.mode === 'TRIAL' ? '🎯 Trickshot Trial' : `⚔️ ${mapData.mode.replace(/_/g, ' ')}`;
+    if (themeTag) themeTag.innerText = `🏰 ${mapData.theme}`;
+    if (verifiedTag) {
+      verifiedTag.style.display = mapData.clearCheck?.completed ? 'inline-block' : 'none';
+    }
+    if (timeEl) timeEl.innerText = `${mapData.parTime.toFixed(1)}s`;
+    if (shotsEl) shotsEl.innerText = `${mapData.maxShots}`;
+    if (recordEl) {
+      recordEl.innerText = mapData.clearCheck?.completed
+        ? `${mapData.clearCheck.clearTime.toFixed(1)}s (${mapData.clearCheck.clearShots} shots)`
+        : 'Unverified';
+    }
+
+    const btnPlay = document.getElementById('btn-share-play');
+    const btnHostMp = document.getElementById('btn-share-host-mp');
+    const btnEdit = document.getElementById('btn-share-edit');
+    const btnSave = document.getElementById('btn-share-save');
+    const btnClose = document.getElementById('btn-share-close');
+
+    if (btnPlay) {
+      btnPlay.onclick = () => {
+        modal.style.display = 'none';
+        launchCustomMap(mapData, false);
+      };
+    }
+
+    if (btnHostMp) {
+      btnHostMp.onclick = () => {
+        modal.style.display = 'none';
+        const mpModal = document.getElementById('multiplayer-modal');
+        if (mpModal) mpModal.style.display = 'flex';
+        const hostBtn = document.getElementById('btn-p2p-host');
+        hostBtn?.click();
+      };
+    }
+
+    if (btnEdit) {
+      btnEdit.onclick = () => {
+        modal.style.display = 'none';
+        openChallengeEditor(mapData);
+      };
+    }
+
+    if (btnSave) {
+      btnSave.onclick = () => {
+        CustomMapStorage.save(mapData);
+        btnSave.innerText = '✓ Saved!';
+        setTimeout(() => { btnSave.innerText = '💾 Save to My Maps'; }, 2500);
+      };
+    }
+
+    if (btnClose) {
+      btnClose.onclick = () => {
+        modal.style.display = 'none';
+        sfx.playModalClose();
+      };
+    }
+  }
+
+  // Editor Toolbar action buttons
+  document.getElementById('btn-open-editor')?.addEventListener('click', () => {
+    openChallengeEditor();
+  });
+
+  document.querySelectorAll('.palette-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.palette-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      const tool = btn.getAttribute('data-tool') as EditorTool;
+      if (activeEditor && tool) {
+        activeEditor.setTool(tool);
+      }
+    });
+  });
+
+  document.getElementById('btn-editor-undo')?.addEventListener('click', () => {
+    activeEditor?.undo();
+  });
+  document.getElementById('btn-editor-redo')?.addEventListener('click', () => {
+    activeEditor?.redo();
+  });
+  document.getElementById('btn-editor-clear')?.addEventListener('click', () => {
+    if (activeEditor && activeCustomMap) {
+      activeCustomMap.walls = createPerimeterWalls(activeCustomMap.size.width, activeCustomMap.size.height);
+      activeCustomMap.dummies = [];
+      activeCustomMap.powerups = [];
+      activeCustomMap.portals = [];
+      activeCustomMap.hazards = [];
+      activeCustomMap.movingWalls = [];
+      activeCustomMap.doors = [];
+      activeCustomMap.destructibleProps = [];
+      activeEditor.setMapData(activeCustomMap);
+    }
+  });
+
+  document.getElementById('btn-editor-test')?.addEventListener('click', () => {
+    if (activeCustomMap) {
+      const { valid, errors } = validateCustomMap(activeCustomMap);
+      if (!valid) {
+        alert(`Cannot start Clear Check:\n• ${errors.join('\n• ')}`);
+        return;
+      }
+      launchCustomMap(activeCustomMap, true);
+    }
+  });
+
+  document.getElementById('btn-editor-share')?.addEventListener('click', async () => {
+    if (!activeCustomMap) return;
+    if (!activeCustomMap.clearCheck?.completed) {
+      alert('Clear Check Required!\nYou must beat your challenge from start to finish via "▶ Clear Check" before generating a State Share link.');
+      return;
+    }
+    const res = await shareCustomMap(activeCustomMap);
+    alert(`${res.message}\n\nState Share Link:\n${generateShareUrl(activeCustomMap)}`);
+  });
+
+  document.getElementById('btn-editor-save')?.addEventListener('click', () => {
+    if (activeCustomMap) {
+      CustomMapStorage.save(activeCustomMap);
+      const saveBtn = document.getElementById('btn-editor-save');
+      if (saveBtn) {
+        saveBtn.innerText = '✓ Saved!';
+        setTimeout(() => { saveBtn.innerText = '💾 Save'; }, 2000);
+      }
+    }
+  });
+
+  document.getElementById('btn-editor-exit')?.addEventListener('click', () => {
+    if (activeEditor) {
+      activeEditor.destroy();
+      activeEditor = null;
+    }
+    const editorOverlay = document.getElementById('editor-overlay');
+    if (editorOverlay) editorOverlay.style.display = 'none';
+    if (menuScreen) menuScreen.style.display = 'flex';
+    void music.playMenu();
+  });
+
+  document.getElementById('btn-snap-1')?.addEventListener('click', () => {
+    activeEditor?.setGridSnap(1.0);
+    document.getElementById('btn-snap-1')?.classList.add('active');
+    document.getElementById('btn-snap-05')?.classList.remove('active');
+  });
+  document.getElementById('btn-snap-05')?.addEventListener('click', () => {
+    activeEditor?.setGridSnap(0.5);
+    document.getElementById('btn-snap-05')?.classList.add('active');
+    document.getElementById('btn-snap-1')?.classList.remove('active');
+  });
+
+  document.getElementById('btn-clear-return-editor')?.addEventListener('click', () => {
+    const modal = document.getElementById('clear-check-result-modal');
+    if (modal) modal.style.display = 'none';
+    if (activeCustomMap) openChallengeEditor(activeCustomMap);
+  });
+
+  document.getElementById('btn-clear-menu')?.addEventListener('click', () => {
+    leaveMatchToMenu();
+  });
+
+  // State Share URL detection on page load & hashchange
+  const checkStateShareUrl = () => {
+    const mapFromUrl = parseStateShareFromUrl();
+    if (mapFromUrl) {
+      openStateShareModal(mapFromUrl);
+    }
+  };
+
+  setTimeout(checkStateShareUrl, 200);
+  window.addEventListener('hashchange', checkStateShareUrl);
+
+  // Quick code import in Custom Maps Modal
+  const inputShareCode = document.getElementById('input-share-code') as HTMLInputElement | null;
+  const btnLoadShareCode = document.getElementById('btn-load-share-code');
+  btnLoadShareCode?.addEventListener('click', () => {
+    const raw = inputShareCode?.value.trim() || '';
+    if (!raw) return;
+
+    let map = parseStateShareFromUrl(raw);
+    if (!map) {
+      map = resolveShareCode(raw);
+    }
+    if (!map) {
+      map = decodeStateShare(raw);
+    }
+
+    if (map) {
+      openStateShareModal(map);
+    } else {
+      alert('Could not decode State Share. Please ensure the link or 6-letter code is valid.');
+    }
+  });
 
   openTrialsBtn?.addEventListener('click', () => {
     renderTrialsGrid();

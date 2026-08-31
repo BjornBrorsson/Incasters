@@ -34,6 +34,10 @@
             <span class="submenu-icon">⭐</span>
             <span class="submenu-label">Trials</span>
           </button>
+          <button id="btn-open-editor" class="submenu-btn nav-tab-btn" type="button">
+            <span class="submenu-icon">🛠️</span>
+            <span class="submenu-label">Maker</span>
+          </button>
           <button id="btn-open-multiplayer" class="submenu-btn nav-tab-btn" type="button">
             <span class="submenu-icon">🌐</span>
             <span class="submenu-label">Multiplayer</span>
@@ -426,6 +430,253 @@
             <button id="btn-trial-next" class="lan-action-btn success">Next Trial</button>
             <button id="btn-trial-retry" class="lan-action-btn">Retry</button>
             <button id="btn-trial-menu" class="lan-action-btn danger">Trials Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHALLENGE EDITOR OVERLAY (Mario Maker meets Incasters) -->
+      <div id="editor-overlay" class="editor-overlay" style="display: none;">
+        <!-- Top Toolbar -->
+        <div class="editor-top-bar glass-panel-light">
+          <div class="editor-title-group">
+            <span class="editor-brand-icon">🛠️</span>
+            <input id="editor-map-title" class="editor-input-title" type="text" value="New Trickshot Challenge" maxlength="36" placeholder="Challenge Title..." />
+            <input id="editor-map-author" class="editor-input-author" type="text" value="Wizard Architect" maxlength="24" placeholder="Author Name..." />
+          </div>
+
+          <div class="editor-settings-group">
+            <div class="editor-select-wrapper">
+              <label for="editor-map-theme">Theme</label>
+              <select id="editor-map-theme" class="editor-select">
+                <option value="ARENA">Unseen Courtyard</option>
+                <option value="COLOSSEUM">Dueling Amphitheater</option>
+                <option value="CHAMBER">Forbidden Arcanum</option>
+                <option value="OBSERVATORY">Astral Observatory</option>
+                <option value="CATACOMBS">Alchemist's Undercroft</option>
+              </select>
+            </div>
+
+            <div class="editor-select-wrapper">
+              <label for="editor-map-mode">Mode</label>
+              <select id="editor-map-mode" class="editor-select">
+                <option value="TRIAL">Trickshot Trial</option>
+                <option value="BATTLE_ROYALE">Battle Royale</option>
+                <option value="TEAM_BATTLE">Team Battle</option>
+                <option value="GOLD_RUSH">Gold Rush</option>
+                <option value="KING_OF_THE_CAULDRON">King of Cauldron</option>
+              </select>
+            </div>
+
+            <div class="editor-par-inputs">
+              <div class="editor-input-pill">
+                <span>⏱️ Par</span>
+                <input id="editor-par-time" type="number" min="3" max="180" step="1" value="12" />
+                <span>s</span>
+              </div>
+              <div class="editor-input-pill">
+                <span>🔥 Shots</span>
+                <input id="editor-par-shots" type="number" min="1" max="50" step="1" value="3" />
+              </div>
+            </div>
+          </div>
+
+          <div class="editor-actions-group">
+            <button id="btn-editor-undo" class="editor-tool-btn" title="Undo (Ctrl+Z)">↩️</button>
+            <button id="btn-editor-redo" class="editor-tool-btn" title="Redo (Ctrl+Y)">↪️</button>
+            <button id="btn-editor-clear" class="editor-tool-btn danger" title="Clear Map">🧹</button>
+            <button id="btn-editor-test" class="editor-action-btn primary" title="Test & Verify Challenge">▶ Clear Check</button>
+            <button id="btn-editor-share" class="editor-action-btn share-btn" title="State Share Link">📤 Share</button>
+            <button id="btn-editor-save" class="editor-action-btn success" title="Save to Local Library">💾 Save</button>
+            <button id="btn-editor-exit" class="editor-action-btn danger" title="Exit Editor">✕ Exit</button>
+          </div>
+        </div>
+
+        <!-- Left Tool Palette -->
+        <div class="editor-palette glass-panel-light">
+          <div class="palette-category-label">TOOLS</div>
+          <button class="palette-btn active" data-tool="SELECT" title="Select & Inspect Objects (S)">
+            <span class="palette-icon">📌</span>
+            <span class="palette-name">Select</span>
+          </button>
+          <button class="palette-btn" data-tool="ERASER" title="Erase Placed Elements (X)">
+            <span class="palette-icon">🧹</span>
+            <span class="palette-name">Eraser</span>
+          </button>
+
+          <div class="palette-category-label">SPAWNS</div>
+          <button class="palette-btn" data-tool="PLAYER_SPAWN" title="Player Start Point">
+            <span class="palette-icon">🧙</span>
+            <span class="palette-name">Player</span>
+          </button>
+          <button class="palette-btn" data-tool="BOT_SPAWN" title="Bot / Enemy Spawn Point">
+            <span class="palette-icon">🤖</span>
+            <span class="palette-name">Bot Spawn</span>
+          </button>
+
+          <div class="palette-category-label">TARGETS</div>
+          <button class="palette-btn" data-tool="TARGET_DUMMY" title="Target Dummy (Trial Goal)">
+            <span class="palette-icon">🎯</span>
+            <span class="palette-name">Target</span>
+          </button>
+
+          <div class="palette-category-label">STRUCTURES</div>
+          <button class="palette-btn" data-tool="WALL_BLOCK" title="2x2 Stone Wall Block">
+            <span class="palette-icon">🧱</span>
+            <span class="palette-name">Wall Block</span>
+          </button>
+          <button class="palette-btn" data-tool="WALL_PILLAR" title="4x4 Solid Stone Pillar">
+            <span class="palette-icon">🏛️</span>
+            <span class="palette-name">Pillar</span>
+          </button>
+          <button class="palette-btn" data-tool="DOOR" title="Sliding Portcullis Door">
+            <span class="palette-icon">🚪</span>
+            <span class="palette-name">Door</span>
+          </button>
+          <button class="palette-btn" data-tool="MOVING_WALL" title="Sliding Bookcase Wall">
+            <span class="palette-icon">↔️</span>
+            <span class="palette-name">Moving Wall</span>
+          </button>
+
+          <div class="palette-category-label">ARCANA &amp; HAZARDS</div>
+          <button class="palette-btn" data-tool="PORTAL" title="Warp Portal Pair (Click 2 Points)">
+            <span class="palette-icon">🌀</span>
+            <span class="palette-name">Portal</span>
+          </button>
+          <button class="palette-btn" data-tool="SPEED_RUNE" title="Speed Boost Rune">
+            <span class="palette-icon">⚡</span>
+            <span class="palette-name">Speed Rune</span>
+          </button>
+          <button class="palette-btn" data-tool="HAZARD" title="Rotating Gargoyle Turret">
+            <span class="palette-icon">💥</span>
+            <span class="palette-name">Turret</span>
+          </button>
+          <button class="palette-btn" data-tool="POWERUP" title="Power-up Spawner">
+            <span class="palette-icon">🔮</span>
+            <span class="palette-name">Powerup</span>
+          </button>
+          <button class="palette-btn" data-tool="PROP" title="Destructible Urn / Crystal">
+            <span class="palette-icon">🏺</span>
+            <span class="palette-name">Prop</span>
+          </button>
+        </div>
+
+        <!-- Bottom Status Bar -->
+        <div class="editor-bottom-bar glass-panel-light">
+          <div class="editor-status-item">
+            <span>📐 Grid Snap:</span>
+            <button id="btn-snap-1" class="snap-toggle-btn active">1.0m</button>
+            <button id="btn-snap-05" class="snap-toggle-btn">0.5m</button>
+          </div>
+
+          <div id="editor-verification-badge" class="editor-verification-badge unverified">
+            <span class="badge-icon">🔒</span>
+            <span id="editor-verification-text">Clear Check Required to Share</span>
+          </div>
+
+          <div class="editor-status-item editor-coords">
+            <span id="editor-coords-text">Cursor: X: 0.0 | Y: 0.0</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- STATE SHARE RECEIVED MODAL (Stadia-Inspired State Share Landing) -->
+      <div id="state-share-modal" class="modal-overlay" style="display: none;">
+        <div class="state-share-dialog glass-panel">
+          <div class="state-share-header">
+            <div class="share-icon-badge">✨ STATE SHARE RECEIVED ✨</div>
+            <h2 id="share-modal-title">Arcane Warp Gauntlet</h2>
+            <p id="share-modal-author" class="share-author-text">Created by Grand Enchanter</p>
+          </div>
+
+          <div class="share-preview-card glass-panel-nested">
+            <div class="share-tags-row">
+              <span id="share-tag-mode" class="share-tag mode">🎯 Trickshot Trial</span>
+              <span id="share-tag-theme" class="share-tag theme">🌌 Astral Observatory</span>
+              <span id="share-tag-verified" class="share-tag verified">✅ Creator Verified</span>
+            </div>
+
+            <p id="share-modal-desc" class="share-desc">Route your curved projectiles through warp vortexes to strike guarded targets.</p>
+            <div id="share-modal-tip" class="share-tip">💡 Tip: Spells retain velocity when passing through portals.</div>
+
+            <div class="share-stats-grid">
+              <div class="share-stat-box">
+                <span class="stat-label">PAR TIME</span>
+                <strong id="share-stat-time">10.0s</strong>
+              </div>
+              <div class="share-stat-box">
+                <span class="stat-label">MAX SHOTS</span>
+                <strong id="share-stat-shots">2</strong>
+              </div>
+              <div class="share-stat-box">
+                <span class="stat-label">CREATOR RECORD</span>
+                <strong id="share-stat-record">4.2s (1 shot)</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="state-share-actions">
+            <button id="btn-share-play" class="lan-action-btn success primary-cta">🎯 Play Challenge</button>
+            <button id="btn-share-host-mp" class="lan-action-btn">🌐 Host in Multiplayer</button>
+            <button id="btn-share-edit" class="lan-action-btn">🛠️ Edit in Maker</button>
+            <button id="btn-share-save" class="lan-action-btn">💾 Save to My Maps</button>
+            <button id="btn-share-close" class="lan-action-btn danger">✕ Close</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CLEAR CHECK PASSED / CELEBRATION MODAL -->
+      <div id="clear-check-result-modal" class="modal-overlay" style="display: none;">
+        <div class="clear-check-dialog glass-panel">
+          <div class="clear-check-badge">🎉 CLEAR CHECK PASSED! 🎉</div>
+          <h2>CHALLENGE VERIFIED!</h2>
+          <p class="clear-check-sub">Your trickshot challenge has been proven possible. State Share is now unlocked!</p>
+
+          <div class="clear-check-stats-row glass-panel-nested">
+            <div><span>CLEAR TIME:</span> <strong id="clear-time-val">4.2s</strong></div>
+            <div><span>SHOTS FIRED:</span> <strong id="clear-shots-val">1</strong></div>
+            <div><span>STATUS:</span> <strong style="color: #00f5a0;">✅ VERIFIED</strong></div>
+          </div>
+
+          <div class="share-code-box glass-panel-nested">
+            <div class="share-code-label">STATE SHARE CODE &amp; LINK:</div>
+            <div class="share-code-row">
+              <span id="clear-share-code" class="share-code-badge">ST-8KM4</span>
+              <button id="btn-copy-share-url" class="copy-btn success">📋 Copy Share Link</button>
+              <button id="btn-web-share" class="copy-btn">📤 Share...</button>
+            </div>
+            <p id="share-copy-toast" class="share-copy-toast" style="display: none;">✓ Link copied to clipboard!</p>
+          </div>
+
+          <div class="clear-check-actions">
+            <button id="btn-clear-return-editor" class="lan-action-btn primary">🛠️ Return to Editor</button>
+            <button id="btn-clear-menu" class="lan-action-btn secondary">🚪 Main Menu</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- CUSTOM MAPS & COMMUNITY HUB MODAL -->
+      <div id="custom-maps-modal" class="modal-overlay" style="display: none;">
+        <div class="menu-modal-dialog glass-panel custom-maps-dialog">
+          <div class="menu-modal-header">
+            <h2>CUSTOM MAPS &amp; STATE SHARE</h2>
+            <button id="btn-close-custom-maps" class="close-modal-btn" type="button">✕</button>
+          </div>
+
+          <!-- Quick Import Code Input -->
+          <div class="share-import-bar glass-panel-nested">
+            <input id="input-share-code" type="text" placeholder="Paste State Share URL or 6-letter Code (e.g. ST-8KM4)..." />
+            <button id="btn-load-share-code" class="lan-action-btn success">Load Map</button>
+          </div>
+
+          <div class="custom-maps-actions-row">
+            <button id="btn-create-new-map" class="lan-action-btn primary">+ Create New Challenge</button>
+          </div>
+
+          <div class="menu-section">
+            <h3>MY SAVED MAPS</h3>
+            <div id="custom-maps-grid" class="custom-maps-grid">
+              <!-- Dynamically populated -->
+            </div>
           </div>
         </div>
       </div>

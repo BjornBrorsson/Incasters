@@ -588,7 +588,44 @@ export class Arena {
     }
   }
 
-  private addHazard(x: number, y: number, fireInterval: number, rotateSpeed: number, fireRadius: number) {
+  addJumpPad(x: number, y: number, radius = 1.2, launchVx = 0, launchVy = 0) {
+    const padGroup = new THREE.Group();
+    padGroup.position.set(x, 0, y);
+
+    const padGeo = new THREE.CylinderGeometry(radius, radius, 0.16, 16);
+    const padMat = new THREE.MeshStandardMaterial({
+      color: 0x00f5a0,
+      emissive: 0x00a060,
+      emissiveIntensity: 0.7,
+      roughness: 0.2,
+      metalness: 0.5
+    });
+    const padMesh = new THREE.Mesh(padGeo, padMat);
+    padMesh.position.y = 0.08;
+    padMesh.castShadow = true;
+    padGroup.add(padMesh);
+
+    const arrowGeo = new THREE.ConeGeometry(0.18, 0.45, 4);
+    const arrowMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const arrow = new THREE.Mesh(arrowGeo, arrowMat);
+    arrow.rotation.x = -Math.PI / 2;
+    const angle = Math.atan2(launchVy, launchVx);
+    arrow.rotation.z = angle - Math.PI / 2;
+    arrow.position.y = 0.17;
+    padGroup.add(arrow);
+
+    this.arenaGroup.add(padGroup);
+    this.jumpPads.push({
+      x,
+      y,
+      radius,
+      launchVx,
+      launchVy,
+      mesh: padGroup as any
+    });
+  }
+
+  addHazard(x: number, y: number, fireInterval: number, rotateSpeed: number, fireRadius: number) {
     // The base is a solid obstacle
     const baseWallIndex = this.walls.length;
     this.walls.push({ minX: x - 0.6, minY: y - 0.6, maxX: x + 0.6, maxY: y + 0.6 });
@@ -605,7 +642,7 @@ export class Arena {
     });
   }
 
-  private addMovingWall(baseX: number, baseY: number, w: number, h: number, axis: 'x' | 'y', range: number, speed: number) {
+  addMovingWall(baseX: number, baseY: number, w: number, h: number, axis: 'x' | 'y', range: number, speed: number) {
     const wallIndex = this.walls.length;
     this.walls.push({ minX: baseX - w / 2, minY: baseY - h / 2, maxX: baseX + w / 2, maxY: baseY + h / 2 });
     this.movingWalls.push({
@@ -622,7 +659,7 @@ export class Arena {
     });
   }
 
-  private addDoor(id: string, minX: number, minY: number, maxX: number, maxY: number, openDur: number, closeDur: number) {
+  addDoor(id: string, minX: number, minY: number, maxX: number, maxY: number, openDur: number, closeDur: number) {
     const wallIndex = this.walls.length;
     this.walls.push({ minX, minY, maxX, maxY, isOpen: false });
 
@@ -639,6 +676,90 @@ export class Arena {
       mesh: null,
       wallIndex
     });
+  }
+
+  /**
+   * Reconfigures this Arena with a complete CustomMapData specification,
+   * building all walls, portals, speed runes, hazards, moving walls, doors,
+   * jump pads, bounce pads, and destructible props without tearing down the floor.
+   */
+  loadCustomMapLayout(customMap: import('../game/CustomMap').CustomMapData) {
+    this.width = customMap.size?.width || 36;
+    this.height = customMap.size?.height || 36;
+
+    // Reset base obstacle geometry
+    this.resetForCustomLayout(customMap.walls || []);
+
+    // Set spawn points and powerups
+    this.spawnPoints = [{ x: customMap.playerSpawn.x, y: customMap.playerSpawn.y }];
+    if (customMap.botSpawns) {
+      customMap.botSpawns.forEach((s) => {
+        this.spawnPoints.push({ x: s.x, y: s.y });
+      });
+    }
+
+    if (customMap.powerups) {
+      this.powerupSpawners = customMap.powerups.map((p) => ({ x: p.x, y: p.y }));
+    }
+
+    // Portals
+    if (customMap.portals) {
+      customMap.portals.forEach((p) => {
+        this.addPortalPair(p.id1, p.x1, p.y1, p.id2, p.x2, p.y2);
+      });
+    }
+
+    // Speed Runes
+    if (customMap.speedRunes) {
+      customMap.speedRunes.forEach((r) => {
+        this.addSpeedRune(r.id, r.x, r.y);
+      });
+    }
+
+    // Bounce Pads
+    if (customMap.bouncePads) {
+      customMap.bouncePads.forEach((b) => {
+        this.walls.push({ minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY, isBouncePad: true });
+      });
+    }
+
+    // Hazards
+    if (customMap.hazards) {
+      customMap.hazards.forEach((h) => {
+        this.addHazard(h.x, h.y, h.fireInterval || 3.0, h.rotateSpeed || 1.2, 1.5);
+      });
+    }
+
+    // Moving Walls
+    if (customMap.movingWalls) {
+      customMap.movingWalls.forEach((m) => {
+        this.addMovingWall(m.baseX, m.baseY, m.halfW * 2, m.halfH * 2, m.axis, m.range, m.speed);
+      });
+    }
+
+    // Doors
+    if (customMap.doors) {
+      customMap.doors.forEach((d, idx) => {
+        this.addDoor(`custom_door_${idx}`, d.minX, d.minY, d.maxX, d.maxY, d.openDuration || 4.0, d.closeDuration || 4.0);
+      });
+    }
+
+    // Jump Pads
+    if (customMap.jumpPads) {
+      customMap.jumpPads.forEach((j) => {
+        this.addJumpPad(j.x, j.y, 1.2, j.launchVx || 0, j.launchVy || 0);
+      });
+    }
+
+    // Destructible Props
+    if (customMap.destructibleProps) {
+      customMap.destructibleProps.forEach((p, idx) => {
+        this.addDestructibleProp(`custom_prop_${idx}`, p.type, p.x, p.y, true);
+      });
+    }
+
+    // Rebuild visual meshes
+    this.buildWallMeshes();
   }
 
   addDestructibleProp(id: string, type: 'URN' | 'BARREL' | 'MANA_CRYSTAL', x: number, y: number, dropsPowerup = true) {

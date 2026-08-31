@@ -143,30 +143,31 @@ async function runCertificationSuite() {
     logCheck("Main Menu UI Visible", touchCheck.menuVisible);
     logCheck("Mobile Touch Action Buttons Hidden in Menus", touchCheck.touchButtonsHidden);
 
-    // Test Sub-menu modals (Customize, Multiplayer, Progress, Trials)
+    // Test Sub-menu modals (Customize, Multiplayer, Progress, Trials, Maker Challenge Editor)
     const modalsToTest = [
       { btn: '#btn-open-customize', modal: '#customize-modal', name: 'Customization Shop' },
       { btn: '#btn-open-multiplayer', modal: '#multiplayer-modal', name: 'Multiplayer Lobby' },
       { btn: '#btn-open-progress', modal: '#progress-modal', name: 'Challenges & Mastery' },
-      { btn: '#btn-open-trials', modal: '#trials-modal', name: 'Trickshot Trials' }
+      { btn: '#btn-open-trials', modal: '#trials-modal', name: 'Trickshot Trials' },
+      { btn: '#btn-open-editor', modal: '#editor-overlay', name: 'Maker Challenge Editor' }
     ];
 
     let allModalsPassed = true;
     for (const m of modalsToTest) {
       await page.click(m.btn);
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
       const isOpen = await page.evaluate((sel) => {
         const el = document.querySelector(sel);
         return el && window.getComputedStyle(el).display === 'flex';
       }, m.modal);
       
-      // Close modal
-      const closeBtn = `${m.modal} .close-modal-btn, ${m.modal} #btn-close-customize, ${m.modal} #btn-close-multiplayer, ${m.modal} #btn-close-progress, ${m.modal} #btn-close-trials`;
+      // Close modal / Exit editor
+      const closeBtn = `${m.modal} .close-modal-btn, ${m.modal} #btn-close-customize, ${m.modal} #btn-close-multiplayer, ${m.modal} #btn-close-progress, ${m.modal} #btn-close-trials, #btn-editor-exit`;
       await page.evaluate((sel) => {
         const btn = document.querySelector(sel);
         if (btn) btn.click();
       }, closeBtn);
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
 
       const isClosed = await page.evaluate((sel) => {
         const el = document.querySelector(sel);
@@ -330,7 +331,51 @@ async function runCertificationSuite() {
 
     await page.click('#btn-close-trials');
     await new Promise(r => setTimeout(r, 200));
-    moduleResults.push({ module: '3_game_modes', passed: brCheck.ok && tdmCheck && goldCheck && cauldronCheck && allTrialsPassed });
+
+    // 3F. State Share Link Simulation (Stadia-inspired state re-creation from URL hash)
+    const stateSharePassed = await page.evaluate(() => {
+      // Sample Base64URL State Share map payload
+      const testMap = {
+        version: 1,
+        id: 'cert_share_001',
+        title: 'Cert Trial Gauntlet',
+        author: 'Cert QA',
+        mode: 'TRIAL',
+        theme: 'CHAMBER',
+        size: { width: 36, height: 36 },
+        parTime: 15,
+        maxShots: 4,
+        clearCheck: { completed: true, clearTime: 6.2, clearShots: 2, clearedAt: Date.now() },
+        playerSpawn: { x: -8, y: 0 },
+        dummies: [{ id: 'd1', x: 8, y: 0, health: 30, radius: 0.75 }],
+        walls: [
+          { minX: -18, minY: -18, maxX: -17, maxY: 18 },
+          { minX: 17, minY: -18, maxX: 18, maxY: 18 },
+          { minX: -18, minY: -18, maxX: 18, maxY: -17 },
+          { minX: -18, minY: 17, maxX: 18, maxY: 18 }
+        ]
+      };
+      
+      const payload = btoa(unescape(encodeURIComponent(JSON.stringify({ v: 1, cs: 999, d: testMap }))))
+        .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      
+      window.location.hash = `share=${payload}`;
+      window.dispatchEvent(new HashChangeEvent('hashchange'));
+      
+      const modal = document.getElementById('state-share-modal');
+      const title = document.getElementById('share-modal-title')?.textContent;
+      const isOpen = modal && window.getComputedStyle(modal).display === 'flex';
+      
+      // Close modal
+      const closeBtn = document.getElementById('btn-share-close');
+      if (closeBtn) closeBtn.click();
+      window.location.hash = '';
+      
+      return isOpen && title === 'Cert Trial Gauntlet';
+    });
+    logCheck("Google Stadia State Share Link Hash Re-Creation", stateSharePassed);
+
+    moduleResults.push({ module: '3_game_modes', passed: brCheck.ok && tdmCheck && goldCheck && cauldronCheck && allTrialsPassed && stateSharePassed });
 
     // ─────────────────────────────────────────────────────────────
     // MODULE 4: All 5 Arenas & Interactive Map Hazards

@@ -65,6 +65,12 @@
 - **LAN WebSocket Server:** Dedicated local network server (`server/lan-server.js`) for low-latency LAN parties.
 - **Host-Authoritative Sync:** Full 3D physics simulation broadcast at 20–30 Hz with client-side interpolation.
 
+### 🛠️ Mario Maker-Style Challenge Editor & Stadia State Share
+- **3D Isometric Level Editor:** Build custom Trickshot Trials, obstacles, portals, moving walls, fire hazards, and powerups with 3D raycasting and grid snapping.
+- **"Clear Check" Verification:** Creators must successfully beat their own level from start to finish before sharing is unlocked.
+- **Zero-Backend State Share Links:** Share challenges or custom multiplayer arenas as compact URL-safe Base64 links (`#share=...`) or 6-letter short codes (`ST-XXXX`).
+- **Instant State Re-Creation:** Anyone opening a State Share link can immediately play the challenge, host it in multiplayer lobbies, or remix it in the editor.
+
 ### ⚡ Power-Up Stacking System
 Combine and stack multiple spells to create wild projectile builds:
 - 💥 **Split:** Breaks your shot into a multi-projectile spread fan.

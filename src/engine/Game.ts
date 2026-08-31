@@ -21,6 +21,7 @@ import { loadGraphicsQuality, getGraphicsConfig } from '../game/GraphicsSettings
 import type { GraphicsQuality, GraphicsConfig } from '../game/GraphicsSettings';
 import type { GameStateSnapshot, CasterNetState, ProjectileNetState, PlayerInputState, GameEvent } from '../net/LanClient';
 import { TRIAL_STAGES, type TrialStage, type TargetDummy, buildDummyMesh } from '../game/Trials';
+import type { CustomMapData, ClearCheckRecord } from '../game/CustomMap';
 
 export interface GameParticle {
   position: THREE.Vector3;
@@ -251,6 +252,12 @@ export class Game {
   trialElapsed: number = 0;
   trialShotsFired: number = 0;
   onTrialCompleted: ((result: { stageId: number; stars: number; time: number; shots: number; tokens: number }) => void) | null = null;
+
+  // ── Custom Maps & State Share Mode ──
+  customMap: CustomMapData | null = null;
+  isClearCheck: boolean = false;
+  onClearCheckCompleted: ((record: ClearCheckRecord) => void) | null = null;
+  onCustomMapCompleted: ((result: { map: CustomMapData; stars: number; time: number; shots: number; cleared: boolean }) => void) | null = null;
 
   // ── LAN Multiplayer ──
   /** 'offline' = single-player vs bots, 'host' = hosting a LAN match, 'client' = connected to a host. */
@@ -720,6 +727,152 @@ export class Game {
     this.fx.announce(stage.title, '#ffd700');
   }
 
+  loadCustomMap(mapData: CustomMapData, isClearCheck: boolean = false) {
+    this.customMap = mapData;
+    this.isClearCheck = isClearCheck;
+    this.trialElapsed = 0;
+    this.trialShotsFired = 0;
+    this.isPlaying = false;
+
+    if (mapData.mode === 'TRIAL') {
+      this.trialStage = {
+        id: 9999,
+        title: mapData.title,
+        subtitle: mapData.subtitle || 'Custom Trickshot Stage',
+        description: mapData.description || 'Destroy all target dummies!',
+        tip: mapData.tip || 'Curve your shots around obstacles.',
+        parTime: mapData.parTime || 15.0,
+        maxShots: mapData.maxShots || 4,
+        star2Time: mapData.star2Time || ((mapData.parTime || 15.0) * 1.5),
+        playerSpawn: mapData.playerSpawn,
+        dummies: (mapData.dummies || []).map((d) => ({
+          id: d.id,
+          x: d.x,
+          y: d.y,
+          health: d.health,
+          radius: d.radius,
+          isMoving: d.isMoving,
+          moveAxis: d.moveAxis,
+          moveRange: d.moveRange,
+          moveSpeed: d.moveSpeed
+        })),
+        walls: mapData.walls
+      };
+
+      // Clean up storm
+      this.gameModeManager.cleanup(this.scene);
+
+      // Clear all existing non-player casters
+      for (let i = this.casters.length - 1; i >= 0; i--) {
+        const c = this.casters[i];
+        if (c.id !== 'player') {
+          c.destroy(this.scene);
+          this.casters.splice(i, 1);
+        }
+      }
+
+      this.projectiles.forEach((p) => p.destroy(this.scene));
+      this.projectiles = [];
+      this.powerups.forEach((pu) => pu.destroy(this.scene));
+      this.powerups = [];
+
+      // Clear existing dummies
+      this.trialDummies.forEach((d) => {
+        this.scene.remove(d.mesh);
+        d.mesh.traverse((ch) => {
+          if (ch instanceof THREE.Mesh) {
+            ch.geometry.dispose();
+            if (Array.isArray(ch.material)) ch.material.forEach((m) => m.dispose());
+            else (ch.material as THREE.Material).dispose();
+          }
+        });
+      });
+      this.trialDummies = [];
+
+      // Reposition player
+      this.player.x = mapData.playerSpawn.x;
+      this.player.y = mapData.playerSpawn.y;
+      this.player.reset();
+      this.player.syncMeshPosition();
+
+      // Load custom arena layout
+      this.physicsArena.loadCustomMapLayout(mapData);
+
+      // Spawn powerups
+      if (mapData.powerups) {
+        mapData.powerups.forEach((p) => {
+          const pu = new PowerUp(p.x, p.y, p.type);
+          this.scene.add(pu.mesh);
+          this.powerups.push(pu);
+        });
+      }
+
+      // Build target dummies
+      (mapData.dummies || []).forEach((dummyDef) => {
+        const mesh = buildDummyMesh(dummyDef.radius);
+        mesh.position.set(dummyDef.x, 0, dummyDef.y);
+        this.scene.add(mesh);
+
+        this.trialDummies.push({
+          id: dummyDef.id,
+          x: dummyDef.x,
+          y: dummyDef.y,
+          radius: dummyDef.radius,
+          health: dummyDef.health,
+          maxHealth: dummyDef.health,
+          isDead: false,
+          mesh,
+          isMoving: dummyDef.isMoving,
+          baseX: dummyDef.x,
+          baseY: dummyDef.y,
+          moveAxis: dummyDef.moveAxis,
+          moveRange: dummyDef.moveRange,
+          moveSpeed: dummyDef.moveSpeed,
+          movePhase: Math.random() * Math.PI * 2
+        });
+      });
+
+      // Reset camera
+      this.cameraLookTarget.set(this.player.x, 0, this.player.y);
+      this.camera.position.set(
+        this.player.x + this.camOffset.x,
+        this.camOffset.y,
+        this.player.y + this.camOffset.z
+      );
+      this.camera.lookAt(this.cameraLookTarget);
+
+      this.fx.announce(isClearCheck ? `VERIFYING: ${mapData.title}` : mapData.title, '#ffd700');
+    } else {
+      // Custom Arena for standard battle mode
+      this.trialStage = null;
+      this.physicsArena.loadCustomMapLayout(mapData);
+
+      // Reposition player
+      this.player.x = mapData.playerSpawn.x;
+      this.player.y = mapData.playerSpawn.y;
+      this.player.reset();
+      this.player.syncMeshPosition();
+
+      // Reposition bots if available
+      const botSpawns = mapData.botSpawns || [];
+      let botSpawnIdx = 0;
+      this.casters.forEach((c) => {
+        if (c.id !== 'player') {
+          if (botSpawns.length > 0) {
+            const sp = botSpawns[botSpawnIdx % botSpawns.length];
+            c.x = sp.x;
+            c.y = sp.y;
+            botSpawnIdx++;
+          }
+          c.reset();
+          c.syncMeshPosition();
+        }
+      });
+
+      this.fx.announce(mapData.title, '#00d4ff');
+    }
+  }
+
   private completeTrial() {
     if (!this.trialStage) return;
     this.isPlaying = false;
@@ -732,6 +885,34 @@ export class Game {
       stars = 3;
     } else if (time <= stage.star2Time) {
       stars = 2;
+    }
+
+    if (this.customMap) {
+      const map = this.customMap;
+      if (stars === 3) {
+        sfx.playTrial3StarFanfare();
+      } else {
+        sfx.playVictory();
+      }
+
+      if (this.isClearCheck) {
+        const record: ClearCheckRecord = {
+          completed: true,
+          clearTime: parseFloat(time.toFixed(2)),
+          clearShots: shots,
+          clearedAt: Date.now()
+        };
+        this.onClearCheckCompleted?.(record);
+      }
+
+      this.onCustomMapCompleted?.({
+        map,
+        stars,
+        time,
+        shots,
+        cleared: true
+      });
+      return;
     }
 
     const { tokensEarned } = progression.recordTrialClear(stage.id, stars, time);

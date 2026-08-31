@@ -40,6 +40,7 @@ export interface MatchConfig {
   map: string;
   playerCount: number;
   difficulty: string;
+  customMap?: import('../game/CustomMap').CustomMapData;
 }
 
 export interface CasterNetState {
@@ -348,7 +349,8 @@ export class ClientGameRenderer {
   constructor(
     container: HTMLDivElement,
     mapType: MapType = 'ARENA',
-    modeType: GameModeType = GameModeType.BATTLE_ROYALE
+    modeType: GameModeType = GameModeType.BATTLE_ROYALE,
+    customMap?: import('../game/CustomMap').CustomMapData
   ) {
     this.container = container;
     this.mapType = mapType;
@@ -414,6 +416,10 @@ export class ClientGameRenderer {
     // 1. Build Arena
     this.arena = new Arena(mapType);
     this.arena.buildArena(this.scene);
+
+    if (customMap) {
+      this.arena.loadCustomMapLayout(customMap);
+    }
 
     // 2. Setup Input Manager
     this.input = new InputManager();

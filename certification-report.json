@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-08-26T18:02:59.232Z",
+  "timestamp": "2026-08-31T23:07:11.271Z",
   "platform": "win32",
   "nodeVersion": "v24.19.0",
   "modules": [
@@ -45,11 +45,11 @@
     }
   ],
   "performance": {
-    "coldBootTimeMs": 14,
-    "fpsAverage": 27,
-    "fpsMin": 11,
-    "frameTime99thPercentileMs": 87.2,
-    "memoryDeltaBytes": 16484204,
+    "coldBootTimeMs": 946,
+    "fpsAverage": 26,
+    "fpsMin": 13,
+    "frameTime99thPercentileMs": 75.6,
+    "memoryDeltaBytes": -17198896,
     "totalMatchCycles": 5,
     "leakedObjectsCount": 0
   },
