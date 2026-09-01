@@ -1,7 +1,7 @@
 {
-  "timestamp": "2026-09-01T15:39:32.429Z",
+  "timestamp": "2026-09-01T21:29:03.573Z",
   "platform": "win32",
-  "nodeVersion": "v24.19.0",
+  "nodeVersion": "v22.20.0",
   "modules": [
     {
       "module": "1_boot_assets",
@@ -41,18 +41,18 @@
     },
     {
       "module": "10_performance_memory",
-      "passed": true
+      "passed": false
     }
   ],
   "performance": {
-    "coldBootTimeMs": 957,
-    "fpsAverage": 24,
-    "fpsMin": 7,
-    "frameTime99thPercentileMs": 139.7,
-    "memoryDeltaBytes": 18305548,
+    "coldBootTimeMs": 61,
+    "fpsAverage": 3,
+    "fpsMin": 1,
+    "frameTime99thPercentileMs": 1286.2,
+    "memoryDeltaBytes": 22032801,
     "totalMatchCycles": 5,
     "leakedObjectsCount": 0
   },
-  "passed": true,
+  "passed": false,
   "summary": ""
 }

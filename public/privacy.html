@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Incasters - Privacy Policy</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=Inter:wght@400;500;600&family=Outfit:wght@600;700;900&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg-dark: #070913;
+        --card-bg: rgba(20, 24, 44, 0.75);
+        --card-border: rgba(99, 102, 241, 0.3);
+        --text-main: #f1f5f9;
+        --text-muted: #94a3b8;
+        --accent-cyan: #06b6d4;
+        --accent-gold: #e0c060;
+        --accent-pink: #ec4899;
+        --accent-glow: rgba(6, 182, 212, 0.25);
+        --pill-bg: rgba(6, 182, 212, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      body {
+        background-color: var(--bg-dark);
+        background-image: 
+          radial-gradient(ellipse at top left, rgba(236, 72, 153, 0.15), transparent 50%),
+          radial-gradient(ellipse at bottom right, rgba(6, 182, 212, 0.15), transparent 50%);
+        background-attachment: fixed;
+        color: var(--text-main);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.65;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+
+      .container {
+        max-width: 820px;
+        margin: 0 auto;
+      }
+
+      header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+
+      .game-badge {
+        display: inline-block;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        letter-spacing: 0.15em;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        color: var(--accent-cyan);
+        background: var(--pill-bg);
+        border: 1px solid rgba(6, 182, 212, 0.4);
+        padding: 0.35rem 1rem;
+        border-radius: 9999px;
+        margin-bottom: 1rem;
+      }
+
+      h1 {
+        font-family: 'Cinzel', 'Outfit', serif;
+        font-weight: 900;
+        font-size: clamp(2rem, 5vw, 2.75rem);
+        letter-spacing: -0.02em;
+        background: linear-gradient(135deg, #ffffff 30%, var(--accent-cyan) 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.5rem;
+      }
+
+      .meta-info {
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+
+      .back-nav {
+        margin-bottom: 1.5rem;
+      }
+
+      .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: var(--accent-cyan);
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 0.95rem;
+        transition: transform 0.2s ease, opacity 0.2s ease;
+      }
+
+      .back-link:hover {
+        opacity: 0.8;
+        transform: translateX(-3px);
+      }
+
+      .card {
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 16px;
+        padding: 2.5rem;
+        box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.7), 0 0 25px -5px var(--accent-glow);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+      }
+
+      .summary-banner {
+        background: rgba(6, 182, 212, 0.08);
+        border-left: 4px solid var(--accent-cyan);
+        padding: 1.25rem 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 2rem;
+      }
+
+      .summary-banner p {
+        font-size: 1.05rem;
+        font-weight: 500;
+        color: #e2e8f0;
+      }
+
+      section {
+        margin-bottom: 2rem;
+      }
+
+      section:last-of-type {
+        margin-bottom: 0;
+      }
+
+      h2 {
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        font-size: 1.35rem;
+        color: #f8fafc;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding-bottom: 0.5rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+
+      h2 .num {
+        color: var(--accent-cyan);
+        font-size: 1.1rem;
+      }
+
+      p {
+        color: #cbd5e1;
+        margin-bottom: 0.85rem;
+      }
+
+      ul {
+        list-style: none;
+        padding-left: 0;
+        margin-bottom: 1rem;
+      }
+
+      li {
+        position: relative;
+        padding-left: 1.5rem;
+        margin-bottom: 0.6rem;
+        color: #cbd5e1;
+      }
+
+      li::before {
+        content: "✦";
+        position: absolute;
+        left: 0;
+        color: var(--accent-pink);
+        font-size: 0.85rem;
+        top: 0.1rem;
+      }
+
+      strong {
+        color: #f8fafc;
+      }
+
+      a {
+        color: var(--accent-cyan);
+        text-decoration: underline;
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        color: #38bdf8;
+      }
+
+      footer {
+        text-align: center;
+        margin-top: 3rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+      }
+
+      @media (max-width: 640px) {
+        body {
+          padding: 1.5rem 1rem 3rem;
+        }
+
+        .card {
+          padding: 1.5rem 1.25rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="back-nav">
+        <a href="/" class="back-link">← Return to Incasters</a>
+      </div>
+
+      <header>
+        <div class="game-badge">Official Policy</div>
+        <h1>Privacy Policy</h1>
+        <p class="meta-info">Application: Incasters (com.incasters.game) • Effective: September 1, 2026</p>
+      </header>
+
+      <main class="card">
+        <div class="summary-banner">
+          <p>🛡️ <strong>Summary:</strong> Incasters does not collect, store, transmit, or monetize any personal information. All your game progress, wizard cosmetics, and settings remain 100% on your local device.</p>
+        </div>
+
+        <section>
+          <h2><span class="num">1.</span> Introduction</h2>
+          <p>This Privacy Policy describes how <strong>Incasters</strong> ("we", "our", or "the game") handles information across all platforms, including Web browsers, Android mobile devices, and Windows desktop distributions.</p>
+          <p>We believe players deserve total privacy. The game operates without remote user accounts, advertising networks, or personal data tracking of any kind.</p>
+        </section>
+
+        <section>
+          <h2><span class="num">2.</span> Information We Do NOT Collect</h2>
+          <p>Incasters does not collect, store, or share any personally identifiable information (PII). Specifically:</p>
+          <ul>
+            <li><strong>No Accounts or Logins:</strong> You do not need an account, email address, password, or profile to play.</li>
+            <li><strong>No Personal Identifiers:</strong> We do not ask for or collect names, addresses, phone numbers, or payment info.</li>
+            <li><strong>No Location Tracking:</strong> We never access or record GPS or location coordinates.</li>
+            <li><strong>No Tracking IDs:</strong> We do not collect Advertising IDs (GAID/IDFA), hardware serials, or device fingerprints.</li>
+            <li><strong>No Camera or Mic:</strong> We never request access to camera, microphone, photos, or file storage.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2><span class="num">3.</span> On-Device Local Data Storage</h2>
+          <p>All progress and game preferences are stored exclusively on your device using client-side storage (<code>localStorage</code> in web/desktop browsers, or internal application storage on Android):</p>
+          <ul>
+            <li><strong>Progression:</strong> Level, experience points (XP), challenge completions, and unlocked cosmetics.</li>
+            <li><strong>Customizations:</strong> Robe color, spell color, eyes, hair, hat, facegear, and weapon choices.</li>
+            <li><strong>Preferences:</strong> Audio volume levels, mute toggle, difficulty level, and game mode preferences.</li>
+          </ul>
+          <p>This data is never sent to any external server or cloud service.</p>
+        </section>
+
+        <section>
+          <h2><span class="num">4.</span> Local Area Network (LAN) Multiplayer</h2>
+          <p>Incasters features an optional local-network multiplayer mode:</p>
+          <ul>
+            <li>Connections run over a local WebSocket server hosted by a player on your local network (Wi-Fi or Ethernet).</li>
+            <li>Transmitted data is limited to real-time positions, spells, and player-selected temporary session names.</li>
+            <li>Multiplayer packets never leave your local Wi-Fi / LAN network and are not logged to any remote database.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2><span class="num">5.</span> Device Permissions (Android)</h2>
+          <p>On Android, Incasters requests only one permission:</p>
+          <ul>
+            <li><code>android.permission.INTERNET</code>: Required solely for the internal web view to load game assets and to support local LAN multiplayer socket communication.</li>
+          </ul>
+          <p>No sensitive or invasive Android permissions are requested.</p>
+        </section>
+
+        <section>
+          <h2><span class="num">6.</span> Third-Party Services and Analytics</h2>
+          <ul>
+            <li><strong>No Analytics SDKs:</strong> We do not use Google Analytics, Firebase Analytics, Unity Analytics, or any telemetry tools.</li>
+            <li><strong>No Advertisements:</strong> Incasters has no banner ads, interstitials, or reward video ads.</li>
+            <li><strong>Web Typography:</strong> Open-source fonts are loaded via Google Fonts. Standard web asset delivery applies.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2><span class="num">7.</span> Children's Privacy (COPPA &amp; GDPR)</h2>
+          <p>Incasters is family-friendly and fully compliant with the Children's Online Privacy Protection Act (COPPA) and General Data Protection Regulation (GDPR). We do not collect personal information from children under the age of 13 (or 16 in the European Union).</p>
+        </section>
+
+        <section>
+          <h2><span class="num">8.</span> Data Control and Deletion</h2>
+          <p>You have complete control over all game data stored on your device:</p>
+          <ul>
+            <li><strong>Web Browser:</strong> Clear your browser's site data/cookies for the Incasters website.</li>
+            <li><strong>Android:</strong> Go to Settings → Apps → Incasters → Storage → Clear Data.</li>
+            <li><strong>Windows:</strong> Uninstalling the application or deleting saved profile files deletes all local data.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2><span class="num">9.</span> Open Source Transparency</h2>
+          <p>Incasters is open source under the MIT License. The complete code and build scripts are publicly auditable at:</p>
+          <p><a href="https://github.com/BjornBrorsson/Incasters" target="_blank" rel="noopener noreferrer">https://github.com/BjornBrorsson/Incasters</a></p>
+        </section>
+
+        <section>
+          <h2><span class="num">10.</span> Contact Information</h2>
+          <p>For inquiries regarding this Privacy Policy or Incasters, please contact:</p>
+          <ul>
+            <li><strong>Developer:</strong> Björn Brorsson</li>
+            <li><strong>Email:</strong> <a href="mailto:bjorn.fristrom@gmail.com">bjorn.fristrom@gmail.com</a></li>
+            <li><strong>GitHub:</strong> <a href="https://github.com/BjornBrorsson/Incasters/issues" target="_blank" rel="noopener noreferrer">Incasters Issues Tracker</a></li>
+          </ul>
+        </section>
+      </main>
+
+      <footer>
+        <p>&copy; 2026 Björn Brorsson • Incasters</p>
+      </footer>
+    </div>
+  </body>
+</html>

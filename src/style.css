@@ -1610,6 +1610,105 @@ body {
   accent-color: var(--color-gold);
 }
 
+.options-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.privacy-btn {
+  background: none;
+  border: none;
+  color: var(--color-gold-deep);
+  font-size: 0.8rem;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.privacy-btn:hover {
+  color: var(--color-gold-light);
+  background: rgba(255, 210, 61, 0.12);
+}
+
+/* Privacy Modal Styling */
+.privacy-modal-dialog {
+  max-width: 540px;
+  width: 90%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.privacy-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  font-size: 0.88rem;
+  color: #3b200c;
+  line-height: 1.55;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(140, 95, 45, 0.3);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.privacy-modal-body p {
+  margin: 0;
+}
+
+.privacy-modal-body a {
+  color: #8c1a1e;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+.privacy-pill-banner {
+  background: rgba(140, 26, 30, 0.08);
+  border-left: 4px solid #8c1a1e;
+  padding: 10px 14px;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #2c1a0e;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.privacy-modal-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.full-policy-btn {
+  color: #8c1a1e;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: var(--font-header);
+  text-decoration: none;
+  transition: opacity 0.2s ease;
+}
+
+.full-policy-btn:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.modal-dismiss-btn {
+  padding: 8px 24px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
 /* ==========================================================================
    GAMEPLAY HUD
    ========================================================================== */

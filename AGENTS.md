@@ -85,6 +85,8 @@ Every push to `main`, pull request, or release tag runs `certification-quality-g
 - `src/game/Difficulty.ts`: Four difficulty presets (Easy/Normal/Hard/Insane) that tune bot AI parameters. Persisted to `localStorage`.
 - `src/net/LanClient.ts`: WebSocket client and lightweight state renderer for LAN multiplayer. Includes `ClientGameRenderer` for client-side rendering without local simulation.
 - `server/lan-server.js`: Standalone WebSocket server for LAN multiplayer matchmaking and message routing.
+- `PRIVACY_POLICY.md`: Official store-ready and open-source privacy policy (zero data collection, local storage only, LAN multiplayer).
+- `public/privacy.html`: Standalone styled web document for web hosting and Google Play Console store submission.
 - `.github/workflows/build-apk.yml`: Automated CI/CD GitHub Actions workflow running tests/certification and building/releasing Android APK, Windows EXE, and Firebase Web Hosting builds on push to main or release tags.
 
 ## Security & Game-Feel Notes

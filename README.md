@@ -3,6 +3,7 @@
 [![Build & Release Android + Windows + Firebase](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml/badge.svg)](https://github.com/BjornBrorsson/Incasters/actions/workflows/build-apk.yml)
 [![Firebase Hosting](https://img.shields.io/badge/Firebase%20Hosting-Live-orange.svg?logo=firebase&logoColor=white)](https://incasters.web.app)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Privacy: Zero Tracking](https://img.shields.io/badge/Privacy-Zero%20Tracking-brightgreen.svg)](PRIVACY_POLICY.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue.svg)](https://www.typescriptlang.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-r160+-black.svg)](https://threejs.org/)
 [![Capacitor](https://img.shields.io/badge/Capacitor-7.x-119EFF.svg)](https://capacitorjs.com/)
@@ -245,8 +246,15 @@ Incasters/
 │   └── style.css            # Responsive neon glassmorphism stylesheet
 ├── test-game.js             # Headless E2E Puppeteer gametest
 ├── index.html               # Main HTML markup & HUD overlays
+├── PRIVACY_POLICY.md        # Store-ready zero-tracking privacy policy
 └── package.json
 ```
+
+---
+
+## 🔒 Privacy
+
+Incasters is designed with total respect for user privacy: zero personal data is collected, stored, tracked, or transmitted. All progression and preferences remain 100% on your local device. See [PRIVACY_POLICY.md](PRIVACY_POLICY.md) or the [Web Privacy Policy](https://incasters.web.app/privacy.html) for full details.
 
 ---
 

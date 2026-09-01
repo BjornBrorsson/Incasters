@@ -530,7 +530,8 @@ document.addEventListener('DOMContentLoaded', () => {
       'editor-overlay',
       'state-share-modal',
       'clear-check-result-modal',
-      'custom-maps-modal'
+      'custom-maps-modal',
+      'privacy-modal'
     ];
     modalIds.forEach((id) => {
       const el = document.getElementById(id);
@@ -2574,7 +2575,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const submenuModals: [string, string][] = [
     ['btn-open-customize', 'customize-modal'],
     ['btn-open-multiplayer', 'multiplayer-modal'],
-    ['btn-open-progress', 'progress-modal']
+    ['btn-open-progress', 'progress-modal'],
+    ['btn-privacy', 'privacy-modal']
   ];
   submenuModals.forEach(([btnId, modalId]) => {
     const btn = document.getElementById(btnId);
@@ -2596,6 +2598,15 @@ document.addEventListener('DOMContentLoaded', () => {
         sfx.playModalClose();
       }
     });
+  });
+
+  // Privacy modal explicit dismiss button
+  document.getElementById('btn-privacy-dismiss')?.addEventListener('click', () => {
+    const modal = document.getElementById('privacy-modal');
+    if (modal) {
+      modal.style.display = 'none';
+      sfx.playModalClose();
+    }
   });
 
   // Clicking the XP/level badge is a shortcut into the Challenges & Mastery modal.
