@@ -5,6 +5,7 @@ import { MapType } from './world/Arena';
 import {
   loadCharacterConfig,
   saveCharacterConfig,
+  sanitizePlayerName,
   HAT_STYLES,
   ACCESSORY_STYLES,
   HAIR_STYLES,
@@ -549,6 +550,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (elimOverlay) elimOverlay.style.display = 'none';
 
       const summary = progression.recordMatch(result);
+      const btnGameoverReturn = document.getElementById('btn-gameover-return-editor');
+      if (btnGameoverReturn) {
+        btnGameoverReturn.style.display = activeCustomMap ? 'inline-block' : 'none';
+      }
       showMatchSummary(result, summary);
       refreshBadge();
       renderChallenges();
@@ -558,6 +563,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     activeGame.onPlayerEliminated = (data) => {
       hideGlobalTouchControls();
+      const btnElimReturn = document.getElementById('btn-elim-return-editor');
+      if (btnElimReturn) {
+        btnElimReturn.style.display = activeCustomMap ? 'inline-block' : 'none';
+      }
       const summary = progression.recordMatch({
         won: false,
         kills: data.kills,
@@ -622,9 +631,64 @@ document.addEventListener('DOMContentLoaded', () => {
   ctrlTargetBtn?.addEventListener('click', () => setControl('TARGET', ctrlTargetBtn));
   ctrlManualBtn?.addEventListener('click', () => setControl('MANUAL', ctrlManualBtn));
 
+  // Custom Map Selection for Main Menu and Multiplayer
+  let selectedCustomMap: CustomMapData | null = null;
+
+  const renderMainMenuCustomMaps = () => {
+    const selector = document.getElementById('custom-maps-selector');
+    const badge = document.getElementById('custom-maps-badge');
+    if (!selector) return;
+
+    const maps = CustomMapStorage.getAll();
+    if (badge) badge.textContent = `${maps.length} saved`;
+    selector.innerHTML = '';
+
+    if (maps.length === 0) {
+      selector.innerHTML = '<div style="grid-column: 1 / -1; font-size: 0.8rem; color: #888; text-align: center; padding: 8px;">No saved custom maps yet. Create one in the Map Maker or load via State Share!</div>';
+      return;
+    }
+
+    maps.forEach((m) => {
+      const card = document.createElement('div');
+      card.className = 'custom-map-card';
+      if (selectedCustomMap && selectedCustomMap.id === m.id) {
+        card.classList.add('active');
+      }
+
+      const title = document.createElement('div');
+      title.className = 'custom-map-card-title';
+      title.textContent = m.title || 'Untitled Map';
+
+      const meta = document.createElement('div');
+      meta.className = 'custom-map-card-meta';
+      meta.innerHTML = `<span>${m.mode.replace(/_/g, ' ')}</span><span>${m.author ? 'by ' + m.author : ''}</span>`;
+
+      card.appendChild(title);
+      card.appendChild(meta);
+
+      card.addEventListener('click', () => {
+        // Deselect standard map buttons
+        [mapArenaBtn, mapColosseumBtn, mapChamberBtn, mapObservatoryBtn, mapCatacombsBtn].forEach((btn) => {
+          btn?.classList.remove('active');
+        });
+        selector.querySelectorAll('.custom-map-card').forEach((c) => c.classList.remove('active'));
+        card.classList.add('active');
+        selectedCustomMap = m;
+        selectedMap = m.theme;
+      });
+
+      selector.appendChild(card);
+    });
+  };
+
   // Toggle Map Selection
   const setMap = (map: MapType, activeBtn: HTMLElement) => {
     selectedMap = map;
+    selectedCustomMap = null;
+    const customSelector = document.getElementById('custom-maps-selector');
+    if (customSelector) {
+      customSelector.querySelectorAll('.custom-map-card').forEach((c) => c.classList.remove('active'));
+    }
     [mapArenaBtn, mapColosseumBtn, mapChamberBtn, mapObservatoryBtn, mapCatacombsBtn].forEach((btn) => {
       btn?.classList.remove('active');
     });
@@ -652,6 +716,7 @@ document.addEventListener('DOMContentLoaded', () => {
       item.btn?.classList.remove('active');
     }
   });
+  renderMainMenuCustomMaps();
 
   // Setup Player Count Buttons
   playerCountBtns.forEach((btn) => {
@@ -819,7 +884,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       p2pClient = new P2PClient();
 
-      const code = await p2pClient.createRoom('Host', characterConfig);
+      const playerName = characterConfig.name || 'Host';
+      const code = await p2pClient.createRoom(playerName, characterConfig);
       if (p2pRoomCodeEl) p2pRoomCodeEl.textContent = code;
       p2pPlayers = p2pClient.roomInfo?.players || [];
 
@@ -856,7 +922,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       p2pClient = new P2PClient();
 
-      await p2pClient.joinRoom(code, 'Player', characterConfig);
+      const playerName = characterConfig.name || 'Player';
+      await p2pClient.joinRoom(code, playerName, characterConfig);
       p2pPlayers = p2pClient.roomInfo?.players || [];
 
       if (p2pJoinStatus) {
@@ -892,7 +959,8 @@ document.addEventListener('DOMContentLoaded', () => {
       mode: selectedMode,
       map: selectedMap,
       playerCount: selectedPlayerCount,
-      difficulty: selectedDifficulty
+      difficulty: selectedDifficulty,
+      customMap: selectedCustomMap || undefined
     });
   });
 
@@ -1001,7 +1069,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const serverUrl = 'ws://localhost:' + port;
       lanClient = new LanClient(serverUrl);
 
-      await lanClient.connect('Host', characterConfig);
+      const hostName = characterConfig.name || 'Host';
+      await lanClient.connect(hostName, characterConfig);
       lanPlayers = lanClient.roomInfo?.players || [];
 
       if (lanRoomInfo) {
@@ -1035,7 +1104,8 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       lanClient = new LanClient(serverUrl);
 
-      await lanClient.connect('Player', characterConfig);
+      const clientPlayerName = characterConfig.name || 'Player';
+      await lanClient.connect(clientPlayerName, characterConfig);
       lanPlayers = lanClient.roomInfo?.players || [];
 
       if (lanJoinStatus) {
@@ -1071,7 +1141,8 @@ document.addEventListener('DOMContentLoaded', () => {
       mode: selectedMode,
       map: selectedMap,
       playerCount: selectedPlayerCount,
-      difficulty: selectedDifficulty
+      difficulty: selectedDifficulty,
+      customMap: selectedCustomMap || undefined
     });
   });
 
@@ -1308,6 +1379,30 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const refreshPreview = () => preview?.setConfig(characterConfig);
 
+  // Player name customizer with hate speech/slur blocklist
+  const nameInput = document.getElementById('player-name-input') as HTMLInputElement | null;
+  const nameWarning = document.getElementById('player-name-warning');
+  if (nameInput) {
+    nameInput.value = characterConfig.name || 'Wizard';
+    nameInput.addEventListener('input', () => {
+      const raw = nameInput.value;
+      const res = sanitizePlayerName(raw);
+      if (!res.valid) {
+        if (nameWarning) {
+          nameWarning.innerText = `⚠️ ${res.reason || 'Name contains blocked terms'}`;
+          nameWarning.style.display = 'block';
+        }
+      } else {
+        if (nameWarning) nameWarning.style.display = 'none';
+      }
+      characterConfig.name = res.name;
+      saveCharacterConfig(characterConfig);
+      if (game && game.player) {
+        game.player.name = res.name;
+      }
+    });
+  }
+
   // Color pickers (robe + spell)
   const setupColorPicker = (pickerEl: HTMLElement | null, currentValue: number, onSelect: (val: number) => void) => {
     if (!pickerEl) return;
@@ -1492,6 +1587,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnSpecMenu = document.getElementById('btn-spec-menu');
 
   btnElimRestart?.addEventListener('click', () => {
+    if (activeCustomMap) {
+      launchCustomMap(activeCustomMap, false);
+      return;
+    }
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (spectatorHud) spectatorHud.style.display = 'none';
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
@@ -1568,6 +1667,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Start Game callback
   playBtn?.addEventListener('click', () => {
+    if (selectedCustomMap) {
+      launchCustomMap(selectedCustomMap, false);
+      return;
+    }
+    activeCustomMap = null;
+
     closeAllModals();
     // Hide overlays & menu screen
     if (menuScreen) menuScreen.style.display = 'none';
@@ -1606,6 +1711,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Play Again callback
   restartBtn?.addEventListener('click', () => {
+    if (activeCustomMap) {
+      launchCustomMap(activeCustomMap, false);
+      return;
+    }
     if (gameOverOverlay) gameOverOverlay.style.display = 'none';
     if (elimOverlay) elimOverlay.style.display = 'none';
     if (spectatorHud) spectatorHud.style.display = 'none';
@@ -1873,6 +1982,23 @@ document.addEventListener('DOMContentLoaded', () => {
           activeCustomMap.clearCheck = undefined;
           updateVerificationUI(false);
         }
+      },
+      onSelectionChanged: (element) => {
+        const selectionBar = document.getElementById('editor-selection-bar');
+        const selectionInfo = document.getElementById('editor-selection-info');
+        const btnRotate = document.getElementById('btn-editor-rotate') as HTMLButtonElement | null;
+        const btnDelete = document.getElementById('btn-editor-delete') as HTMLButtonElement | null;
+
+        if (element) {
+          if (selectionBar) selectionBar.style.display = 'flex';
+          if (selectionInfo) selectionInfo.textContent = `Selected: ${element.type.replace(/_/g, ' ')}`;
+          if (btnRotate) btnRotate.disabled = false;
+          if (btnDelete) btnDelete.disabled = false;
+        } else {
+          if (selectionBar) selectionBar.style.display = 'none';
+          if (btnRotate) btnRotate.disabled = true;
+          if (btnDelete) btnDelete.disabled = true;
+        }
       }
     });
 
@@ -1921,13 +2047,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const mode = mapData.mode === 'TRIAL' ? 'BATTLE_ROYALE' : (mapData.mode as GameModeType);
+    const spawnsCount = mapData.spawns?.length || ((mapData.botSpawns?.length || 0) + 1);
+    const playerCount = mapData.mode === 'TRIAL' ? 1 : Math.max(4, spawnsCount);
+
     game = new Game(
       gameContainer,
       mode,
       characterConfig.robeColor,
       characterConfig.spellColor,
       mapData.theme,
-      1,
+      playerCount,
       { ...characterConfig },
       selectedDifficulty
     );
@@ -2020,6 +2149,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (shotsEl) shotsEl.innerText = `${res.shots}`;
         if (tokensEl) tokensEl.innerText = `+25 🪙`;
         if (nextBtn) nextBtn.style.display = 'none';
+        const returnBtn = document.getElementById('btn-trial-return-editor');
+        if (returnBtn) returnBtn.style.display = 'inline-block';
       }
     };
 
@@ -2084,6 +2215,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnHostMp) {
       btnHostMp.onclick = () => {
         modal.style.display = 'none';
+        selectedCustomMap = mapData;
+        selectedMap = mapData.theme;
+        renderMainMenuCustomMaps();
         const mpModal = document.getElementById('multiplayer-modal');
         if (mpModal) mpModal.style.display = 'flex';
         const hostBtn = document.getElementById('btn-p2p-host');
@@ -2101,6 +2235,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnSave) {
       btnSave.onclick = () => {
         CustomMapStorage.save(mapData);
+        renderMainMenuCustomMaps();
         btnSave.innerText = '✓ Saved!';
         setTimeout(() => { btnSave.innerText = '💾 Save to My Maps'; }, 2500);
       };
@@ -2150,14 +2285,39 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  document.getElementById('btn-editor-rotate')?.addEventListener('click', () => {
+    activeEditor?.rotateSelected();
+  });
+  document.getElementById('btn-editor-delete')?.addEventListener('click', () => {
+    activeEditor?.deleteSelected();
+  });
+  document.getElementById('btn-selection-rotate')?.addEventListener('click', () => {
+    activeEditor?.rotateSelected();
+  });
+  document.getElementById('btn-selection-delete')?.addEventListener('click', () => {
+    activeEditor?.deleteSelected();
+  });
+  document.getElementById('btn-selection-deselect')?.addEventListener('click', () => {
+    activeEditor?.clearSelection();
+  });
+  document.getElementById('btn-editor-toggle-palette')?.addEventListener('click', () => {
+    const palette = document.getElementById('editor-palette');
+    palette?.classList.toggle('mobile-collapsed');
+  });
+
   document.getElementById('btn-editor-test')?.addEventListener('click', () => {
     if (activeCustomMap) {
-      const { valid, errors } = validateCustomMap(activeCustomMap);
-      if (!valid) {
-        alert(`Cannot start Clear Check:\n• ${errors.join('\n• ')}`);
-        return;
+      if (activeCustomMap.mode === 'TRIAL') {
+        const { valid, errors } = validateCustomMap(activeCustomMap);
+        if (!valid) {
+          alert(`Cannot start Clear Check:\n• ${errors.join('\n• ')}`);
+          return;
+        }
+        launchCustomMap(activeCustomMap, true);
+      } else {
+        // Direct playtest for Battle Royale, Team Battle, Gold Rush, etc.
+        launchCustomMap(activeCustomMap, false);
       }
-      launchCustomMap(activeCustomMap, true);
     }
   });
 
@@ -2174,6 +2334,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-editor-save')?.addEventListener('click', () => {
     if (activeCustomMap) {
       CustomMapStorage.save(activeCustomMap);
+      renderMainMenuCustomMaps();
       const saveBtn = document.getElementById('btn-editor-save');
       if (saveBtn) {
         saveBtn.innerText = '✓ Saved!';
@@ -2286,6 +2447,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (matchMenuModal) {
       matchMenuModal.style.display = 'flex';
       sfx.playModalOpen();
+      const btnMatchReturn = document.getElementById('btn-match-return-editor');
+      if (btnMatchReturn) {
+        btnMatchReturn.style.display = activeCustomMap ? 'block' : 'none';
+      }
       if (matchMenuInfo) {
         if (game?.trialStage) {
           matchMenuInfo.textContent = `Practice & Trials • ${game.trialStage.title}`;
@@ -2313,6 +2478,31 @@ document.addEventListener('DOMContentLoaded', () => {
       game.resumeMatch();
     }
   };
+
+  const returnToEditor = () => {
+    if (!activeCustomMap) return;
+    cancelPregameCountdown();
+    hideGlobalTouchControls();
+    closeAllModals();
+
+    if (gameOverOverlay) gameOverOverlay.style.display = 'none';
+    if (elimOverlay) elimOverlay.style.display = 'none';
+    if (spectatorHud) spectatorHud.style.display = 'none';
+    if (hudContainer) hudContainer.style.display = 'none';
+    const trialHud = document.getElementById('trial-hud');
+    if (trialHud) trialHud.style.display = 'none';
+
+    if (game) {
+      game.cleanup();
+      game = null;
+    }
+    openChallengeEditor(activeCustomMap);
+  };
+
+  document.getElementById('btn-gameover-return-editor')?.addEventListener('click', returnToEditor);
+  document.getElementById('btn-elim-return-editor')?.addEventListener('click', returnToEditor);
+  document.getElementById('btn-trial-return-editor')?.addEventListener('click', returnToEditor);
+  document.getElementById('btn-match-return-editor')?.addEventListener('click', returnToEditor);
 
   const leaveMatchToMenu = () => {
     cancelPregameCountdown();

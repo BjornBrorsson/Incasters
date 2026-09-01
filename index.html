@@ -168,6 +168,16 @@
               </div>
             </div>
 
+            <div class="settings-group custom-maps-group">
+              <div class="map-category-header">
+                <span class="settings-group-label">Custom &amp; Shared Maps</span>
+                <span id="custom-maps-badge" class="custom-maps-badge">0 saved</span>
+              </div>
+              <div id="custom-maps-selector" class="custom-maps-grid">
+                <!-- Dynamically populated from CustomMapStorage & State Share -->
+              </div>
+            </div>
+
             <div class="settings-group">
               <span class="settings-group-label">Difficulty</span>
               <div class="difficulty-selector">
@@ -242,6 +252,13 @@
           <div class="customizer-container glass-panel-nested">
             <div id="char-preview" class="char-preview"></div>
             <div class="customizer-controls">
+              <div class="customizer-row name-row">
+                <span class="customizer-label">Name</span>
+                <div class="name-input-wrapper">
+                  <input id="player-name-input" class="customizer-name-input" type="text" maxlength="16" placeholder="Wizard" />
+                  <span id="player-name-warning" class="customizer-name-warning" style="display: none;"></span>
+                </div>
+              </div>
               <div class="customizer-row">
                 <span class="customizer-label">Robe</span>
                 <div id="robe-color-picker" class="color-picker"></div>
@@ -429,6 +446,7 @@
           <div class="trial-result-actions">
             <button id="btn-trial-next" class="lan-action-btn success">Next Trial</button>
             <button id="btn-trial-retry" class="lan-action-btn">Retry</button>
+            <button id="btn-trial-return-editor" class="lan-action-btn primary" style="display: none;">🛠️ Return to Editor</button>
             <button id="btn-trial-menu" class="lan-action-btn danger">Trials Menu</button>
           </div>
         </div>
@@ -483,8 +501,11 @@
           <div class="editor-actions-group">
             <button id="btn-editor-undo" class="editor-tool-btn" title="Undo (Ctrl+Z)">↩️</button>
             <button id="btn-editor-redo" class="editor-tool-btn" title="Redo (Ctrl+Y)">↪️</button>
+            <button id="btn-editor-rotate" class="editor-tool-btn" title="Rotate Selected Object (R)">🔄</button>
+            <button id="btn-editor-delete" class="editor-tool-btn danger" title="Delete Selected Object (Del)">🗑️</button>
             <button id="btn-editor-clear" class="editor-tool-btn danger" title="Clear Map">🧹</button>
-            <button id="btn-editor-test" class="editor-action-btn primary" title="Test & Verify Challenge">▶ Clear Check</button>
+            <button id="btn-editor-toggle-palette" class="editor-tool-btn mobile-only" title="Toggle Tool Palette">🛠️</button>
+            <button id="btn-editor-test" class="editor-action-btn primary" title="Test & Verify Challenge">▶ Playtest</button>
             <button id="btn-editor-share" class="editor-action-btn share-btn" title="State Share Link">📤 Share</button>
             <button id="btn-editor-save" class="editor-action-btn success" title="Save to Local Library">💾 Save</button>
             <button id="btn-editor-exit" class="editor-action-btn danger" title="Exit Editor">✕ Exit</button>
@@ -492,7 +513,7 @@
         </div>
 
         <!-- Left Tool Palette -->
-        <div class="editor-palette glass-panel-light">
+        <div id="editor-palette" class="editor-palette glass-panel-light">
           <div class="palette-category-label">TOOLS</div>
           <button class="palette-btn active" data-tool="SELECT" title="Select & Inspect Objects (S)">
             <span class="palette-icon">📌</span>
@@ -504,13 +525,9 @@
           </button>
 
           <div class="palette-category-label">SPAWNS</div>
-          <button class="palette-btn" data-tool="PLAYER_SPAWN" title="Player Start Point">
+          <button class="palette-btn" data-tool="SPAWN" title="Spawn Point (Player &amp; Bots)">
             <span class="palette-icon">🧙</span>
-            <span class="palette-name">Player</span>
-          </button>
-          <button class="palette-btn" data-tool="BOT_SPAWN" title="Bot / Enemy Spawn Point">
-            <span class="palette-icon">🤖</span>
-            <span class="palette-name">Bot Spawn</span>
+            <span class="palette-name">Spawn</span>
           </button>
 
           <div class="palette-category-label">TARGETS</div>
@@ -558,6 +575,16 @@
             <span class="palette-icon">🏺</span>
             <span class="palette-name">Prop</span>
           </button>
+        </div>
+
+        <!-- Floating Selection Toolbar (appears when an object is selected) -->
+        <div id="editor-selection-bar" class="editor-selection-bar glass-panel-light" style="display: none;">
+          <span id="editor-selection-info" class="selection-info">Selected: Wall</span>
+          <div class="selection-actions">
+            <button id="btn-selection-rotate" class="editor-action-btn primary" title="Rotate Selected Object (R)">🔄 Rotate (R)</button>
+            <button id="btn-selection-delete" class="editor-action-btn danger" title="Delete Selected Object (Del)">🗑️ Delete</button>
+            <button id="btn-selection-deselect" class="editor-tool-btn" title="Deselect (Esc)">✕</button>
+          </div>
         </div>
 
         <!-- Bottom Status Bar -->
@@ -693,6 +720,7 @@
             <div class="pause-action-list">
               <button id="btn-match-resume" class="play-btn pause-btn" type="button">▶ RESUME BATTLE</button>
               <button id="btn-match-restart" class="trials-btn pause-btn" style="display: none;" type="button">🔄 RESTART STAGE</button>
+              <button id="btn-match-return-editor" class="play-btn pause-btn primary" style="display: none;" type="button">🛠️ RETURN TO EDITOR</button>
               <button id="btn-match-options" class="submenu-btn pause-btn" type="button">⚙️ OPTIONS &amp; AUDIO</button>
               <button id="btn-match-leave" class="lan-action-btn danger pause-btn" type="button">🚪 LEAVE TO MAIN MENU</button>
             </div>
@@ -848,6 +876,7 @@
 
         <div class="gameover-buttons">
           <button id="btn-elim-restart" class="play-btn">PLAY AGAIN</button>
+          <button id="btn-elim-return-editor" class="play-btn primary" style="display: none;">🛠️ RETURN TO EDITOR</button>
           <button id="btn-elim-spectate" class="play-btn tertiary">SPECTATE BATTLE</button>
           <button id="btn-elim-menu" class="play-btn secondary">BACK TO MENU</button>
         </div>
@@ -861,6 +890,7 @@
 
         <div class="gameover-buttons">
           <button id="btn-restart" class="play-btn">PLAY AGAIN</button>
+          <button id="btn-gameover-return-editor" class="play-btn primary" style="display: none;">🛠️ RETURN TO EDITOR</button>
           <button id="btn-back-menu" class="play-btn secondary">BACK TO MENU</button>
         </div>
       </div>

@@ -103,6 +103,7 @@ export interface CustomMapData {
   clearCheck?: ClearCheckRecord;
 
   // Placed map elements
+  spawns?: { x: number; y: number; team?: 'RED' | 'BLUE' }[];
   playerSpawn: { x: number; y: number };
   botSpawns?: { x: number; y: number; team?: 'RED' | 'BLUE' }[];
   dummies?: CustomTargetDummyDef[];
@@ -150,7 +151,10 @@ export function validateCustomMap(map: any): { valid: boolean; errors: string[] 
     errors.push('Map title is required');
   }
 
-  if (!map.playerSpawn || typeof map.playerSpawn.x !== 'number' || typeof map.playerSpawn.y !== 'number') {
+  const hasSpawns = (Array.isArray(map.spawns) && map.spawns.length > 0 && typeof map.spawns[0]?.x === 'number' && typeof map.spawns[0]?.y === 'number') ||
+    (map.playerSpawn && typeof map.playerSpawn.x === 'number' && typeof map.playerSpawn.y === 'number');
+
+  if (!hasSpawns) {
     errors.push('Player spawn point is required with valid x and y coordinates');
   }
 
@@ -191,6 +195,30 @@ export function sanitizeCustomMap(map: CustomMapData): CustomMapData {
   const validThemes: MapType[] = ['ARENA', 'COLOSSEUM', 'CHAMBER', 'OBSERVATORY', 'CATACOMBS'];
   const sanitizedTheme: MapType = validThemes.includes(map.theme) ? map.theme : 'ARENA';
 
+  // Unify spawns: support either new `spawns` or legacy `playerSpawn`/`botSpawns`
+  let spawnsList: { x: number; y: number; team?: 'RED' | 'BLUE' }[] = [];
+  if (Array.isArray(map.spawns) && map.spawns.length > 0) {
+    spawnsList = map.spawns.map((s) => ({
+      x: Number(s.x) || 0,
+      y: Number(s.y) || 0,
+      team: s.team === 'RED' || s.team === 'BLUE' ? s.team : undefined
+    }));
+  } else if (map.playerSpawn) {
+    spawnsList = [
+      { x: Number(map.playerSpawn.x) || 0, y: Number(map.playerSpawn.y) || 0 },
+      ...(Array.isArray(map.botSpawns) ? map.botSpawns.map((s) => ({
+        x: Number(s.x) || 0,
+        y: Number(s.y) || 0,
+        team: s.team === 'RED' || s.team === 'BLUE' ? s.team : undefined
+      })) : [])
+    ];
+  } else {
+    spawnsList = [{ x: 0, y: 0 }];
+  }
+
+  const playerSpawn = { x: spawnsList[0].x, y: spawnsList[0].y };
+  const botSpawns = spawnsList.slice(1);
+
   return {
     version: 1,
     id: map.id || `custom_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -212,15 +240,9 @@ export function sanitizeCustomMap(map: CustomMapData): CustomMapData {
       clearedAt: Number(map.clearCheck.clearedAt) || Date.now(),
       verifierSignature: map.clearCheck.verifierSignature
     } : undefined,
-    playerSpawn: {
-      x: Number(map.playerSpawn?.x) || 0,
-      y: Number(map.playerSpawn?.y) || 0
-    },
-    botSpawns: Array.isArray(map.botSpawns) ? map.botSpawns.map((s) => ({
-      x: Number(s.x) || 0,
-      y: Number(s.y) || 0,
-      team: s.team === 'RED' || s.team === 'BLUE' ? s.team : undefined
-    })) : [],
+    spawns: spawnsList,
+    playerSpawn,
+    botSpawns,
     dummies: Array.isArray(map.dummies) ? map.dummies.map((d, idx) => ({
       id: d.id || `dummy_${idx}`,
       x: Number(d.x) || 0,

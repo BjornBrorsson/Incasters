@@ -503,7 +503,8 @@ export class Game {
 
     // Player (Index 0)
     const playerSp = sp[0];
-    this.player = new Caster('player', 'You (Player)', playerSp.x, playerSp.y, 'GOLD', false, this.playerRobeColor, this.playerSpellColor, this.playerConfig);
+    const playerName = this.playerConfig.name || 'You (Player)';
+    this.player = new Caster('player', playerName, playerSp.x, playerSp.y, 'GOLD', false, this.playerRobeColor, this.playerSpellColor, this.playerConfig);
     this.scene.add(this.player.mesh);
     this.casters.push(this.player);
 
@@ -853,8 +854,48 @@ export class Game {
       this.player.reset();
       this.player.syncMeshPosition();
 
+      // Collect bot spawn coordinates
+      const botSpawns = (mapData.spawns && mapData.spawns.length > 1)
+        ? mapData.spawns.slice(1)
+        : (mapData.botSpawns && mapData.botSpawns.length > 0 ? mapData.botSpawns : []);
+
+      // If we don't have bots instantiated in this match, create them!
+      const targetBotCount = Math.max(botSpawns.length, 3);
+      const existingBots = this.casters.filter((c) => c.id !== 'player');
+
+      if (existingBots.length < targetBotCount) {
+        const botConfigs = generateDistinctBotConfigs(targetBotCount, this.playerConfig);
+        const botNames = ['Glitch', 'Spike', 'Glimmer', 'Vortex', 'Echo', 'Frost', 'Blaze'];
+        for (let i = existingBots.length; i < targetBotCount; i++) {
+          const sp = botSpawns.length > 0
+            ? botSpawns[i % botSpawns.length]
+            : { x: (Math.random() - 0.5) * 20, y: (Math.random() - 0.5) * 20 };
+          const botCfg = botConfigs[i] || randomCharacterConfig(0x2e7d32, 0xd4a020);
+          const name = BOT_ARCHETYPES[i % BOT_ARCHETYPES.length]?.name || botNames[i % botNames.length];
+          const botTeam = mapData.mode === 'TEAM_BATTLE' || mapData.mode === 'GOLD_RUSH'
+            ? (i % 2 === 0 ? 'BLUE' : 'RED')
+            : 'GOLD';
+
+          const bot = new Bot(
+            `bot_custom_${i + 1}`,
+            name,
+            sp.x + (Math.random() - 0.5) * 0.5,
+            sp.y + (Math.random() - 0.5) * 0.5,
+            botTeam,
+            botCfg.robeColor,
+            botCfg.spellColor,
+            botCfg
+          );
+          bot.onAiShoot = (angle, target) => {
+            this.spawnProjectile(bot, angle, target);
+          };
+          bot.setDifficulty(this.difficultyConfig);
+          this.scene.add(bot.mesh);
+          this.casters.push(bot);
+        }
+      }
+
       // Reposition bots if available
-      const botSpawns = mapData.botSpawns || [];
       let botSpawnIdx = 0;
       this.casters.forEach((c) => {
         if (c.id !== 'player') {
@@ -868,6 +909,23 @@ export class Game {
           c.syncMeshPosition();
         }
       });
+
+      // Spawn powerups
+      if (mapData.powerups) {
+        mapData.powerups.forEach((p) => {
+          const pu = new PowerUp(p.x, p.y, p.type);
+          this.scene.add(pu.mesh);
+          this.powerups.push(pu);
+        });
+      }
+
+      // Re-initialize game mode with all casters
+      this.gameModeManager.initMode(
+        this.scene,
+        this.casters,
+        this.physicsArena.powerupSpawners,
+        (this.physicsArena.width / 2) - 1.5
+      );
 
       this.fx.announce(mapData.title, '#00d4ff');
     }

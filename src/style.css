@@ -3031,6 +3031,212 @@ body {
   box-shadow: 0 0 12px rgba(0, 245, 160, 0.3);
 }
 
+/* Floating Object Selection Bar */
+.editor-selection-bar {
+  pointer-events: auto;
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--color-gold);
+  background: rgba(14, 18, 44, 0.95);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7), 0 0 12px rgba(255, 210, 61, 0.3);
+  z-index: 105;
+}
+
+.selection-info {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: var(--color-gold-light);
+  font-size: 0.85rem;
+}
+
+.selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Customizer Name Input */
+.name-row {
+  margin-bottom: 6px;
+}
+
+.name-input-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.customizer-name-input {
+  background: rgba(6, 9, 25, 0.85);
+  border: 1px solid rgba(255, 210, 61, 0.4);
+  color: #fff;
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 1.05rem;
+  padding: 8px 12px;
+  border-radius: 8px;
+  outline: none;
+  transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.customizer-name-input:focus {
+  border-color: var(--color-gold);
+  box-shadow: 0 0 12px var(--color-gold-glow);
+}
+
+.customizer-name-warning {
+  font-size: 0.75rem;
+  color: #ff5a6e;
+  font-weight: 600;
+}
+
+/* Main Menu Custom Maps Category */
+.custom-maps-group {
+  margin-top: 12px;
+}
+
+.map-category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.custom-maps-badge {
+  background: rgba(138, 75, 250, 0.3);
+  border: 1px solid rgba(138, 75, 250, 0.6);
+  color: #e0b0ff;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.custom-maps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.custom-map-card {
+  background: rgba(14, 18, 44, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.custom-map-card:hover {
+  border-color: var(--color-arcane-purple);
+  background: rgba(22, 28, 64, 0.85);
+  transform: translateY(-2px);
+}
+
+.custom-map-card.active {
+  border-color: var(--color-gold);
+  background: linear-gradient(135deg, rgba(255, 210, 61, 0.2), rgba(138, 75, 250, 0.2));
+  box-shadow: 0 0 14px rgba(255, 210, 61, 0.35);
+}
+
+.custom-map-card-title {
+  font-family: var(--font-title);
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.custom-map-card-meta {
+  font-size: 0.75rem;
+  color: #aaa;
+  display: flex;
+  justify-content: space-between;
+}
+
+.editor-tool-btn.mobile-only {
+  display: none;
+}
+
+/* Mobile Responsiveness for Editor Overlay */
+@media (max-width: 900px) {
+  .editor-top-bar {
+    margin: 8px;
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .editor-input-title {
+    width: 140px;
+    font-size: 0.9rem;
+  }
+  .editor-input-author {
+    display: none;
+  }
+  .editor-palette {
+    top: 68px;
+    left: 8px;
+    width: 110px;
+    max-height: calc(100vh - 140px);
+    padding: 6px;
+  }
+  .palette-btn {
+    padding: 5px 6px;
+    font-size: 0.72rem;
+  }
+  .editor-bottom-bar {
+    margin: 8px;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 650px) {
+  .editor-tool-btn.mobile-only {
+    display: inline-flex;
+  }
+  .editor-palette.mobile-collapsed {
+    display: none;
+  }
+  .editor-top-bar {
+    margin: 4px;
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+  .editor-par-inputs {
+    display: none;
+  }
+  .editor-actions-group {
+    gap: 4px;
+  }
+  .editor-action-btn {
+    padding: 5px 8px;
+    font-size: 0.75rem;
+  }
+  .editor-selection-bar {
+    bottom: 54px;
+    padding: 6px 10px;
+    gap: 8px;
+  }
+  .editor-bottom-bar .editor-coords {
+    display: none;
+  }
+}
+
 /* ==========================================================================
    STATE SHARE RECEIVED MODAL
    ========================================================================== */

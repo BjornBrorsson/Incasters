@@ -12,7 +12,8 @@ import {
   HAIR_COLORS,
   DEFAULT_CONFIG,
   loadCharacterConfig,
-  saveCharacterConfig
+  saveCharacterConfig,
+  sanitizePlayerName
 } from '../../src/game/CharacterConfig';
 
 // Mock localStorage for node test runner
@@ -65,5 +66,77 @@ describe('CharacterConfig: Cosmetic Catalog & Config Integrity', () => {
     localStorage.setItem('incasters_character', '{ corrupted json invalid');
     const loaded = loadCharacterConfig();
     assert.deepEqual(loaded, DEFAULT_CONFIG);
+  });
+
+  it('validates, sanitizes and persists player customized name', () => {
+    const validCheck = sanitizePlayerName('Spellweaver');
+    assert.equal(validCheck.valid, true);
+    assert.equal(validCheck.name, 'Spellweaver');
+
+    const trimmedCheck = sanitizePlayerName('   ArcaneStorm   ');
+    assert.equal(trimmedCheck.valid, true);
+    assert.equal(trimmedCheck.name, 'ArcaneStorm');
+
+    const config = { ...DEFAULT_CONFIG, name: 'Merlin' };
+    saveCharacterConfig(config);
+    const loaded = loadCharacterConfig();
+    assert.equal(loaded.name, 'Merlin');
+  });
+
+  it('enforces character name bounds (non-empty, max 16 chars)', () => {
+    const emptyCheck = sanitizePlayerName('    ');
+    assert.equal(emptyCheck.valid, false);
+    assert.equal(emptyCheck.name, 'Wizard');
+
+    const tooLongCheck = sanitizePlayerName('ThisNameIsWayTooLongForWizard');
+    assert.equal(tooLongCheck.valid, false);
+    assert.ok(tooLongCheck.name.length <= 16);
+  });
+
+  it('blocks racist, bigoted and sexist words, including leetspeak and spaced bypasses', () => {
+    // Racist slurs & hate speech
+    const slur1 = sanitizePlayerName('nigger');
+    assert.equal(slur1.valid, false);
+    assert.equal(slur1.name, 'Wizard');
+
+    const slurLeet = sanitizePlayerName('n!gg3r');
+    assert.equal(slurLeet.valid, false);
+    assert.equal(slurLeet.name, 'Wizard');
+
+    const slurSpaced = sanitizePlayerName('n i g g a');
+    assert.equal(slurSpaced.valid, false);
+    assert.equal(slurSpaced.name, 'Wizard');
+
+    const slurNazi = sanitizePlayerName('Heil Hitler');
+    assert.equal(slurNazi.valid, false);
+    assert.equal(slurNazi.name, 'Wizard');
+
+    // Bigotry & homophobic slurs
+    const slurHomo = sanitizePlayerName('faggot');
+    assert.equal(slurHomo.valid, false);
+    assert.equal(slurHomo.name, 'Wizard');
+
+    const slurHomoLeet = sanitizePlayerName('f@g');
+    assert.equal(slurHomoLeet.valid, false);
+    assert.equal(slurHomoLeet.name, 'Wizard');
+
+    // Sexist & misogynistic slurs
+    const sexist1 = sanitizePlayerName('bitch');
+    assert.equal(sexist1.valid, false);
+    assert.equal(sexist1.name, 'Wizard');
+
+    const sexistLeet = sanitizePlayerName('b.i.t.c.h');
+    assert.equal(sexistLeet.valid, false);
+    assert.equal(sexistLeet.name, 'Wizard');
+
+    const sexist2 = sanitizePlayerName('cunt');
+    assert.equal(sexist2.valid, false);
+    assert.equal(sexist2.name, 'Wizard');
+
+    // Attempting to save an offensive name falls back to safe default
+    const badConfig = { ...DEFAULT_CONFIG, name: 'b1tch' };
+    saveCharacterConfig(badConfig);
+    const loaded = loadCharacterConfig();
+    assert.equal(loaded.name, 'Wizard');
   });
 });

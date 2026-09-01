@@ -12,6 +12,7 @@ import { PALETTE, createSkyDome } from '../engine/Theme';
 
 export type EditorTool =
   | 'SELECT'
+  | 'SPAWN'
   | 'WALL_BLOCK'
   | 'WALL_PILLAR'
   | 'WALL_BOX'
@@ -53,6 +54,7 @@ export class ChallengeEditor {
   private groundPlane: THREE.Mesh;
   private previewMesh: THREE.Group | null = null;
   private placedObjectsGroup: THREE.Group;
+  private selectionVisual: THREE.Group | null = null;
 
   // Raycasting & Interaction
   private raycaster = new THREE.Raycaster();
@@ -76,6 +78,7 @@ export class ChallengeEditor {
   private historyIndex: number = -1;
   private isDisposed = false;
   private animationFrameId: number | null = null;
+  private onKeyDownHandler: ((e: KeyboardEvent) => void) | null = null;
 
   constructor(container: HTMLElement, initialMap?: CustomMapData, callbacks: EditorCallbacks = {}) {
     this.container = container;
@@ -232,36 +235,38 @@ export class ChallengeEditor {
       });
     }
 
-    // 1. Render Player Spawn Marker
-    const pSpawnGroup = new THREE.Group();
-    pSpawnGroup.position.set(this.mapData.playerSpawn.x, 0, this.mapData.playerSpawn.y);
-    const pCircle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.9, 0.9, 0.1, 16),
-      new THREE.MeshStandardMaterial({ color: 0x8a4bfa, emissive: 0x5821c9, emissiveIntensity: 0.6 })
-    );
-    pCircle.position.y = 0.05;
-    pSpawnGroup.add(pCircle);
-    const pIcon = new THREE.Mesh(
-      new THREE.ConeGeometry(0.4, 0.9, 8),
-      new THREE.MeshStandardMaterial({ color: 0xffd23d, roughness: 0.3 })
-    );
-    pIcon.position.y = 0.6;
-    pSpawnGroup.add(pIcon);
-    pSpawnGroup.userData = { type: 'PLAYER_SPAWN', index: 0 };
-    this.placedObjectsGroup.add(pSpawnGroup);
+    // 1. Render Unified Spawns
+    const spawns: { x: number; y: number; team?: 'RED' | 'BLUE' }[] = this.mapData.spawns && this.mapData.spawns.length > 0
+      ? this.mapData.spawns
+      : [this.mapData.playerSpawn, ...(this.mapData.botSpawns || [])];
 
-    // 2. Render Bot Spawns
-    (this.mapData.botSpawns || []).forEach((s, idx) => {
-      const bGroup = new THREE.Group();
-      bGroup.position.set(s.x, 0, s.y);
-      const bCircle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.8, 0.8, 0.1, 16),
-        new THREE.MeshStandardMaterial({ color: 0xff3366, emissive: 0xaa1133, emissiveIntensity: 0.6 })
+    spawns.forEach((s, idx) => {
+      const sGroup = new THREE.Group();
+      sGroup.position.set(s.x, 0, s.y);
+      const isPlayer = idx === 0;
+      const spawnColor = isPlayer
+        ? 0x8a4bfa
+        : (s.team === 'RED' ? 0xff3366 : (s.team === 'BLUE' ? 0x3388ff : 0xd4a020));
+      const emissiveColor = isPlayer
+        ? 0x5821c9
+        : (s.team === 'RED' ? 0xaa1133 : (s.team === 'BLUE' ? 0x1144aa : 0x664400));
+
+      const sCircle = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.85, 0.85, 0.1, 16),
+        new THREE.MeshStandardMaterial({ color: spawnColor, emissive: emissiveColor, emissiveIntensity: 0.6 })
       );
-      bCircle.position.y = 0.05;
-      bGroup.add(bCircle);
-      bGroup.userData = { type: 'BOT_SPAWN', index: idx };
-      this.placedObjectsGroup.add(bGroup);
+      sCircle.position.y = 0.05;
+      sGroup.add(sCircle);
+
+      const icon = new THREE.Mesh(
+        new THREE.ConeGeometry(0.35, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: isPlayer ? 0xffd23d : 0x00f5a0, roughness: 0.3 })
+      );
+      icon.position.y = 0.55;
+      sGroup.add(icon);
+
+      sGroup.userData = { type: 'SPAWN', index: idx };
+      this.placedObjectsGroup.add(sGroup);
     });
 
     // 3. Render Walls
@@ -445,11 +450,10 @@ export class ChallengeEditor {
       case 'WALL_PILLAR':
         this.previewMesh.add(new THREE.Mesh(new THREE.BoxGeometry(4, 1.4, 4), ghostMat));
         break;
+      case 'SPAWN':
       case 'PLAYER_SPAWN':
-        this.previewMesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.2, 16), ghostMat));
-        break;
       case 'BOT_SPAWN':
-        this.previewMesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.2, 16), ghostMat));
+        this.previewMesh.add(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.2, 16), ghostMat));
         break;
       case 'TARGET_DUMMY':
         this.previewMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.75, 12, 12), ghostMat));
@@ -485,14 +489,29 @@ export class ChallengeEditor {
     const y = this.snap(worldY);
 
     switch (this.activeTool) {
-      case 'PLAYER_SPAWN':
-        this.mapData.playerSpawn = { x, y };
-        break;
+      case 'SELECT':
+        this.selectAt(worldX, worldY);
+        return;
 
-      case 'BOT_SPAWN':
-        this.mapData.botSpawns = this.mapData.botSpawns || [];
-        this.mapData.botSpawns.push({ x, y });
+      case 'SPAWN':
+      case 'PLAYER_SPAWN':
+      case 'BOT_SPAWN': {
+        const spawns = this.mapData.spawns && this.mapData.spawns.length > 0
+          ? [...this.mapData.spawns]
+          : [{ x: this.mapData.playerSpawn?.x ?? 0, y: this.mapData.playerSpawn?.y ?? -10 }];
+        const existingIdx = spawns.findIndex((s) => Math.hypot(s.x - x, s.y - y) < 1.2);
+        if (existingIdx >= 0) {
+          spawns[existingIdx] = { ...spawns[existingIdx], x, y };
+        } else if (spawns.length < 8) {
+          spawns.push({ x, y });
+        } else {
+          spawns[spawns.length - 1] = { x, y };
+        }
+        this.mapData.spawns = spawns;
+        this.mapData.playerSpawn = { x: spawns[0].x, y: spawns[0].y };
+        this.mapData.botSpawns = spawns.slice(1);
         break;
+      }
 
       case 'WALL_BLOCK':
         this.mapData.walls.push({ minX: x - 1, minY: y - 1, maxX: x + 1, maxY: y + 1 });
@@ -677,14 +696,302 @@ export class ChallengeEditor {
       return;
     }
 
-    // Bot spawns
-    const botIdx = (this.mapData.botSpawns || []).findIndex((s) => Math.hypot(s.x - worldX, s.y - worldY) <= r);
-    if (botIdx >= 0) {
-      this.mapData.botSpawns!.splice(botIdx, 1);
+    // Spawns
+    const spawns = this.mapData.spawns || [];
+    const spawnIdx = spawns.findIndex((s) => Math.hypot(s.x - worldX, s.y - worldY) <= r);
+    if (spawnIdx > 0) {
+      this.mapData.spawns!.splice(spawnIdx, 1);
+      this.mapData.playerSpawn = { x: this.mapData.spawns![0].x, y: this.mapData.spawns![0].y };
+      this.mapData.botSpawns = this.mapData.spawns!.slice(1);
       this.rebuildPlacedObjects();
       this.pushHistory();
       return;
     }
+  }
+
+  // ── Selection & Object Manipulation System ──
+  private selectAt(worldX: number, worldY: number) {
+    // 1. Raycast against placed meshes
+    this.raycaster.setFromCamera(this.mouse, this.camera);
+    const intersects = this.raycaster.intersectObjects(this.placedObjectsGroup.children, true);
+
+    let hitUserData: { type: string; index: number; [key: string]: any } | null = null;
+
+    for (const hit of intersects) {
+      let cur: THREE.Object3D | null = hit.object;
+      while (cur && cur !== this.placedObjectsGroup) {
+        if (cur.userData && cur.userData.type) {
+          if (cur.userData.type === 'WALL' && cur.userData.isPerimeter) {
+            break; // Do not select perimeter boundary walls
+          }
+          hitUserData = cur.userData as any;
+          break;
+        }
+        cur = cur.parent;
+      }
+      if (hitUserData) break;
+    }
+
+    // 2. Fallback distance check if raycast missed thin geometry
+    if (!hitUserData) {
+      const r = 1.8;
+      const wallIdx = (this.mapData.walls || []).findIndex(
+        (w) => !this.isPerimeterWall(w) && worldX >= w.minX - 0.3 && worldX <= w.maxX + 0.3 && worldY >= w.minY - 0.3 && worldY <= w.maxY + 0.3
+      );
+      if (wallIdx >= 0) {
+        hitUserData = { type: 'WALL', index: wallIdx };
+      }
+
+      if (!hitUserData) {
+        const spawns = this.mapData.spawns || [this.mapData.playerSpawn];
+        const sIdx = spawns.findIndex((s) => Math.hypot(s.x - worldX, s.y - worldY) <= r);
+        if (sIdx >= 0) hitUserData = { type: 'SPAWN', index: sIdx };
+      }
+
+      if (!hitUserData) {
+        const dIdx = (this.mapData.dummies || []).findIndex((d) => Math.hypot(d.x - worldX, d.y - worldY) <= r);
+        if (dIdx >= 0) hitUserData = { type: 'TARGET_DUMMY', index: dIdx };
+      }
+
+      if (!hitUserData) {
+        const hIdx = (this.mapData.hazards || []).findIndex((h) => Math.hypot(h.x - worldX, h.y - worldY) <= r);
+        if (hIdx >= 0) hitUserData = { type: 'HAZARD', index: hIdx };
+      }
+
+      if (!hitUserData) {
+        const mIdx = (this.mapData.movingWalls || []).findIndex((m) => Math.hypot(m.baseX - worldX, m.baseY - worldY) <= r);
+        if (mIdx >= 0) hitUserData = { type: 'MOVING_WALL', index: mIdx };
+      }
+
+      if (!hitUserData) {
+        const drIdx = (this.mapData.doors || []).findIndex(
+          (d) => worldX >= d.minX - 0.5 && worldX <= d.maxX + 0.5 && worldY >= d.minY - 0.5 && worldY <= d.maxY + 0.5
+        );
+        if (drIdx >= 0) hitUserData = { type: 'DOOR', index: drIdx };
+      }
+
+      if (!hitUserData) {
+        const pIdx = (this.mapData.powerups || []).findIndex((p) => Math.hypot(p.x - worldX, p.y - worldY) <= r);
+        if (pIdx >= 0) hitUserData = { type: 'POWERUP', index: pIdx };
+      }
+
+      if (!hitUserData) {
+        const portIdx = (this.mapData.portals || []).findIndex(
+          (p) => Math.hypot(p.x1 - worldX, p.y1 - worldY) <= r || Math.hypot(p.x2 - worldX, p.y2 - worldY) <= r
+        );
+        if (portIdx >= 0) hitUserData = { type: 'PORTAL', index: portIdx };
+      }
+
+      if (!hitUserData) {
+        const srIdx = (this.mapData.speedRunes || []).findIndex((s) => Math.hypot(s.x - worldX, s.y - worldY) <= r);
+        if (srIdx >= 0) hitUserData = { type: 'SPEED_RUNE', index: srIdx };
+      }
+
+      if (!hitUserData) {
+        const propIdx = (this.mapData.destructibleProps || []).findIndex((p) => Math.hypot(p.x - worldX, p.y - worldY) <= r);
+        if (propIdx >= 0) hitUserData = { type: 'PROP', index: propIdx };
+      }
+    }
+
+    if (hitUserData) {
+      this.selectedElement = {
+        type: hitUserData.type,
+        index: hitUserData.index,
+        data: this.getElementData(hitUserData.type, hitUserData.index)
+      };
+    } else {
+      this.selectedElement = null;
+    }
+
+    this.updateSelectionVisual();
+    this.callbacks.onSelectionChanged?.(this.selectedElement);
+  }
+
+  private updateSelectionVisual() {
+    if (this.selectionVisual) {
+      this.scene.remove(this.selectionVisual);
+      this.selectionVisual.traverse((ch) => {
+        if (ch instanceof THREE.Mesh || ch instanceof THREE.LineSegments) {
+          ch.geometry.dispose();
+          if (Array.isArray(ch.material)) ch.material.forEach((m) => m.dispose());
+          else ch.material.dispose();
+        }
+      });
+      this.selectionVisual = null;
+    }
+
+    if (!this.selectedElement) return;
+
+    let targetMesh: THREE.Object3D | null = null;
+    for (const child of this.placedObjectsGroup.children) {
+      if (child.userData?.type === this.selectedElement.type && child.userData?.index === this.selectedElement.index) {
+        targetMesh = child;
+        break;
+      }
+    }
+
+    if (!targetMesh) return;
+
+    const box = new THREE.Box3().setFromObject(targetMesh);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+
+    this.selectionVisual = new THREE.Group();
+
+    // Vibrant cyan wireframe box
+    const boxGeo = new THREE.BoxGeometry(Math.max(1.2, size.x + 0.25), Math.max(1.2, size.y + 0.25), Math.max(1.2, size.z + 0.25));
+    const edges = new THREE.EdgesGeometry(boxGeo);
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x00f5a0 });
+    const wireframe = new THREE.LineSegments(edges, lineMat);
+    wireframe.position.copy(center);
+    this.selectionVisual.add(wireframe);
+
+    // Glowing floor ring
+    const ringRadius = Math.max(size.x, size.z) * 0.65 + 0.3;
+    const ringGeo = new THREE.RingGeometry(ringRadius - 0.08, ringRadius, 24);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0x00f5a0, side: THREE.DoubleSide });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(center.x, 0.06, center.z);
+    this.selectionVisual.add(ring);
+
+    this.scene.add(this.selectionVisual);
+  }
+
+  /**
+   * Rotates the currently selected object:
+   * - Walls & Doors: Swaps width and length around center
+   * - Moving Walls: Swaps axis and dimensions
+   * - Hazards: Rotates fire angle by 45 degrees
+   * - Target Dummies: Toggles movement axis
+   * - Spawns: Cycles team alignment
+   */
+  rotateSelected() {
+    if (!this.selectedElement) return;
+    const { type, index } = this.selectedElement;
+
+    if (type === 'WALL') {
+      const wall = this.mapData.walls[index];
+      if (wall && !this.isPerimeterWall(wall)) {
+        const cx = (wall.minX + wall.maxX) / 2;
+        const cy = (wall.minY + wall.maxY) / 2;
+        const hw = (wall.maxX - wall.minX) / 2;
+        const hh = (wall.maxY - wall.minY) / 2;
+        wall.minX = cx - hh;
+        wall.maxX = cx + hh;
+        wall.minY = cy - hw;
+        wall.maxY = cy + hw;
+      }
+    } else if (type === 'DOOR') {
+      const door = this.mapData.doors?.[index];
+      if (door) {
+        const cx = (door.minX + door.maxX) / 2;
+        const cy = (door.minY + door.maxY) / 2;
+        const hw = (door.maxX - door.minX) / 2;
+        const hh = (door.maxY - door.minY) / 2;
+        door.minX = cx - hh;
+        door.maxX = cx + hh;
+        door.minY = cy - hw;
+        door.maxY = cy + hw;
+      }
+    } else if (type === 'MOVING_WALL') {
+      const mw = this.mapData.movingWalls?.[index];
+      if (mw) {
+        const oldHw = mw.halfW;
+        mw.halfW = mw.halfH;
+        mw.halfH = oldHw;
+        mw.axis = mw.axis === 'x' ? 'y' : 'x';
+      }
+    } else if (type === 'HAZARD') {
+      const hz = this.mapData.hazards?.[index];
+      if (hz) {
+        hz.angle = ((hz.angle || 0) + Math.PI / 4) % (Math.PI * 2);
+      }
+    } else if (type === 'TARGET_DUMMY') {
+      const d = this.mapData.dummies?.[index];
+      if (d) {
+        d.moveAxis = d.moveAxis === 'y' ? 'x' : 'y';
+      }
+    } else if (type === 'SPAWN') {
+      const spawns = this.mapData.spawns || [];
+      if (spawns[index] && index > 0) {
+        spawns[index].team = spawns[index].team === 'RED' ? 'BLUE' : (spawns[index].team === 'BLUE' ? undefined : 'RED');
+        this.mapData.botSpawns = spawns.slice(1);
+      }
+    }
+
+    this.rebuildPlacedObjects();
+    this.updateSelectionVisual();
+    this.pushHistory();
+    this.callbacks.onMapModified?.(this.mapData);
+  }
+
+  /**
+   * Deletes the currently selected object.
+   */
+  deleteSelected() {
+    if (!this.selectedElement) return;
+    const { type, index } = this.selectedElement;
+
+    if (type === 'WALL') {
+      const wall = this.mapData.walls[index];
+      if (wall && !this.isPerimeterWall(wall)) {
+        this.mapData.walls.splice(index, 1);
+      }
+    } else if (type === 'TARGET_DUMMY') {
+      this.mapData.dummies?.splice(index, 1);
+    } else if (type === 'POWERUP') {
+      this.mapData.powerups?.splice(index, 1);
+    } else if (type === 'PORTAL') {
+      this.mapData.portals?.splice(index, 1);
+    } else if (type === 'SPEED_RUNE') {
+      this.mapData.speedRunes?.splice(index, 1);
+    } else if (type === 'HAZARD') {
+      this.mapData.hazards?.splice(index, 1);
+    } else if (type === 'MOVING_WALL') {
+      this.mapData.movingWalls?.splice(index, 1);
+    } else if (type === 'DOOR') {
+      this.mapData.doors?.splice(index, 1);
+    } else if (type === 'PROP') {
+      this.mapData.destructibleProps?.splice(index, 1);
+    } else if (type === 'SPAWN') {
+      if (index > 0 && this.mapData.spawns) {
+        this.mapData.spawns.splice(index, 1);
+        this.mapData.playerSpawn = { x: this.mapData.spawns[0].x, y: this.mapData.spawns[0].y };
+        this.mapData.botSpawns = this.mapData.spawns.slice(1);
+      }
+    }
+
+    this.selectedElement = null;
+    this.updateSelectionVisual();
+    this.rebuildPlacedObjects();
+    this.pushHistory();
+    this.callbacks.onSelectionChanged?.(null);
+    this.callbacks.onMapModified?.(this.mapData);
+  }
+
+  private getElementData(type: string, index: number): any {
+    switch (type) {
+      case 'WALL': return this.mapData.walls[index];
+      case 'TARGET_DUMMY': return this.mapData.dummies?.[index];
+      case 'POWERUP': return this.mapData.powerups?.[index];
+      case 'PORTAL': return this.mapData.portals?.[index];
+      case 'SPEED_RUNE': return this.mapData.speedRunes?.[index];
+      case 'HAZARD': return this.mapData.hazards?.[index];
+      case 'MOVING_WALL': return this.mapData.movingWalls?.[index];
+      case 'DOOR': return this.mapData.doors?.[index];
+      case 'PROP': return this.mapData.destructibleProps?.[index];
+      case 'SPAWN': return (this.mapData.spawns || [this.mapData.playerSpawn])[index];
+      default: return null;
+    }
+  }
+
+  clearSelection() {
+    this.selectedElement = null;
+    this.updateSelectionVisual();
+    this.callbacks.onSelectionChanged?.(null);
   }
 
   // ── History Stack ──
@@ -788,6 +1095,33 @@ export class ChallengeEditor {
       this.camera.updateProjectionMatrix();
     });
 
+    // Keyboard Shortcuts
+    this.onKeyDownHandler = (e: KeyboardEvent) => {
+      const targetTag = (e.target as HTMLElement)?.tagName;
+      if (targetTag === 'INPUT' || targetTag === 'TEXTAREA' || targetTag === 'SELECT') {
+        return;
+      }
+      if (e.key === 'r' || e.key === 'R') {
+        e.preventDefault();
+        this.rotateSelected();
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault();
+        this.deleteSelected();
+      } else if (e.key === 'Escape') {
+        this.selectedElement = null;
+        this.updateSelectionVisual();
+        this.callbacks.onSelectionChanged?.(null);
+      } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        if (e.shiftKey) this.redo();
+        else this.undo();
+      } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        this.redo();
+      }
+    };
+    window.addEventListener('keydown', this.onKeyDownHandler);
+
     // Resize
     window.addEventListener('resize', this.onResize);
   }
@@ -815,6 +1149,10 @@ export class ChallengeEditor {
       cancelAnimationFrame(this.animationFrameId);
     }
     window.removeEventListener('resize', this.onResize);
+    if (this.onKeyDownHandler) {
+      window.removeEventListener('keydown', this.onKeyDownHandler);
+      this.onKeyDownHandler = null;
+    }
 
     this.scene.traverse((child) => {
       if (child instanceof THREE.Mesh) {

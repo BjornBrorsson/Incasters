@@ -44,6 +44,7 @@ export interface CharacterConfig {
   trail: TrailStyle;
   burst: BurstStyle;
   title?: string;
+  name?: string;
   // Rotation angle (radians) applied to head-gear for creative positioning
   hatRotation: number;
 }
@@ -98,33 +99,37 @@ export const WEAPON_STYLES: { id: WeaponStyle; label: string }[] = [
   { id: 'STAFF', label: 'Elder Staff' },
   { id: 'WAND', label: 'Dueling Wand' },
   { id: 'SWORD', label: 'Silver Rapier' },
-  { id: 'SCYTHE', label: 'Astral Scythe' },
-  { id: 'GRIMOIRE_FOCUS', label: 'Grimoire Tome' },
+  { id: 'SCYTHE', label: 'Reaper Scythe' },
+  { id: 'GRIMOIRE_FOCUS', label: 'Grimoire Focus' },
   { id: 'ORB_SCEPTRE', label: 'Orb Sceptre' },
-  { id: 'BOW', label: 'Mystic Bow' },
-  { id: 'BROOM', label: 'Witch Broom' }
+  { id: 'BOW', label: 'Arcane Bow' },
+  { id: 'BROOM', label: 'Flying Broom' }
 ];
 
 export const TRAIL_STYLES: { id: TrailStyle; label: string }[] = [
-  { id: 'DEFAULT', label: 'Classic Sparks' },
-  { id: 'CELESTIAL', label: 'Celestial Stardust' },
+  { id: 'DEFAULT', label: 'Arcane Sparkle' },
+  { id: 'CELESTIAL', label: 'Starlight Orbit' },
   { id: 'PHOENIX', label: 'Phoenix Embers' },
-  { id: 'VOID', label: 'Void Nebula' },
-  { id: 'GLITCH', label: 'Cyber Glitch' },
-  { id: 'LIGHTNING', label: 'Volt Arc' }
+  { id: 'VOID', label: 'Void Wisp' },
+  { id: 'GLITCH', label: 'Digital Matrix' },
+  { id: 'LIGHTNING', label: 'Static Arc' }
 ];
 
 export const BURST_STYLES: { id: BurstStyle; label: string }[] = [
-  { id: 'SPARKLE', label: 'Sparkle Burst' },
-  { id: 'SUPERNOVA', label: 'Supernova' },
-  { id: 'PLASMA', label: 'Plasma Ring' },
-  { id: 'FROST_BLAST', label: 'Frost Shatter' },
-  { id: 'ARCANE_FLAME', label: 'Arcane Flare' }
+  { id: 'SPARKLE', label: 'Stardust Nova' },
+  { id: 'SUPERNOVA', label: 'Supernova Blast' },
+  { id: 'PLASMA', label: 'Solar Flare' },
+  { id: 'FROST_BLAST', label: 'Absolute Zero' },
+  { id: 'ARCANE_FLAME', label: 'Hellfire Burst' }
 ];
 
-export const EYE_COLORS = [0xfff000, 0xe0a020, 0xff3366, 0x58c040, 0xffffff, 0x00d2ff];
+export const EYE_COLORS: number[] = [
+  0xfff000, 0x00f0ff, 0xff0044, 0x00ff88, 0xff8800, 0xff00ff, 0xffffff, 0x8800ff
+];
 
-export const HAIR_COLORS = [0x2b1b0e, 0x8b4513, 0xffd700, 0xff3366, 0x39ff14, 0xb026ff, 0xffffff, 0x1a1a1a];
+export const HAIR_COLORS: number[] = [
+  0x2b1b0e, 0x7c4a1e, 0xd4a020, 0xcccccc, 0xff3355, 0x3388ff, 0x00f5a0, 0x8a4bfa
+];
 
 export const DEFAULT_CONFIG: CharacterConfig = {
   robeColor: 0x6b2fa0,
@@ -132,6 +137,7 @@ export const DEFAULT_CONFIG: CharacterConfig = {
   trail: 'DEFAULT',
   burst: 'SPARKLE',
   title: 'Novice Caster',
+  name: 'Wizard',
   hat: 'WIZARD',
   accessory: 'NONE',
   eyeColor: 0xfff000,
@@ -142,6 +148,108 @@ export const DEFAULT_CONFIG: CharacterConfig = {
   hatRotation: 0
 };
 
+/**
+ * Normalizes text to detect obfuscated words by stripping common non-alphanumeric
+ * delimiters and translating leetspeak glyphs.
+ */
+function normalizeForSafetyCheck(text: string): string {
+  let s = text.toLowerCase();
+  const map: Record<string, string> = {
+    '@': 'a', '4': 'a', '^': 'a',
+    '8': 'b', '6': 'b',
+    '(': 'c', '<': 'c', '{': 'c', '[': 'c',
+    '3': 'e', '€': 'e',
+    '1': 'i', '!': 'i', '|': 'i',
+    '0': 'o',
+    '5': 's', '$': 's', 'z': 's',
+    '7': 't', '+': 't',
+    'v': 'u',
+    '9': 'g'
+  };
+  let result = '';
+  for (const ch of s) {
+    result += map[ch] ?? ch;
+  }
+  return result;
+}
+
+// Word boundaries & substring patterns for prohibited slurs & hate speech
+const BLOCKED_PATTERNS: RegExp[] = [
+  // Racial slurs (African-American, Asian, Latino, Jewish, Indigenous, Romani, etc.)
+  /n+i+g+g+[a-z]*/i,
+  /n+i+g+a+[a-z]*/i,
+  /n+i+b+b+[a-z]*/i,
+  /k+i+k+e+[a-z]*/i,
+  /c+h+i+n+k+[a-z]*/i,
+  /g+o+o+k+[a-z]*/i,
+  /s+p+i+c+[a-z]*/i,
+  /w+e+t+b+a+c+k+[a-z]*/i,
+  /c+o+o+n+[a-z]*/i,
+  /r+e+d+s+k+i+n+[a-z]*/i,
+  /p+a+k+i+[a-z]*/i,
+  /g+y+p+s+y+[a-z]*/i,
+  /w+o+g+[a-z]*/i,
+  // White supremacy & Neo-Nazi hate symbols / slogans
+  /1+4+8+8+/i,
+  /h+e+i+l+h+i+t+l+e+r+/i,
+  /h+i+t+l+e+r+/i,
+  /s+w+a+s+t+i+k+a+/i,
+  /w+h+i+t+e+p+o+w+e+r+/i,
+  /k+u+k+l+u+x+k+l+a+n+/i,
+  /\bk+k+k+\b/i,
+  /a+r+y+a+n+n+a+t+i+o+n+/i,
+  /g+a+s+t+h+e+j+e+w+s+/i,
+  // Bigotry / Homophobic & Transphobic slurs
+  /f+a+g+g+o+t+[a-z]*/i,
+  /\bf+a+g+s?\b/i,
+  /d+y+k+e+[a-z]*/i,
+  /t+r+a+n+n+y+[a-z]*/i,
+  /s+h+e+m+a+l+e+[a-z]*/i,
+  // Sexist, Misogynistic slurs & sexual violence
+  /c+u+n+t+[a-z]*/i,
+  /b+i+t+c+h+[a-z]*/i,
+  /w+h+o+r+e+[a-z]*/i,
+  /s+l+u+t+[a-z]*/i,
+  /t+w+a+t+[a-z]*/i,
+  /r+a+p+e+[a-z]*/i,
+  /r+a+p+i+s+t+[a-z]*/i
+];
+
+/**
+ * Sanitizes and validates a player's customized name against length bounds
+ * and a comprehensive safety filter prohibiting racist, bigoted, and sexist terms.
+ */
+export function sanitizePlayerName(rawName: string): { valid: boolean; name: string; reason?: string } {
+  if (typeof rawName !== 'string') {
+    return { valid: false, name: 'Wizard', reason: 'Invalid name format.' };
+  }
+
+  const trimmed = rawName.trim();
+  if (trimmed.length === 0) {
+    return { valid: false, name: 'Wizard', reason: 'Name cannot be empty.' };
+  }
+
+  if (trimmed.length > 16) {
+    return { valid: false, name: trimmed.slice(0, 16), reason: 'Name cannot exceed 16 characters.' };
+  }
+
+  // Check against safety blocklist
+  const normalized = normalizeForSafetyCheck(trimmed);
+  const stripped = normalized.replace(/[^a-z0-9]/g, '');
+
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(normalized) || pattern.test(stripped)) {
+      return {
+        valid: false,
+        name: 'Wizard',
+        reason: 'Name contains prohibited or offensive language.'
+      };
+    }
+  }
+
+  return { valid: true, name: trimmed };
+}
+
 const STORAGE_KEY = 'incasters_character';
 
 export function loadCharacterConfig(): CharacterConfig {
@@ -149,7 +257,12 @@ export function loadCharacterConfig(): CharacterConfig {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<CharacterConfig>;
-      return { ...DEFAULT_CONFIG, ...parsed };
+      const config = { ...DEFAULT_CONFIG, ...parsed };
+      if (config.name) {
+        const check = sanitizePlayerName(config.name);
+        config.name = check.valid ? check.name : 'Wizard';
+      }
+      return config;
     }
   } catch {
     // ignore malformed storage
@@ -166,7 +279,12 @@ export function loadCharacterConfig(): CharacterConfig {
 
 export function saveCharacterConfig(cfg: CharacterConfig) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+    const toSave = { ...cfg };
+    if (toSave.name) {
+      const check = sanitizePlayerName(toSave.name);
+      toSave.name = check.valid ? check.name : 'Wizard';
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {
     // ignore storage failures (private mode, etc.)
   }

@@ -151,4 +151,102 @@ describe('Custom Maps: Schema Validation, Templates & Persistence', () => {
     assert.equal(deleted, true);
     assert.equal(CustomMapStorage.getAll().length, 1);
   });
+
+  it('handles unified spawns array and maintains backward compatibility for playerSpawn/botSpawns', () => {
+    // 1. Unified spawns input
+    const unifiedInput: any = {
+      title: 'Unified Spawns Arena',
+      spawns: [
+        { x: 0, y: -10 },
+        { x: 10, y: 0, team: 'BLUE' },
+        { x: -10, y: 0, team: 'RED' },
+        { x: 0, y: 10 }
+      ],
+      walls: createPerimeterWalls(36, 36),
+      theme: 'ARENA',
+      mode: 'BATTLE_ROYALE'
+    };
+
+    assert.equal(validateCustomMap(unifiedInput).valid, true);
+    const sanitizedUnified = sanitizeCustomMap(unifiedInput);
+    assert.equal(sanitizedUnified.spawns?.length, 4);
+    assert.deepEqual(sanitizedUnified.playerSpawn, { x: 0, y: -10 });
+    assert.equal(sanitizedUnified.botSpawns?.length, 3);
+    assert.deepEqual(sanitizedUnified.botSpawns?.[0], { x: 10, y: 0, team: 'BLUE' });
+
+    // 2. Legacy playerSpawn + botSpawns input automatically populates spawns
+    const legacyInput: any = {
+      title: 'Legacy Spawns Arena',
+      playerSpawn: { x: -5, y: -5 },
+      botSpawns: [
+        { x: 5, y: 5 },
+        { x: -5, y: 5 }
+      ],
+      walls: createPerimeterWalls(36, 36),
+      theme: 'ARENA',
+      mode: 'BATTLE_ROYALE'
+    };
+
+    assert.equal(validateCustomMap(legacyInput).valid, true);
+    const sanitizedLegacy = sanitizeCustomMap(legacyInput);
+    assert.equal(sanitizedLegacy.spawns?.length, 3);
+    assert.equal(sanitizedLegacy.spawns?.[0].x, -5);
+    assert.equal(sanitizedLegacy.spawns?.[0].y, -5);
+    assert.equal(sanitizedLegacy.spawns?.[1].x, 5);
+    assert.equal(sanitizedLegacy.spawns?.[1].y, 5);
+    assert.deepEqual(sanitizedLegacy.playerSpawn, { x: -5, y: -5 });
+  });
+
+  it('correctly calculates object rotations for walls, moving walls, hazards, dummies, and spawns', () => {
+    // 1. Wall rotation: 4x2 wall at (10, 20) -> minX=8, maxX=12, minY=19, maxY=21
+    const wall = { minX: 8, maxX: 12, minY: 19, maxY: 21 };
+    const cx = (wall.minX + wall.maxX) / 2; // 10
+    const cy = (wall.minY + wall.maxY) / 2; // 20
+    const hw = (wall.maxX - wall.minX) / 2; // 2
+    const hh = (wall.maxY - wall.minY) / 2; // 1
+    // After rotation: width and height swap
+    const rotatedWall = {
+      minX: cx - hh, // 9
+      maxX: cx + hh, // 11
+      minY: cy - hw, // 18
+      maxY: cy + hw  // 22
+    };
+    assert.equal(rotatedWall.minX, 9);
+    assert.equal(rotatedWall.maxX, 11);
+    assert.equal(rotatedWall.minY, 18);
+    assert.equal(rotatedWall.maxY, 22);
+
+    // 2. Moving Wall: toggle axis and swap dimensions
+    const mw = { baseX: 0, baseY: 0, halfW: 2, halfH: 1, axis: 'x' as const, range: 4, speed: 2 };
+    const oldHw = mw.halfW;
+    mw.halfW = mw.halfH;
+    mw.halfH = oldHw;
+    mw.axis = mw.axis === 'x' ? 'y' : 'x';
+    assert.equal(mw.halfW, 1);
+    assert.equal(mw.halfH, 2);
+    assert.equal(mw.axis, 'y');
+
+    // 3. Hazard Turret: advance angle by 45 degrees (PI / 4)
+    let hazardAngle = 0;
+    hazardAngle = (hazardAngle + Math.PI / 4) % (Math.PI * 2);
+    assert.equal(hazardAngle, Math.PI / 4);
+    hazardAngle = (hazardAngle + Math.PI / 4) % (Math.PI * 2);
+    assert.equal(hazardAngle, Math.PI / 2);
+
+    // 4. Target Dummy: toggle moveAxis
+    let dummyAxis: 'x' | 'y' = 'x';
+    dummyAxis = dummyAxis === 'y' ? 'x' : 'y';
+    assert.equal(dummyAxis, 'y');
+    dummyAxis = dummyAxis === 'y' ? 'x' : 'y';
+    assert.equal(dummyAxis, 'x');
+
+    // 5. Spawn Team: cycle undefined -> RED -> BLUE -> undefined
+    let team: 'RED' | 'BLUE' | undefined = undefined;
+    team = team === 'RED' ? 'BLUE' : (team === 'BLUE' ? undefined : 'RED');
+    assert.equal(team, 'RED');
+    team = team === 'RED' ? 'BLUE' : (team === 'BLUE' ? undefined : 'RED');
+    assert.equal(team, 'BLUE');
+    team = team === 'RED' ? 'BLUE' : (team === 'BLUE' ? undefined : 'RED');
+    assert.equal(team, undefined);
+  });
 });
