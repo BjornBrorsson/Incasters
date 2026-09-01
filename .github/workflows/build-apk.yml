@@ -236,9 +236,9 @@ jobs:
               echo "$FIREBASE_TOKEN" > service-account.json
               trap 'rm -f service-account.json' EXIT
               GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
-            elif decoded=$(echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null || true) && [[ "$decoded" == *"service_account"* ]]; then
+            elif echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null | grep -q "service_account"; then
               echo "Detected base64 service account JSON in FIREBASE_TOKEN secret. Deploying via GOOGLE_APPLICATION_CREDENTIALS..."
-              echo "$decoded" > service-account.json
+              echo "$FIREBASE_TOKEN" | base64 -d > service-account.json
               trap 'rm -f service-account.json' EXIT
               GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
             else
@@ -273,9 +273,9 @@ jobs:
               echo "$FIREBASE_TOKEN" > service-account.json
               trap 'rm -f service-account.json' EXIT
               GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
-            elif decoded=$(echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null || true) && [[ "$decoded" == *"service_account"* ]]; then
+            elif echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null | grep -q "service_account"; then
               echo "Detected base64 service account JSON in FIREBASE_TOKEN secret. Deploying preview channel $CHANNEL_NAME via GOOGLE_APPLICATION_CREDENTIALS..."
-              echo "$decoded" > service-account.json
+              echo "$FIREBASE_TOKEN" | base64 -d > service-account.json
               trap 'rm -f service-account.json' EXIT
               GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
             else
