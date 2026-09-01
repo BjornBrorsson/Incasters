@@ -5,7 +5,7 @@
 **Application:** Incasters  
 **Package / App ID:** `com.incasters.game`  
 **Developer:** Björn Brorsson  
-**Contact Email:** [bjorn.fristrom@gmail.com](mailto:bjorn.fristrom@gmail.com)  
+**Contact Email:** [bjorn.brorsson@bearnecessitiesapps.com](mailto:bjorn.brorsson@bearnecessitiesapps.com)  
 **Repository:** [https://github.com/BjornBrorsson/Incasters](https://github.com/BjornBrorsson/Incasters)  
 
 ---
