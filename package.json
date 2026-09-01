@@ -11,6 +11,8 @@
     "lan-server": "node server/lan-server.js",
     "desktop": "npm run build && electron .",
     "desktop:build": "npm run build && electron-builder --win portable --x64",
+    "build:aab": "node scripts/build-appbundle.cjs",
+    "bundle:android": "node scripts/build-appbundle.cjs",
     "generate-keystore": "node scripts/generate-keystore.cjs",
     "test": "npm run test:unit && npm run test:cert",
     "test:unit": "tsx --test test/unit/*.test.ts",

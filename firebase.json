@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "incasters",
     "public": "dist",
     "ignore": [
       "firebase.json",

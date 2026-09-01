@@ -107,24 +107,34 @@ jobs:
       - name: Make Gradle Wrapper Executable
         run: chmod +x android/gradlew
 
-      - name: Build Signed Android Release APK
+      - name: Build Signed Android Release APK & App Bundle
         env:
           VERSION_CODE: ${{ github.run_number }}
           GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
           cd android
-          ./gradlew assembleRelease --no-daemon --stacktrace
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
 
-      - name: Prepare Android Release Asset
+      - name: Prepare Android Release Assets
         run: |
           test -f android/app/build/outputs/apk/release/app-release.apk
+          test -f android/app/build/outputs/bundle/release/app-release.aab
           cp android/app/build/outputs/apk/release/app-release.apk ./Incasters-Android.apk
+          cp android/app/build/outputs/bundle/release/app-release.aab ./Incasters-Android.aab
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Incasters-Android
           path: Incasters-Android.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload Android AAB (Google Play Store Bundle)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Incasters-Android-AAB
+          path: Incasters-Android.aab
           if-no-files-found: error
           retention-days: 30
 
@@ -205,41 +215,73 @@ jobs:
 
       - name: Deploy to Firebase Hosting (Live Channel)
         if: github.event_name != 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_INCASTERS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
-          if [ -n "${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}" ]; then
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT_INCASTERS" ]; then
             echo "Deploying to Firebase Hosting via FIREBASE_SERVICE_ACCOUNT_INCASTERS..."
-            echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}' > service-account.json
+            echo "$FIREBASE_SERVICE_ACCOUNT_INCASTERS" > service-account.json
+            trap 'rm -f service-account.json' EXIT
             GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
-            rm -f service-account.json
-          elif [ -n "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+          elif [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
             echo "Deploying to Firebase Hosting via FIREBASE_SERVICE_ACCOUNT..."
-            echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > service-account.json
+            echo "$FIREBASE_SERVICE_ACCOUNT" > service-account.json
+            trap 'rm -f service-account.json' EXIT
             GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
-            rm -f service-account.json
-          elif [ -n "${{ secrets.FIREBASE_TOKEN }}" ]; then
-            echo "Deploying to Firebase Hosting via FIREBASE_TOKEN..."
-            npx -y firebase-tools@latest deploy --only hosting --token "${{ secrets.FIREBASE_TOKEN }}" --project incasters --non-interactive
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            if [[ "$FIREBASE_TOKEN" == *"service_account"* || "$FIREBASE_TOKEN" == *"private_key"* ]]; then
+              echo "Detected service account JSON in FIREBASE_TOKEN secret. Deploying via GOOGLE_APPLICATION_CREDENTIALS..."
+              echo "$FIREBASE_TOKEN" > service-account.json
+              trap 'rm -f service-account.json' EXIT
+              GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
+            elif decoded=$(echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null || true) && [[ "$decoded" == *"service_account"* ]]; then
+              echo "Detected base64 service account JSON in FIREBASE_TOKEN secret. Deploying via GOOGLE_APPLICATION_CREDENTIALS..."
+              echo "$decoded" > service-account.json
+              trap 'rm -f service-account.json' EXIT
+              GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest deploy --only hosting --project incasters --non-interactive
+            else
+              echo "Deploying to Firebase Hosting via FIREBASE_TOKEN (OAuth token)..."
+              npx -y firebase-tools@latest deploy --only hosting --token "$FIREBASE_TOKEN" --project incasters --non-interactive
+            fi
           else
             echo "::warning::No Firebase credentials found in repository secrets (FIREBASE_SERVICE_ACCOUNT_INCASTERS, FIREBASE_SERVICE_ACCOUNT, or FIREBASE_TOKEN). Skipping live deployment."
           fi
 
       - name: Deploy to Firebase Hosting Preview Channel (Pull Requests)
         if: github.event_name == 'pull_request'
+        env:
+          FIREBASE_SERVICE_ACCOUNT_INCASTERS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
         run: |
           CHANNEL_NAME="pr-${{ github.event.pull_request.number }}"
-          if [ -n "${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}" ]; then
+          if [ -n "$FIREBASE_SERVICE_ACCOUNT_INCASTERS" ]; then
             echo "Deploying preview channel $CHANNEL_NAME via FIREBASE_SERVICE_ACCOUNT_INCASTERS..."
-            echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_INCASTERS }}' > service-account.json
+            echo "$FIREBASE_SERVICE_ACCOUNT_INCASTERS" > service-account.json
+            trap 'rm -f service-account.json' EXIT
             GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
-            rm -f service-account.json
-          elif [ -n "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ]; then
+          elif [ -n "$FIREBASE_SERVICE_ACCOUNT" ]; then
             echo "Deploying preview channel $CHANNEL_NAME via FIREBASE_SERVICE_ACCOUNT..."
-            echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > service-account.json
+            echo "$FIREBASE_SERVICE_ACCOUNT" > service-account.json
+            trap 'rm -f service-account.json' EXIT
             GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
-            rm -f service-account.json
-          elif [ -n "${{ secrets.FIREBASE_TOKEN }}" ]; then
-            echo "Deploying preview channel $CHANNEL_NAME via FIREBASE_TOKEN..."
-            npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --token "${{ secrets.FIREBASE_TOKEN }}" --project incasters --non-interactive
+          elif [ -n "$FIREBASE_TOKEN" ]; then
+            if [[ "$FIREBASE_TOKEN" == *"service_account"* || "$FIREBASE_TOKEN" == *"private_key"* ]]; then
+              echo "Detected service account JSON in FIREBASE_TOKEN secret. Deploying preview channel $CHANNEL_NAME via GOOGLE_APPLICATION_CREDENTIALS..."
+              echo "$FIREBASE_TOKEN" > service-account.json
+              trap 'rm -f service-account.json' EXIT
+              GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
+            elif decoded=$(echo "$FIREBASE_TOKEN" | base64 -d 2>/dev/null || true) && [[ "$decoded" == *"service_account"* ]]; then
+              echo "Detected base64 service account JSON in FIREBASE_TOKEN secret. Deploying preview channel $CHANNEL_NAME via GOOGLE_APPLICATION_CREDENTIALS..."
+              echo "$decoded" > service-account.json
+              trap 'rm -f service-account.json' EXIT
+              GOOGLE_APPLICATION_CREDENTIALS=$(pwd)/service-account.json npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --project incasters --non-interactive
+            else
+              echo "Deploying preview channel $CHANNEL_NAME via FIREBASE_TOKEN..."
+              npx -y firebase-tools@latest hosting:channel:deploy "$CHANNEL_NAME" --expires 7d --token "$FIREBASE_TOKEN" --project incasters --non-interactive
+            fi
           else
             echo "::warning::No Firebase credentials found for PR preview deployment. Skipping."
           fi
@@ -260,6 +302,12 @@ jobs:
           name: Incasters-Android
           path: release-assets
 
+      - name: Download Android AAB
+        uses: actions/download-artifact@v4
+        with:
+          name: Incasters-Android-AAB
+          path: release-assets
+
       - name: Download Windows EXE
         uses: actions/download-artifact@v4
         with:
@@ -275,6 +323,7 @@ jobs:
       - name: Verify Release Assets
         run: |
           test -f release-assets/Incasters-Android.apk
+          test -f release-assets/Incasters-Android.aab
           test -f release-assets/Incasters-Windows-x64.exe
           test -f release-assets/Incasters-Web.zip
           ls -lh release-assets
@@ -290,6 +339,7 @@ jobs:
           prerelease: false
           files: |
             release-assets/Incasters-Android.apk
+            release-assets/Incasters-Android.aab
             release-assets/Incasters-Windows-x64.exe
             release-assets/Incasters-Web.zip
         env:

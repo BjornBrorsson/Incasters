@@ -173,7 +173,8 @@ The repository includes an automated GitHub Actions CI/CD workflow that compiles
 1. Visit the [Releases](https://github.com/BjornBrorsson/Incasters/releases) page.
 2. Pick the latest release.
 3. Download the assets you need:
-   - `Incasters-Android.apk` — install on any Android device.
+   - `Incasters-Android.apk` — install and sideload directly on any Android device.
+   - `Incasters-Android.aab` — signed Google Play Store App Bundle ready for Play Console upload.
    - `Incasters-Windows-x64.exe` — portable Windows x64 executable; no installation required.
    - `Incasters-Web.zip` — static web bundle for offline play or custom web hosting.
    - Or play directly online at [https://incasters.web.app](https://incasters.web.app).
@@ -191,21 +192,20 @@ npm run desktop:build
 
 The output file is created at `release/windows/Incasters-0.0.0-Windows-x64.exe` and can be run directly or renamed to `Incasters-Windows-x64.exe`.
 
-### Build Android Locally
+### Build Android App Bundle (.aab) & APK Locally
 
 ```bash
-# 1. Build web distribution
+# Build production Google Play Store App Bundle (.aab)
+npm run build:aab
+
+# Or build debug APK manually via Gradle
 npm run build
-
-# 2. Sync web assets with Capacitor
 npx cap sync android
-
-# 3. Compile debug APK using Gradle
 cd android
 ./gradlew assembleDebug
 ```
 
-The output APK will be generated at `android/app/build/outputs/apk/debug/app-debug.apk`.
+The signed Play Store bundle is copied to `Incasters-Release.aab` and `release/android/Incasters-Release.aab`.
 
 ---
 
